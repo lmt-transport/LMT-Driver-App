@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LMT. Driver App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* บังคับใช้ Font Kanit ทั้งหมด */
+        body { font-family: 'Kanit', sans-serif; background-color: #f8fafc; }
+        .glass-nav { 
+            background: rgba(30, 58, 138, 0.95); /* indigo-900 with transparency */
+            backdrop-filter: blur(10px); 
+        }
+        /* ซ่อน Scrollbar สำหรับ Element ที่ใช้ */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="text-gray-800 h-screen flex flex-col overflow-hidden">
+    
+    <nav class="glass-nav text-white shadow-lg z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                
+                <div class="flex items-center gap-3">
+                    
+                    <img src="{{ url_for('static', filename='mylogo.png') }}" alt="LMT Logo" class="h-10 w-auto rounded-full bg-white p-1 shadow-md">
+                    
+                    <div class="flex flex-col">
+                        <span class="font-bold text-lg leading-tight tracking-wide">LMT.</span>
+                        <span class="text-[10px] text-gray-300 font-light tracking-wider">DRIVER APP</span>
+                    </div>
+                </div>
+
+                <div>
+                    {% if session.get('user') %}
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm hidden sm:inline opacity-90">สวัสดี, {{ session['user'] }}</span>
+                        <a href="/logout" class="text-xs bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded-full transition shadow">
+                            ออก
+                        </a>
+                    </div>
+                    {% else %}
+                    <a href="/" class="text-sm hover:text-yellow-300 transition flex items-center gap-1">
+                        <i class="fa-solid fa-house"></i> หน้าหลัก
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-1 overflow-y-auto no-scrollbar p-4 pb-20 relative">
+        <div class="absolute inset-0 z-0 opacity-5 pointer-events-none flex justify-center items-center overflow-hidden">
+             <i class="fa-solid fa-truck text-[400px]"></i>
+        </div>
+        
+        <div class="relative z-10">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <footer class="bg-white border-t text-center py-3 text-xs text-gray-400 font-light">
+        © 2025 LMT. Transport System. All rights reserved.
+    </footer>
+
+</body>
+</html>

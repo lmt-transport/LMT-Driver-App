@@ -1,0 +1,155 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<div class="max-w-7xl mx-auto">
+    
+    <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-indigo-600 mb-6 text-center">
+        <h1 class="text-2xl font-bold text-gray-800">📦 ติดตามสถานะการจัดส่งสินค้า</h1>
+        <p class="text-gray-500 text-sm mt-1">Real-time Delivery Tracking Dashboard</p>
+    </div>
+    
+    <div class="grid grid-cols-5 gap-3 mb-6"> <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500">
+            <div class="text-gray-500 text-xs font-bold uppercase">เที่ยววิ่งทั้งหมด</div>
+            <div class="text-2xl font-bold text-gray-800">{{ total_trips }}</div>
+        </div>
+        
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-700">
+            <div class="text-gray-500 text-xs font-bold uppercase">เที่ยววิ่งที่จบแล้ว</div>
+            <div class="text-2xl font-bold text-green-700">{{ completed_trips }}</div>
+        </div>
+        
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-gray-400">
+            <div class="text-gray-500 text-xs font-bold uppercase">สาขาทั้งหมด</div>
+            <div class="text-2xl font-bold text-gray-800">{{ total_branches }}</div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-500">
+            <div class="text-gray-500 text-xs font-bold uppercase">สาขาที่จบแล้ว</div>
+            <div class="text-2xl font-bold text-green-600">{{ total_done_jobs }}</div>
+        </div>
+        
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-yellow-500">
+            <div class="text-gray-500 text-xs font-bold uppercase">สาขาที่กำลังวิ่ง</div>
+            <div class="text-2xl font-bold text-yellow-600">{{ total_running_jobs }}</div>
+        </div>
+    </div>
+    
+    <div class="flex flex-wrap justify-center md:justify-start items-center bg-white p-3 rounded-lg shadow-md mb-6 gap-3">
+        
+        <form action="/tracking" method="GET" id="tracking-filter-form" class="flex gap-2 items-center">
+            <span class="text-sm font-bold text-gray-600 pl-2">เลือกวันที่ PO:</span>
+            <select name="date_filter" id="customer_date_filter" class="border border-gray-300 rounded p-2 text-sm outline-none" onchange="this.form.submit()">
+                {% for d in all_dates %}
+                <option value="{{ d }}" {% if current_date == d %}selected{% endif %}>{{ d }}</option>
+                {% endfor %}
+            </select>
+        </form>
+
+        <a href="#" onclick="triggerCustomerExport()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-green-700 transition shadow-md flex items-center gap-2">
+            <i class="fa-solid fa-file-excel"></i> Export Excel
+        </a>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
+        <div class="bg-gray-50 p-3 border-b text-xs text-right text-gray-400">
+            ข้อมูลล่าสุด: <span id="update-time"></span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-xs text-center whitespace-nowrap">
+                <thead>
+                    <tr class="text-white">
+                        <th class="p-3 bg-indigo-800 sticky left-0 z-10">ลำดับรถ</th>
+                        <th class="p-3 bg-indigo-700">ทะเบียนรถ</th>
+                        <th class="p-3 bg-indigo-700">ชื่อคนขับ</th>
+                        <th class="p-3 bg-indigo-700 min-w-[150px]">สาขาปลายทาง</th>
+                        
+                        <th class="p-3 bg-gray-500">1.เข้าโรงงาน</th>
+                        <th class="p-3 bg-gray-500">2.เริ่มโหลด</th>
+                        <th class="p-3 bg-gray-500">3.โหลดเสร็จ</th>
+                        <th class="p-3 bg-gray-500">6.ออกโรงงาน</th>
+                        <th class="p-3 bg-green-600 border-l border-white">7.ถึงสาขา</th>
+                        <th class="p-3 bg-green-700">8.จบงาน</th>
+                    </tr>
+                </thead>
+                <tbody class="text-gray-700 bg-white">
+                    {% if jobs|length == 0 %}
+                    <tr><td colspan="10" class="p-10 text-center text-gray-400">ไม่พบข้อมูลในวันนี้</td></tr>
+                    {% endif %}
+
+                    {% for job in jobs %}
+                        {% set is_same = False %}
+                        {% if not loop.first and loop.previtem.Car_No == job.Car_No and loop.previtem.Driver == job.Driver %}
+                            {% set is_same = True %}
+                        {% endif %}
+
+                        <tr class="border-b hover:bg-indigo-50/20 transition">
+                            <td class="p-3 border-r bg-gray-50 sticky left-0 font-bold">
+                                {% if not is_same %} คันที่ {{ job.Car_No }} {% endif %}
+                            </td>
+                            <td class="p-3 border-r">
+                                {% if not is_same %} {{ job.Plate }} {% endif %}
+                            </td>
+                            <td class="p-3 border-r font-medium"> {% if not is_same %} {{ job.Driver }} {% endif %}
+                            </td>
+                            <td class="p-3 border-r text-left pl-4 font-bold text-indigo-800">
+                                {{ job.Branch_Name }}
+                            </td>
+
+					{% macro time_display(time_val, loc_val) %}
+						{% if time_val %}
+							{% if loc_val %}
+							<a href="https://maps.google.com/maps?q={{ loc_val }}" target="_blank" class="text-blue-600 hover:underline" title="คลิกดูแผนที่">
+								{{ time_val }} <i class="fa-solid fa-location-arrow text-[8px]"></i>
+							</a>
+							{% else %}
+							{{ time_val }}
+							{% endif %}
+						{% else %} - {% endif %}
+					{% endmacro %}
+
+                            {% if is_same %}
+                                <td class="p-3 border-r bg-gray-50/50" colspan="4"></td>
+                            {% else %}
+                                <td class="p-3 border-r">{{ time_display(job.T1_Enter, job.L1_Loc) }}</td>
+                                <td class="p-3 border-r">{{ time_display(job.T2_StartLoad, job.L2_Loc) }}</td>
+                                <td class="p-3 border-r">{{ time_display(job.T3_EndLoad, job.L3_Loc) }}</td>
+                                <td class="p-3 border-r">{{ time_display(job.T6_Exit, job.L6_Loc) }}</td>
+                            {% endif %}
+
+                            <td class="p-3 border-r bg-green-50 font-bold text-green-700 border-l border-gray-200">
+                                {{ time_display(job.T7_ArriveBranch, job.L7_Loc) }}
+                            </td>
+                            <td class="p-3 font-bold text-red-600">
+                                {{ time_display(job.T8_EndJob, job.L8_Loc) }}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="p-4 text-center">
+            <a href="/tracking" class="text-sm text-indigo-500 hover:text-indigo-700 underline">
+                <i class="fa-solid fa-arrows-rotate"></i> กดรีเฟรชข้อมูลล่าสุด
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('update-time').innerText = new Date().toLocaleString('th-TH');
+    
+    // Function สำหรับ Trigger Export
+    function triggerCustomerExport() {
+        const selectedDate = document.getElementById('customer_date_filter').value;
+        let url = '/export_excel'; // ใช้ Route เดียวกับ Manager
+
+        if (selectedDate) {
+            url += `?date_filter=${selectedDate}`;
+        }
+        
+        window.open(url, '_blank');
+    }
+</script>
+
+{% endblock %}

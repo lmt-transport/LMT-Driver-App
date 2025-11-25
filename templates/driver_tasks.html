@@ -1,0 +1,142 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<div class="mb-4 flex justify-between items-end">
+    <div>
+        <h2 class="text-xl font-bold text-gray-800">งานของคุณ</h2>
+        <p class="text-sm text-gray-500">คนขับ: **{{ name }}**</p>
+    </div>
+    <a href="/driver" class="text-xs bg-gray-200 px-3 py-1 rounded-full text-gray-600 hover:bg-gray-300">เปลี่ยนชื่อ</a>
+</div>
+
+{% if jobs|length == 0 %}
+    <div class="p-8 bg-white rounded-xl shadow text-center border border-green-100">
+        <i class="fa-solid fa-clipboard-check text-4xl text-green-500 mb-3"></i>
+        <p class="text-gray-500">เยี่ยมมาก! ไม่มีงานค้างของคุณในขณะนี้</p>
+    </div>
+{% else %}
+    
+    {% set first_job = jobs[0] %}
+    {% set factory_row_id = first_job['row_id'] %}
+
+    <div class="bg-white rounded-xl shadow-lg mb-6 overflow-hidden border-t-4 border-red-500">
+        <div class="bg-red-50 p-4 text-red-800 font-bold flex justify-between items-center">
+            <span>🏭 ขั้นตอนในโรงงาน (6 ปุ่ม)</span>
+            <span class="text-xs font-normal">PO: {{ first_job['PO_Date'] }} | #{{ first_job['Car_No'] }}</span>
+        </div>
+        
+        <div class="p-4 grid grid-cols-2 gap-3 md:grid-cols-3">
+            {% set factory_buttons = [
+                ('1', 'เวลาเข้าโรงงาน', 'bg-red-500', first_job['T1_Enter']),
+                ('2', 'เวลาเริ่มโหลด', 'bg-red-500', first_job['T2_StartLoad']),
+                ('3', 'เวลาโหลดเสร็จ', 'bg-red-500', first_job['T3_EndLoad']),
+                ('4', 'ยื่นเอกสาร', 'bg-orange-500', first_job['T4_SubmitDoc']),
+                ('5', 'รับเอกสาร', 'bg-orange-500', first_job['T5_RecvDoc']),
+                ('6', 'ออกโรงงาน', 'bg-purple-500', first_job['T6_Exit'])
+            ] %}
+
+            {% for step_id, label, color, val in factory_buttons %}
+            <form action="/update_status" method="POST" class="w-full form-step" id="form-{{ factory_row_id }}-{{ step_id }}">
+                <input type="hidden" name="row_id" value="{{ factory_row_id }}">
+                <input type="hidden" name="driver_name" value="{{ name }}">
+                <input type="hidden" name="step" value="{{ step_id }}">
+                
+                <input type="hidden" name="lat" id="lat-{{ factory_row_id }}-{{ step_id }}">
+                <input type="hidden" name="long" id="long-{{ factory_row_id }}-{{ step_id }}">
+                
+                <button type="button" onclick="getLocationAndSubmit('{{ factory_row_id }}', '{{ step_id }}')"
+                    class="w-full py-3 rounded-xl text-white font-bold shadow-md transition transform active:scale-95 relative overflow-hidden
+                    {{ color }} {% if val %} opacity-40 cursor-not-allowed {% else %} hover:shadow-lg {% endif %}"
+                    {% if val %} disabled {% endif %}>
+                    
+                    {% if val %}
+                        <div class="text-xs font-normal opacity-80 mb-1">บันทึกแล้ว</div>
+                        <div class="text-lg">{{ val }}</div>
+                    {% else %}
+                        <i class="fa-solid fa-fingerprint mb-1 block text-xl opacity-90"></i>
+                        {{ label }}
+                    {% endif %}
+                </button>
+            </form>
+            {% endfor %}
+        </div>
+    </div>
+
+
+    <h3 class="text-lg font-bold text-gray-700 mb-3 flex items-center gap-2"><i class="fa-solid fa-location-arrow text-indigo-500"></i> งานตามสาขา (2 ปุ่มต่อสาขา)</h3>
+
+    {% for job in jobs %}
+    <div class="bg-white rounded-xl shadow-lg mb-6 overflow-hidden border border-gray-200">
+        <div class="bg-indigo-50 p-3 text-indigo-800 font-bold flex justify-between items-center border-b border-indigo-100">
+            <span>➡️ สาขา: **{{ job['Branch_Name'] }}**</span>
+            <span class="text-xs font-normal">PO: {{ job['PO_Date'] }}</span>
+        </div>
+        
+        <div class="p-4 grid grid-cols-2 gap-3">
+            {% set branch_buttons = [
+                ('7', 'เวลาถึงสาขา', 'bg-teal-600', job['T7_ArriveBranch']),
+                ('8', 'จบงาน', 'bg-green-700', job['T8_EndJob'])
+            ] %}
+
+            {% for step_id, label, color, val in branch_buttons %}
+            <form action="/update_status" method="POST" class="w-full form-step" id="form-{{ job['row_id'] }}-{{ step_id }}">
+                <input type="hidden" name="row_id" value="{{ job['row_id'] }}">
+                <input type="hidden" name="driver_name" value="{{ name }}">
+                <input type="hidden" name="step" value="{{ step_id }}">
+                
+                <input type="hidden" name="lat" id="lat-{{ job['row_id'] }}-{{ step_id }}">
+                <input type="hidden" name="long" id="long-{{ job['row_id'] }}-{{ step_id }}">
+                
+                <button type="button" onclick="getLocationAndSubmit('{{ job['row_id'] }}', '{{ step_id }}')"
+                    class="w-full py-4 rounded-xl text-white font-bold shadow-md transition transform active:scale-95 relative overflow-hidden
+                    {{ color }} {% if val %} opacity-40 cursor-not-allowed {% else %} hover:shadow-lg {% endif %}"
+                    {% if val %} disabled {% endif %}>
+                    
+                    {% if val %}
+                        <div class="text-xs font-normal opacity-80 mb-1">บันทึกแล้ว</div>
+                        <div class="text-xl">{{ val }}</div>
+                    {% else %}
+                        <i class="fa-solid fa-circle-check mb-1 block text-2xl opacity-90"></i>
+                        {{ label }}
+                    {% endif %}
+                </button>
+            </form>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+
+{% endif %}
+
+<script>
+    function getLocationAndSubmit(rowId, stepId) {
+        // ... (โค้ด JavaScript เดิม) ...
+        const btn = document.querySelector(`#form-${rowId}-${stepId} button`);
+        const originalText = btn.innerHTML;
+        
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> ระบุพิกัด...';
+        btn.disabled = true;
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                // Success
+                function(position) {
+                    document.getElementById(`lat-${rowId}-${stepId}`).value = position.coords.latitude;
+                    document.getElementById(`long-${rowId}-${stepId}`).value = position.coords.longitude;
+                    document.getElementById(`form-${rowId}-${stepId}`).submit();
+                },
+                // Error
+                function(error) {
+                    alert("ไม่สามารถระบุพิกัดได้: " + error.message + "\n(กรุณาเปิด GPS และอนุญาตให้เข้าถึงตำแหน่ง)");
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        } else {
+            alert("อุปกรณ์นี้ไม่รองรับ GPS");
+            document.getElementById(`form-${rowId}-${stepId}`).submit();
+        }
+    }
+</script>
+{% endblock %}

@@ -5,7 +5,8 @@ from datetime import datetime
 import pandas as pd
 import io
 import os
-import gspread.utils # เพื่อใช้สำหรับ batch_update
+import gspread.utils 
+import json # <--- สำคัญ: ต้อง import json
 
 app = Flask(__name__)
 app.secret_key = 'lmt_driver_app_secret_key_2024' 

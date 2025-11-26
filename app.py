@@ -554,7 +554,7 @@ def export_pdf():
 
         # Main Table Header
         cols = [12, 32, 38, 18, 56, 16, 35, 16, 16, 22, 22]
-        headers = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', '1.เข้า', '2.เริ่ม', '3.เสร็จ', '6.ออก', '7.ถึงสาขา', '8.จบงาน']
+        headers = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', '1.เข้าโรงงาน', '2.เริ่มโหลด', '3.โหลดเสร็จ', '6.ออกโรงงาน', '7.ถึงสาขา', '8.จบงาน']
         
         pdf.set_fill_color(46, 64, 83)
         pdf.set_text_color(255, 255, 255)
@@ -646,75 +646,110 @@ def export_pdf():
 
             pdf.ln()
 
-    # --- [NEW] Page: Summary (หน้าสรุป แยกเป็นหน้าสุดท้าย) ---
+   # --- [NEW] Page: Summary (หน้าสรุป แยกเป็นหน้าสุดท้าย) ---
     pdf.add_page()
     
-    # เตรียมข้อมูลหัวข้อสรุป
+    # 1. ปรับส่วนหัวข้อ (Title) แก้ปัญหาสระลอยหาย
     po_date_thai = thai_date_filter(date_filter) if date_filter else "ทั้งหมด"
     
-    # หัวข้อสรุป
-    pdf.set_font('Sarabun', '', 16)
-    pdf.set_y(20) # ขยับลงมาจากขอบบนนิดหน่อย
-    pdf.cell(0, 10, f'สรุปภาพรวมการจัดส่งสินค้า ประจำวันที่ {po_date_thai}', align='C', new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(5)
+    pdf.set_font('Sarabun', '', 18) # เพิ่มขนาดฟอนต์หัวข้อ
+    pdf.set_y(25) # ขยับลงมาให้ห่างจากขอบบนมากขึ้น
+    # เพิ่ม h=15 (ความสูงบรรทัด) เพื่อไม่ให้สระบน/ล่างขาด
+    pdf.cell(0, 15, f'สรุปภาพรวมการจัดส่งสินค้า ประจำวันที่ {po_date_thai}', align='C', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(5) # เว้นระยะห่างก่อนเริ่มตาราง
 
-    # Config Table Summary
-    # คอลัมน์: รอบงาน, จำนวนเที่ยว, เข้าโรงงาน, เข้าโหลด, โหลดเสร็จ, ออกโรงงาน, ถึงสาขา, จบงาน
-    # รวม 8 คอลัมน์
-    sum_headers = ['รอบงาน', 'จำนวนเที่ยว', 'เข้าโรงงาน', 'เข้าโหลด', 'โหลดเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
-    # กำหนดความกว้าง (รวม = 220mm) -> จัดกึ่งกลางหน้า A4 Landscape (297mm)
+    # --- Config Table Summary (Modern Design) ---
+    sum_headers = ['รอบงาน', 'จำนวนเที่ยว', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
+    
+    # กำหนดความกว้าง (รวม = 220mm)
     sum_cols = [45, 25, 25, 25, 25, 25, 25, 25] 
     
+    # คำนวณจุดเริ่ม X เพื่อจัดกึ่งกลางหน้า A4 Landscape (297mm)
     total_table_width = sum(sum_cols)
     page_width = 297
-    start_x = (page_width - total_table_width) / 2 # คำนวณจุดเริ่ม X เพื่อจัดกึ่งกลาง
+    start_x = (page_width - total_table_width) / 2 
     
-    # Helper วาดแถว
-    def draw_sum_row(label, data, is_header=False, is_total=False):
+    # --- Palette สี (RGB) ---
+    COLOR_HEADER_BG = (44, 62, 80)      # Midnight Blue
+    COLOR_HEADER_TXT = (255, 255, 255)  # White
+    
+    COLOR_ROW_DAY_BG = (255, 255, 255)  # White
+    COLOR_ROW_NIGHT_BG = (242, 243, 244)# Anti-Flash White (เทาจางๆ)
+    
+    COLOR_TOTAL_BG = (213, 245, 227)    # Light Green (เน้นยอดรวมให้ดูสดใส)
+    COLOR_TOTAL_TXT = (25, 111, 61)     # Dark Green Text
+    
+    COLOR_BORDER = (189, 195, 199)      # เส้นขอบสีเทา (ไม่ดำสนิท)
+
+    # Helper วาดแถวแบบใหม่
+    def draw_sum_row(label, data, row_type='normal'):
         pdf.set_x(start_x) # เริ่มที่จุดกึ่งกลาง
         
-        if is_header:
-            pdf.set_fill_color(46, 64, 83)
-            pdf.set_text_color(255, 255, 255)
-            pdf.set_font('Sarabun', '', 12) # หัวตารางใหญ่หน่อย
-        else:
+        # ตั้งค่าสีตามประเภทแถว
+        if row_type == 'header':
+            pdf.set_fill_color(*COLOR_HEADER_BG)
+            pdf.set_text_color(*COLOR_HEADER_TXT)
+            pdf.set_font('Sarabun', '', 12) # หัวตัวหนา
+            pdf.set_draw_color(*COLOR_HEADER_BG) # เส้นขอบสีเดียวกับพื้น
+        elif row_type == 'total':
+            pdf.set_fill_color(*COLOR_TOTAL_BG)
+            pdf.set_text_color(*COLOR_TOTAL_TXT)
+            pdf.set_font('Sarabun', '', 12) # ยอดรวมตัวใหญ่หน่อย
+            pdf.set_draw_color(*COLOR_BORDER)
+        elif row_type == 'night':
+            pdf.set_fill_color(*COLOR_ROW_NIGHT_BG)
             pdf.set_text_color(0, 0, 0)
-            if is_total:
-                pdf.set_fill_color(230, 230, 230) # สีเทาอ่อนสำหรับยอดรวม
-                pdf.set_font('Sarabun', '', 11)   # ตัวหนาขึ้นนิดนึง (ใช้ FPDF ธรรมดาไม่มี Bold ในตัวแปร Font ต้อง load แยก แต่เพิ่มขนาดแทนได้)
-            else:
-                pdf.set_fill_color(255, 255, 255)
-                pdf.set_font('Sarabun', '', 11)
+            pdf.set_font('Sarabun', '', 11)
+            pdf.set_draw_color(*COLOR_BORDER)
+        else: # day/normal
+            pdf.set_fill_color(*COLOR_ROW_DAY_BG)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font('Sarabun', '', 11)
+            pdf.set_draw_color(*COLOR_BORDER)
+
+        # ความสูงของแถว (เพิ่มเป็น 12 เพื่อแก้สระลอยหาย)
+        row_h = 12
 
         # วาด Cell แรก (Label)
-        pdf.cell(sum_cols[0], 10, label, border=1, align='C', fill=True)
+        pdf.cell(sum_cols[0], row_h, label, border=1, align='C', fill=True)
         
-        # วาด Cell ข้อมูล (ถ้าเป็น Header ให้วาด text, ถ้าไม่ใช่ให้ดึงค่าจาก dict)
-        if is_header:
-            for i, h in enumerate(data):
-                pdf.cell(sum_cols[i+1], 10, h, border=1, align='C', fill=True)
+        # เตรียมข้อมูล
+        vals = []
+        if row_type == 'header':
+            vals = data # data คือ list ของ header
         else:
-            # data คือ dictionary (sum_day, sum_night)
+            # data คือ dictionary
             vals = [
                 str(data['total']), str(data['t1']), str(data['t2']),
                 str(data['t3']), str(data['t6']), str(data['t7']), str(data['t8'])
             ]
-            for i, val in enumerate(vals):
-                pdf.cell(sum_cols[i+1], 10, val, border=1, align='C', fill=True)
+
+        # วาด Cell ข้อมูล
+        for i, val in enumerate(vals):
+            pdf.cell(sum_cols[i+1], row_h, val, border=1, align='C', fill=True)
         
         pdf.ln()
 
-    # 1. วาดหัวตาราง
-    draw_sum_row("รอบงาน", sum_headers[1:], is_header=True)
+    # --- เริ่มวาดตาราง ---
+    
+    # 1. หัวตาราง
+    draw_sum_row("รอบงาน", sum_headers[1:], row_type='header')
     
     # 2. รอบกลางวัน
-    draw_sum_row("รอบกลางวัน (06:00-18:00)", sum_day)
+    draw_sum_row("รอบกลางวัน)", sum_day, row_type='day')
     
     # 3. รอบกลางคืน
-    draw_sum_row("รอบกลางคืน (19:00-05:00)", sum_night)
+    draw_sum_row("รอบกลางคืน)", sum_night, row_type='night')
     
     # 4. ยอดรวม
-    draw_sum_row("ยอดรวมทั้งหมด", sum_total, is_total=True)
+    draw_sum_row("ยอดรวมทั้งหมด", sum_total, row_type='total')
+    
+    # คำอธิบายเพิ่มเติมด้านล่าง (Footer Note)
+    pdf.ln(5)
+    pdf.set_x(start_x)
+    pdf.set_text_color(127, 140, 141) # สีเทา
+    pdf.set_font('Sarabun', '', 9)
+    pdf.cell(0, 5, "* ข้อมูลนับจากจำนวนเที่ยวรถที่มีการบันทึกเวลาในแต่ละขั้นตอนจริง", align='L')
 
     pdf_bytes = pdf.output()
     filename = f"Report_{date_filter if date_filter else 'All'}.pdf"

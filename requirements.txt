@@ -4,5 +4,5 @@ gspread
 oauth2client
 pandas
 openpyxl
-xhtml2pdf
+fpdf2
 gunicorn

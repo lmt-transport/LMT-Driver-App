@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, session, send_file, make_response
 from flask_cors import CORS
-from xhtml2pdf import pisa
+from fpdf import FPDF
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
@@ -419,7 +419,7 @@ def export_excel():
     
 @app.route('/export_pdf')
 def export_pdf():
-    # --- 1. เตรียมข้อมูล (เหมือนเดิม) ---
+    # --- 1. เตรียมข้อมูล (Logic เดิม) ---
     sheet = get_db()
     raw_jobs = sheet.worksheet('Jobs').get_all_records()
     
@@ -438,7 +438,7 @@ def export_pdf():
 
     jobs = sorted(jobs, key=sort_key_func)
 
-    # คำนวณความล่าช้า (เหมือนเดิม)
+    # คำนวณความล่าช้า
     for job in jobs:
         job['is_late'] = False
         job['delay_msg'] = ""
@@ -459,37 +459,149 @@ def export_pdf():
                     job['delay_msg'] = f"(ช้า {hours} ชม. {minutes} น.)"
             except: pass
 
-    # --- 2. Render Template ---
-    print_date = datetime.now().strftime("%d/%m/%Y %H:%M")
+    # --- 2. สร้าง PDF ด้วย FPDF2 ---
+    # ตั้งค่ากระดาษ A4 แนวนอน (Landscape)
+    pdf = FPDF(orientation='L', unit='mm', format='A4')
+    pdf.add_page()
+    
+    # ลงทะเบียนฟอนต์ภาษาไทย (ต้องมีไฟล์ static/fonts/Sarabun-Regular.ttf)
+    font_path = os.path.join(os.getcwd(), 'static', 'fonts', 'Sarabun-Regular.ttf')
+    pdf.add_font('Sarabun', '', font_path)
+    pdf.set_font('Sarabun', '', 14)
+
+    # หัวกระดาษ
     po_date_thai = thai_date_filter(date_filter) if date_filter else "ทั้งหมด"
+    print_date = datetime.now().strftime("%d/%m/%Y %H:%M")
+    
+    pdf.set_font_size(16)
+    pdf.cell(0, 10, 'รายงานสรุปการจัดส่งสินค้า (Daily Jobs Report)', align='C', new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font_size(12)
+    pdf.cell(0, 8, f'วันที่เอกสาร: {po_date_thai} | พิมพ์เมื่อ: {print_date}', align='C', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
 
-    # ส่ง path ของ static folder ไปด้วยเพื่อให้ template หา font เจอ
-    html = render_template('pdf_template.html', 
-                           jobs=jobs, 
-                           po_date=po_date_thai,
-                           print_date=print_date,
-                           static_folder=os.path.join(os.getcwd(), 'static'))
+    # ตั้งค่าหัวตาราง
+    # กำหนดความกว้างคอลัมน์ (รวมกันต้องไม่เกินประมาณ 277 มม. สำหรับ A4 แนวนอน)
+    cols = [15, 20, 25, 20, 40, 20, 35, 20, 20, 25, 25] # รวม ~265
+    headers = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', '1.เข้า', '2.เริ่ม', '3.เสร็จ', '6.ออก', '7.ถึงสาขา', '8.จบงาน']
+    
+    # วาดหัวตาราง
+    pdf.set_fill_color(46, 64, 83) # สีน้ำเงินเข้ม
+    pdf.set_text_color(255, 255, 255) # สีขาว
+    pdf.set_font('Sarabun', '', 10)
+    
+    for i, h in enumerate(headers):
+        pdf.cell(cols[i], 8, h, border=1, align='C', fill=True)
+    pdf.ln()
 
-    # --- 3. สร้าง PDF ด้วย xhtml2pdf ---
-    result = io.BytesIO()
-    # สร้าง PDF จาก HTML string
-    pisa_status = pisa.CreatePDF(
-        src=html, 
-        dest=result,
-        encoding='utf-8'
-    )
+    # วาดข้อมูล
+    pdf.set_text_color(0, 0, 0) # สีดำ
+    pdf.set_font('Sarabun', '', 10)
+    
+    prev_trip_key = None
+    
+    for job in jobs:
+        # Logic ตรวจสอบแถวซ้ำ (Group)
+        current_trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
+        is_same = (current_trip_key == prev_trip_key)
+        
+        # สีพื้นหลังสลับ (optional) หรือใช้สีขาวล้วน
+        pdf.set_fill_color(255, 255, 255)
+        
+        # ข้อมูลที่จะแสดง (ถ้าซ้ำให้เป็นว่าง)
+        c_no = str(job['Car_No']) if not is_same else ""
+        plate = str(job['Plate']) if not is_same else ""
+        driver = str(job['Driver']) if not is_same else ""
+        round_t = str(job['Round']) if not is_same else ""
+        branch = str(job['Branch_Name'])
+        t1 = str(job['T1_Enter']) if not is_same else ""
+        
+        # จัดการช่อง T2 (เริ่มโหลด) - แสดงความล่าช้า
+        t2_text = ""
+        is_late_row = False
+        if not is_same:
+            t2_text = str(job['T2_StartLoad'])
+            if job['is_late']:
+                t2_text += f"\n{job['delay_msg']}"
+                is_late_row = True
+        
+        t3 = str(job['T3_EndLoad']) if not is_same else ""
+        t6 = str(job['T6_Exit']) if not is_same else ""
+        t7 = str(job['T7_ArriveBranch'])
+        t8 = str(job['T8_EndJob'])
 
-    if pisa_status.err:
-        return f"เกิดข้อผิดพลาดในการสร้าง PDF: {pisa_status.err}"
+        # คำนวณความสูงของแถว (เผื่อมีข้อความยาวหรือบรรทัดใหม่)
+        # ใช้ 8mm เป็นฐาน ถ้ามี delay_msg อาจต้องสูงขึ้น
+        row_height = 8
+        if is_late_row: row_height = 12 
 
-    result.seek(0)
+        # วาด Cell
+        # เก็บตำแหน่ง X, Y ก่อนวาด
+        x_start = pdf.get_x()
+        y_start = pdf.get_y()
+
+        # เช็คหน้ากระดาษ ถ้าใกล้หมดให้ขึ้นหน้าใหม่
+        if y_start + row_height > pdf.page_break_trigger:
+            pdf.add_page()
+            # วาดหัวตารางซ้ำ
+            pdf.set_fill_color(46, 64, 83)
+            pdf.set_text_color(255, 255, 255)
+            for i, h in enumerate(headers):
+                pdf.cell(cols[i], 8, h, border=1, align='C', fill=True)
+            pdf.ln()
+            pdf.set_text_color(0, 0, 0)
+            x_start = pdf.get_x()
+            y_start = pdf.get_y()
+
+        # วาดทีละช่อง
+        pdf.cell(cols[0], row_height, c_no, border=1, align='C')
+        pdf.cell(cols[1], row_height, plate, border=1, align='C')
+        
+        # คนขับ (ตัดคำถ้ายาว)
+        # ใช้ MultiCell ไม่ได้ง่ายๆ ในตารางบรรทัดเดียว ต้องใช้ cell ธรรมดาแล้วตัดคำเอา หรือใช้ x,y set
+        # เพื่อความง่ายใช้ Cell ธรรมดา
+        pdf.cell(cols[2], row_height, driver, border=1, align='L')
+        
+        pdf.cell(cols[3], row_height, round_t, border=1, align='C')
+        pdf.cell(cols[4], row_height, branch, border=1, align='L') # ปลายทาง
+        pdf.cell(cols[5], row_height, t1, border=1, align='C')
+
+        # ช่อง T2 พิเศษ (สีแดงถ้าช้า)
+        current_x = pdf.get_x()
+        current_y = pdf.get_y()
+        if is_late_row:
+            pdf.set_text_color(192, 57, 43) # แดง
+            # ใช้ MultiCell จำลอง
+            pdf.multi_cell(cols[6], row_height/2 if '\n' in t2_text else row_height, t2_text, border=1, align='C')
+            pdf.set_xy(current_x + cols[6], current_y) # ย้าย Cursor กลับมาต่อท้าย
+            pdf.set_text_color(0, 0, 0) # กลับเป็นดำ
+        else:
+            if not is_same and t2_text: pdf.set_text_color(25, 111, 61) # เขียว
+            pdf.cell(cols[6], row_height, t2_text.split('\n')[0], border=1, align='C')
+            pdf.set_text_color(0, 0, 0)
+
+        pdf.cell(cols[7], row_height, t3, border=1, align='C')
+        pdf.cell(cols[8], row_height, t6, border=1, align='C')
+        
+        # T7 เขียวอ่อน
+        pdf.set_fill_color(213, 245, 227)
+        pdf.cell(cols[9], row_height, t7, border=1, align='C', fill=True)
+        
+        # T8 แดงอ่อน
+        pdf.set_fill_color(250, 219, 216)
+        pdf.cell(cols[10], row_height, t8, border=1, align='C', fill=True)
+
+        pdf.ln()
+        prev_trip_key = current_trip_key
 
     # --- 4. ส่งไฟล์กลับ ---
+    # FPDF2 output() คืนค่าเป็น byte string
+    pdf_bytes = pdf.output()
+    
     filename = f"Report_{date_filter if date_filter else 'All'}.pdf"
     return send_file(
-        result,
+        io.BytesIO(pdf_bytes),
         mimetype='application/pdf',
-        as_attachment=True, # หรือ False ถ้าอยากให้เปิดดูใน browser ก่อน
+        as_attachment=True,
         download_name=filename
     )
     

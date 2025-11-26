@@ -11,7 +11,9 @@ import json
 from openpyxl import load_workbook
 from openpyxl.styles import Font, Border, Side, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
-
+from datetime import datetime
+import pandas as pd
+import io
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'lmt_driver_app_secret_key_2024')
@@ -199,7 +201,7 @@ def delete_job():
 
 @app.route('/export_excel')
 def export_excel():
-    # ... (ส่วนเตรียมข้อมูลคงเดิม) ...
+    # ... (ส่วนเตรียมข้อมูล) ...
     sheet = get_db()
     raw_jobs = sheet.worksheet('Jobs').get_all_records()
     
@@ -223,10 +225,39 @@ def export_excel():
     prev_trip_key = None
     
     for job in jobs:
-        # ... (Logic ข้อมูลภายใน Loop คงเดิม) ...
         current_trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
         is_same = (current_trip_key == prev_trip_key)
         
+        # --- 1. Logic คำนวณความล่าช้า (เพิ่มใหม่) ---
+        t2_display = job['T2_StartLoad']
+        if not is_same: # คำนวณเฉพาะบรรทัดแรกของกลุ่ม (ถ้าข้อมูลซ้ำไม่ต้องทำ)
+            try:
+                # สมมติรูปแบบเวลาใน DB เป็น "HH:MM" หรือ "HH:MM:SS"
+                # แปลงเวลาแผน (Column C: Round)
+                plan_time_str = str(job['Round']).strip()
+                # แปลงเวลาจริง (T2_StartLoad)
+                actual_time_str = str(job['T2_StartLoad']).strip()
+                
+                if plan_time_str and actual_time_str:
+                    # รองรับ format สั้นๆ เช่น 08:00
+                    fmt = "%H:%M" if len(plan_time_str) <= 5 else "%H:%M:%S"
+                    fmt_act = "%H:%M" if len(actual_time_str) <= 5 else "%H:%M:%S"
+                    
+                    t_plan = datetime.strptime(plan_time_str, fmt)
+                    t_act = datetime.strptime(actual_time_str, fmt_act)
+                    
+                    if t_act > t_plan:
+                        diff = t_act - t_plan
+                        total_seconds = diff.total_seconds()
+                        hours = int(total_seconds // 3600)
+                        minutes = int((total_seconds % 3600) // 60)
+                        
+                        delay_msg = f" (ล่าช้า {hours} ชม./{minutes} น.)"
+                        t2_display = f"{actual_time_str}{delay_msg}"
+            except (ValueError, TypeError):
+                pass # ถ้า format เวลาผิดพลาด ให้แสดงข้อมูลเดิม
+        # ----------------------------------------
+
         formatted_date = job['PO_Date']
         try:
             date_obj = datetime.strptime(str(job['PO_Date']).strip(), "%Y-%m-%d")
@@ -237,12 +268,12 @@ def export_excel():
         row = {
             'ลำดับรถ': "" if is_same else job['Car_No'],
             'PO Date': "" if is_same else formatted_date,
-            'เวลาโหลด': "" if is_same else job['Round'],
+            'เวลาโหลด': "" if is_same else job['Round'], # Column C
             'คนขับ': "" if is_same else job['Driver'],
             'ปลายทาง (สาขา)': job['Branch_Name'],
             'ทะเบียนรถ': "" if is_same else job['Plate'],
             '1.เข้าโรงงาน': "" if is_same else job['T1_Enter'],
-            '2.เริ่มโหลด': "" if is_same else job['T2_StartLoad'],
+            '2.เริ่มโหลด': "" if is_same else t2_display, # ใช้ค่าที่คำนวณล่าช้าแล้ว
             '3.โหลดเสร็จ': "" if is_same else job['T3_EndLoad'],
             '4.ยื่นเอกสาร': "" if is_same else job['T4_SubmitDoc'],
             '5.รับเอกสาร': "" if is_same else job['T5_RecvDoc'],
@@ -265,19 +296,15 @@ def export_excel():
     wb = load_workbook(output)
     ws = wb.active
     
-    # --- 1. ปรับ Font เป็น Cordia New ขนาด 14 ---
-    # ปรับหัวตารางให้สอดคล้องกัน (14 ตัวหนา)
+    # Styles
     font_header = Font(name='Cordia New', size=14, bold=True, color='FFFFFF') 
-    # ปรับเนื้อหา (14 ธรรมดา)
     font_body = Font(name='Cordia New', size=14)
+    font_body_bold = Font(name='Cordia New', size=14, bold=True) # --- 2. Font ตัวหนาสำหรับคอลัมน์พิเศษ ---
     
-    # Border Styles
     side_thin = Side(border_style="thin", color="000000")
     side_none = Side(border_style=None) 
-    
     border_header = Border(top=side_thin, bottom=side_thin, left=side_thin, right=side_thin)
     
-    # --- 2. ปรับ Alignment ให้ชิดบน (vertical='top') ---
     align_center = Alignment(horizontal='center', vertical='top', wrap_text=True)
     align_left = Alignment(horizontal='left', vertical='top', wrap_text=True)
     
@@ -304,7 +331,6 @@ def export_excel():
         # --- ส่วนเนื้อหา ---
         job_index = row[0].row - 2
         
-        # Logic ตรวจสอบการจบกลุ่ม (Car_No) เพื่อตีเส้นใต้ (คงเดิม)
         is_group_end = False
         if 0 <= job_index < len(jobs):
             job_data = jobs[job_index]
@@ -316,7 +342,6 @@ def export_excel():
                    (str(job_data['Car_No']) != str(next_job['Car_No'])):
                     is_group_end = True
 
-            # Logic สี Zebra (คงเดิม)
             this_trip_key = (str(job_data['PO_Date']), str(job_data['Car_No']), str(job_data['Round']))
             if this_trip_key != current_trip_id:
                 is_zebra_active = not is_zebra_active
@@ -332,30 +357,42 @@ def export_excel():
         )
 
         for cell in row:
-            cell.font = font_body # ใช้ Cordia New 14
+            # Override สีและ Font ตามคอลัมน์
+            col_name = ws.cell(row=1, column=cell.column).value
+            
+            # --- 2. เงื่อนไข Font ตัวหนา ---
+            if col_name in ['7.ถึงสาขา', '8.จบงาน']:
+                cell.font = font_body_bold
+            else:
+                cell.font = font_body
+            
             cell.border = current_border 
             cell.fill = row_fill
             
-            # Override สีเฉพาะคอลัมน์
-            col_name = ws.cell(row=1, column=cell.column).value
             if col_name == '7.ถึงสาขา':
                 cell.fill = fill_green_branch
             elif col_name == '8.จบงาน':
                 cell.fill = fill_red_end
             
-            # จัด Alignment (ใช้ตัวแปรที่แก้เป็น vertical='top' แล้ว)
             if col_name in ['คนขับ', 'ปลายทาง (สาขา)', 'ทะเบียนรถ']:
                 cell.alignment = align_left
             else:
                 cell.alignment = align_center
 
-    # ปรับความกว้างคอลัมน์
+    # --- 3. ปรับความกว้างคอลัมน์ให้พอดี (Auto Fit) ---
     for column_cells in ws.columns:
-        # ปรับสูตรความกว้างเล็กน้อยเพื่อให้รองรับ font 14 ที่ใหญ่ขึ้น
-        length = max(len(str(cell.value) or "") for cell in column_cells)
-        ws.column_dimensions[get_column_letter(column_cells[0].column)].width = min(length + 8, 40)
+        length = 0
+        for cell in column_cells:
+            # คำนวณความยาวข้อความ (นับบรรทัดใหม่ด้วยถ้ายาวมาก)
+            val = str(cell.value) if cell.value else ""
+            lines = val.split('\n')
+            longest_line = max(len(line) for line in lines) if lines else 0
+            if longest_line > length:
+                length = longest_line
+        
+        # สูตรคำนวณ: Base length + Padding, จำกัดสูงสุดที่ 50 (เผื่อข้อความล่าช้า)
+        ws.column_dimensions[get_column_letter(column_cells[0].column)].width = min(length + 4, 50)
 
-    # --- 3. เพิ่ม Filter ที่หัวคอลัมน์ ---
     ws.auto_filter.ref = ws.dimensions
 
     final_output = io.BytesIO()

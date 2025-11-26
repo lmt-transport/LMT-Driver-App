@@ -248,7 +248,7 @@ def export_excel():
                         hours = int(total_seconds // 3600)
                         minutes = int((total_seconds % 3600) // 60)
                         
-                        # เพิ่มข้อความล่าช้า (ใช้ตรวจสอบเงื่อนไขสีแดงทีหลัง)
+                        # เพิ่มข้อความล่าช้า
                         delay_msg = f" (ล่าช้า {hours} ชม./{minutes} น.)"
                         t2_display = f"{actual_time_str}{delay_msg}"
             except (ValueError, TypeError):
@@ -354,23 +354,23 @@ def export_excel():
         for cell in row:
             col_name = ws.cell(row=1, column=cell.column).value
             
-            # --- กำหนด Font, Bold, และ Color แบบ Dynamic ---
+            # --- Logic การตกแต่ง Font, Bold, Color ---
             f_bold = False
             f_color = '000000' # สีดำ (Default)
 
-            # 1. เงื่อนไข Bold
-            if col_name in ['7.ถึงสาขา', '8.จบงาน']:
+            # 1. เงื่อนไข Bold: สาขา, จบงาน, และ **เริ่มโหลด**
+            if col_name in ['7.ถึงสาขา', '8.จบงาน', '2.เริ่มโหลด']:
                 f_bold = True
 
-            # 2. เงื่อนไขสีตัวอักษร คอลัมน์ '2.เริ่มโหลด'
+            # 2. เงื่อนไขสีตัวอักษรเฉพาะ '2.เริ่มโหลด'
             if col_name == '2.เริ่มโหลด':
                 cell_val_str = str(cell.value) if cell.value else ""
                 if "(ล่าช้า" in cell_val_str:
-                    f_color = 'C0392B' # สีแดงเข้ม (Dark Red)
+                    f_color = 'C0392B' # สีแดงเข้ม (ล่าช้า)
                 elif cell_val_str.strip() != "":
-                    f_color = '196F3D' # สีเขียวเข้ม (Dark Green) สำหรับคันที่ทันเวลา
+                    f_color = '196F3D' # สีเขียวเข้ม (ตรงเวลา)
 
-            # สร้าง Font Object ใหม่สำหรับเซลล์นี้
+            # สร้าง Font Object ใหม่
             cell.font = Font(name='Cordia New', size=14, bold=f_bold, color=f_color)
             
             cell.border = current_border 

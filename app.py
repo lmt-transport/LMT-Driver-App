@@ -461,11 +461,16 @@ def export_pdf():
 
     # --- 2. สร้าง PDF ด้วย FPDF2 ---
     pdf = FPDF(orientation='L', unit='mm', format='A4')
+    
+    # [NEW] ปรับขอบกระดาษให้แคบลง (ซ้าย 7mm, บน 10mm, ขวา 7mm)
+    pdf.set_margins(7, 10, 7)
     pdf.add_page()
     
-    # Path Setup (ใช้ logic เดิมที่หา path เจอแล้ว)
+    # Path Setup
     basedir = os.path.abspath(os.path.dirname(__file__))
     font_path = os.path.join(basedir, 'static', 'fonts', 'Sarabun-Regular.ttf')
+    
+    # [NEW] เปลี่ยนชื่อไฟล์โลโก้ (ตรวจสอบนามสกุลไฟล์จริงของคุณว่าเป็น .png หรือ .jpg)
     logo_path = os.path.join(basedir, 'static', 'mylogo.png') 
     
     # Load Font
@@ -475,30 +480,46 @@ def export_pdf():
     
     # --- ส่วนหัวกระดาษ & Logo ---
     if os.path.exists(logo_path):
-        pdf.image(logo_path, x=10, y=8, w=25)
+        # [NEW] ปรับขนาดโลโก้เล็กลง (w=18) และขยับตำแหน่ง x=7 ให้ตรงกับขอบ
+        pdf.image(logo_path, x=7, y=8, w=18)
     
     po_date_thai = thai_date_filter(date_filter) if date_filter else "ทั้งหมด"
     print_date = datetime.now().strftime("%d/%m/%Y %H:%M")
     
-    # *ปรับลดขนาด Font หัวข้อลงเล็กน้อยเพื่อไม่ให้สระบนขาด*
     pdf.set_font('Sarabun', '', 16) 
     pdf.set_y(10)
     pdf.cell(0, 10, 'รายงานสรุปการจัดส่งสินค้า (Daily Jobs Report)', align='C', new_x="LMARGIN", new_y="NEXT")
     
     pdf.set_font_size(12)
-    # เพิ่มระยะห่างบรรทัด (ln) เพื่อให้สระไม่ชนขอบ
     pdf.cell(0, 8, f'วันที่เอกสาร: {po_date_thai} | พิมพ์เมื่อ: {print_date}', align='C', new_x="LMARGIN", new_y="NEXT")
     pdf.ln(5) 
 
-    # --- Table Config ---
-    # ปรับความกว้าง (Width)
-    cols = [12, 28, 32, 18, 48, 16, 35, 16, 16, 22, 22] 
+    # --- Table Config (คำนวณใหม่สำหรับขอบแคบ) ---
+    # กระดาษ A4 แนวนอน = 297mm
+    # ขอบซ้าย 7 + ขวา 7 = 14mm
+    # พื้นที่ใช้งาน = 283mm
+    
+    cols = [
+        12,  # 0. คันที่
+        32,  # 1. ทะเบียน (เพิ่มจาก 28)
+        38,  # 2. คนขับ (เพิ่มจาก 32 -> ช่วยเรื่องชื่อยาว)
+        18,  # 3. เวลาโหลด
+        56,  # 4. ปลายทาง (เพิ่มจาก 48 -> ช่วยเรื่องชื่อสาขา)
+        16,  # 5. 1.เข้า
+        35,  # 6. 2.เริ่ม
+        16,  # 7. 3.เสร็จ
+        16,  # 8. 6.ออก
+        22,  # 9. 7.ถึงสาขา
+        22   # 10. 8.จบงาน
+    ]
+    # รวม = 283mm (เต็มความกว้างพอดี)
+
     headers = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', '1.เข้า', '2.เริ่ม', '3.เสร็จ', '6.ออก', '7.ถึงสาขา', '8.จบงาน']
     
     # หัวตาราง
     pdf.set_fill_color(46, 64, 83)
     pdf.set_text_color(255, 255, 255)
-    pdf.set_font('Sarabun', '', 10) # หัวตารางคงไว้ 10pt
+    pdf.set_font('Sarabun', '', 10) 
     
     for i, h in enumerate(headers):
         pdf.cell(cols[i], 8, h, border=1, align='C', fill=True)
@@ -515,7 +536,6 @@ def export_pdf():
         
         pdf.set_fill_color(255, 255, 255)
         
-        # เตรียมตัวแปร
         c_no = str(job['Car_No']) if not is_same else ""
         plate = str(job['Plate']) if not is_same else ""
         driver = str(job['Driver']) if not is_same else ""
@@ -536,8 +556,9 @@ def export_pdf():
         t7 = str(job['T7_ArriveBranch'])
         t8 = str(job['T8_EndJob'])
 
-        row_height = 8
-        if is_late_row: row_height = 12 
+        # [NEW] เพิ่มความสูงบรรทัดพื้นฐานเป็น 9mm (จาก 8mm) เพื่อให้สระไม่ชนขอบบน
+        row_height = 9
+        if is_late_row: row_height = 13 # เพิ่มเผื่อบรรทัดล่าช้าด้วย
 
         # Page Break
         if pdf.get_y() + row_height > pdf.page_break_trigger:
@@ -550,28 +571,28 @@ def export_pdf():
             pdf.ln()
             pdf.set_text_color(0, 0, 0)
 
-        # *** จุดแก้ไข: ตั้ง Font เริ่มต้นเป็น 8pt เพื่อให้สระไม่ลอยหาย ***
+        # ใช้ Font 8pt เหมือนเดิม
         pdf.set_font('Sarabun', '', 8)
 
-        # วาด Cell ทั่วไป
+        # วาด Cell
         pdf.cell(cols[0], row_height, c_no, border=1, align='C')
         pdf.cell(cols[1], row_height, plate, border=1, align='C')
         pdf.cell(cols[2], row_height, driver, border=1, align='L')
         pdf.cell(cols[3], row_height, round_t, border=1, align='C')
         
-        # *** จุดแก้ไข: คอลัมน์ "ปลายทาง" ปรับ Font เหลือ 7pt ***
+        # ปลายทางใช้ Font 7pt
         pdf.set_font_size(7) 
         pdf.cell(cols[4], row_height, branch, border=1, align='L')
-        pdf.set_font_size(8) # ปรับกลับเป็น 8pt สำหรับช่องอื่น
+        pdf.set_font_size(8) 
         
         pdf.cell(cols[5], row_height, t1, border=1, align='C')
 
-        # ช่อง 2.เริ่ม (จัดการสีแดง)
+        # 2.เริ่ม (จัดการสีแดง)
         current_x = pdf.get_x()
         current_y = pdf.get_y()
         if is_late_row:
             pdf.set_text_color(192, 57, 43)
-            # ใช้ MultiCell ต้องระวัง Layout นิดหน่อย
+            # MultiCell
             pdf.multi_cell(cols[6], row_height/2 if '\n' in t2_text else row_height, t2_text, border=1, align='C')
             pdf.set_xy(current_x + cols[6], current_y)
             pdf.set_text_color(0, 0, 0)

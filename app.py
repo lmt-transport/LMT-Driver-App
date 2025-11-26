@@ -438,7 +438,7 @@ def export_pdf():
 
     jobs = sorted(jobs, key=sort_key_func)
 
-    # --- [UPDATED] คำนวณความล่าช้า (แก้ Logic ข้ามวัน) ---
+    # --- คำนวณความล่าช้า (Logic ข้ามวัน) ---
     for job in jobs:
         job['is_late'] = False
         job['delay_msg'] = ""
@@ -447,20 +447,14 @@ def export_pdf():
         
         if t_plan_str and t_act_str:
             try:
-                # แปลง String เป็น Datetime Object (วันที่ default คือ 1900-01-01)
                 fmt_plan = "%H:%M" if len(t_plan_str) <= 5 else "%H:%M:%S"
                 fmt_act = "%H:%M" if len(t_act_str) <= 5 else "%H:%M:%S"
-                
                 t_plan = datetime.strptime(t_plan_str, fmt_plan)
                 t_act = datetime.strptime(t_act_str, fmt_act)
                 
-                # === [NEW LOGIC] ตรวจสอบการข้ามวัน (Midnight Crossover) ===
-                # ถ้าเวลาแผน (t_plan) มากกว่าเวลาจริง (t_act) เกิน 12 ชั่วโมง 
-                # (เช่น แผน 22:30 - จริง 01:00 = ต่างกัน 21 ชม.)
-                # สันนิษฐานว่าเวลาจริงคือ "วันถัดไป"
+                # Check Midnight Crossover
                 if (t_plan - t_act).total_seconds() > 12 * 3600:
                     t_act = t_act + timedelta(days=1)
-                # ========================================================
 
                 if t_act > t_plan:
                     job['is_late'] = True
@@ -468,7 +462,7 @@ def export_pdf():
                     total_seconds = diff.total_seconds()
                     hours = int(total_seconds // 3600)
                     minutes = int((total_seconds % 3600) // 60)
-                    job['delay_msg'] = f"(ช้า {hours} ชม. {minutes} น.)"
+                    job['delay_msg'] = f"(ล่าช้า {hours} ชม. {minutes} น.)"
             except: pass
 
     # --- จัดกลุ่มข้อมูล ---
@@ -521,8 +515,6 @@ def export_pdf():
     font_path = os.path.join(basedir, 'static', 'fonts', 'Sarabun-Regular.ttf')
     logo_path = os.path.join(basedir, 'static', 'mylogo.png') 
     po_date_thai = thai_date_filter(date_filter) if date_filter else "ทั้งหมด"
-    
-    # [UPDATED] เวลาพิมพ์: ใช้เวลาปัจจุบัน + 7 ชม. (Thailand Time)
     print_date = (datetime.now() + timedelta(hours=7)).strftime("%d/%m/%Y %H:%M")
 
     class PDF(FPDF):
@@ -568,7 +560,7 @@ def export_pdf():
             self.set_x(-30)
             self.cell(0, 10, f'หน้า {self.page_no()}/{{nb}}', align='R')
 
-    # --- Main Loop & Summary (เหมือนเดิม) ---
+    # --- Generate PDF ---
     pdf = PDF(orientation='L', unit='mm', format='A4')
     pdf.alias_nb_pages()
     pdf.set_margins(7, 10, 7)
@@ -589,6 +581,10 @@ def export_pdf():
         for idx, job in enumerate(group):
             is_first_row = (idx == 0)
             is_last_in_group = (idx == len(group) - 1)
+            
+            # 1. จับตำแหน่งแกน Y ก่อนเริ่มวาด
+            y_top = pdf.get_y()
+
             pdf.set_fill_color(255, 255, 255)
             
             c_no = str(job['Car_No']) if is_first_row else ""
@@ -614,6 +610,8 @@ def export_pdf():
             row_height = 9
             if is_late_row: row_height = 13
 
+            # 2. วาด Cells (Background & Text)
+            # ใช้ border='LR' (ซ้ายขวา) เพื่อไม่ให้ตีเส้นบนล่างทับกันเอง
             pdf.set_font('Sarabun', '', 8)
             pdf.set_text_color(0, 0, 0)
             pdf.cell(cols[0], row_height, c_no, border='LR', align='C')
@@ -642,6 +640,7 @@ def export_pdf():
             pdf.cell(cols[7], row_height, t3, border='LR', align='C')
             pdf.cell(cols[8], row_height, t6, border='LR', align='C')
             
+            # พื้นหลังสีพิเศษ (จะถูกวาดลงไป)
             pdf.set_fill_color(213, 245, 227)
             pdf.cell(cols[9], row_height, t7, border='LR', align='C', fill=True)
             pdf.set_fill_color(250, 219, 216)
@@ -649,16 +648,27 @@ def export_pdf():
 
             pdf.ln()
             
-            # เส้นคั่น
-            y_curr = pdf.get_y()
-            if is_last_in_group:
-                pdf.set_draw_color(0, 0, 0)
-                pdf.set_line_width(0.2)
+            # 3. [NEW] วาดเส้นทับลงไปทีหลังสุด (Overlay Lines)
+            # เส้นบน (Top Line) ของแถวปัจจุบัน
+            if is_first_row:
+                # ถ้าเป็นเริ่มคันใหม่ -> เส้นดำหนา
+                pdf.set_draw_color(0, 0, 0) # Black
+                pdf.set_line_width(0.3)     # Thick
             else:
-                pdf.set_draw_color(220, 220, 220)
-                pdf.set_line_width(0.1)
-            
-            pdf.line(7, y_curr, 290, y_curr)
+                # ถ้าเป็นสาขารอง -> เส้นเทาบาง
+                pdf.set_draw_color(200, 200, 200) # Gray
+                pdf.set_line_width(0.1)     # Thin
+                
+            pdf.line(7, y_top, 290, y_top)
+
+            # เส้นล่าง (Bottom Line) เฉพาะบรรทัดสุดท้ายของกลุ่ม
+            if is_last_in_group:
+                y_bottom = pdf.get_y()
+                pdf.set_draw_color(0, 0, 0)
+                pdf.set_line_width(0.3)
+                pdf.line(7, y_bottom, 290, y_bottom)
+
+            # Reset Line
             pdf.set_draw_color(0, 0, 0)
             pdf.set_line_width(0.2)
 
@@ -714,9 +724,9 @@ def export_pdf():
         pdf.ln()
 
     draw_sum_row("รอบงาน", sum_headers[1:], row_type='header')
-    draw_sum_row("รอบกลางวัน (06:00-18:00)", sum_day, row_type='day')
-    draw_sum_row("รอบกลางคืน (19:00-05:00)", sum_night, row_type='night')
-    draw_sum_row("ยอดรวมทั้งหมด", sum_total, row_type='total')
+    draw_sum_row("รอบกลางวัน", sum_day, row_type='day')
+    draw_sum_row("รอบกลางคืน", sum_night, row_type='night')
+    draw_sum_row("รวมทั้งหมด", sum_total, row_type='total')
     
     pdf.ln(5)
     pdf.set_x(start_x)

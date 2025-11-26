@@ -253,11 +253,16 @@
                                 {% if not loop.first and loop.previtem.Car_No == job.Car_No and loop.previtem.Driver == job.Driver and loop.previtem.PO_Date == job.PO_Date %}
                                     {% set is_same = True %}
                                 {% endif %}
+                                
                                 {% set start_load_color = '' %}
-                                {% if job.T2_StartLoad and job.Round %}
-                                    {% if job.T2_StartLoad > job.Round %} {% set start_load_color = 'text-red-600 font-bold' %}
-                                    {% else %} {% set start_load_color = 'text-green-600 font-bold' %} {% endif %}
+                                {% if job.T2_StartLoad %}
+                                    {% if job.is_start_late %} 
+                                        {% set start_load_color = 'text-red-600 font-bold' %}
+                                    {% else %} 
+                                        {% set start_load_color = 'text-green-600 font-bold' %} 
+                                    {% endif %}
                                 {% endif %}
+                                
                                 <tr class="border-b hover:bg-gray-50 transition">
                                     <td class="p-2 border-r font-bold bg-gray-50 sticky left-0 z-10 border-gray-200 text-indigo-900">
                                         {% if not is_same %} คันที่ {{ job.Car_No }} {% endif %}
@@ -276,12 +281,24 @@
                                         {% if not is_same %} {{ job.Driver }} {% endif %}
                                     </td>
                                     
-                                    <td class="p-2 border-r border-gray-200">{{ job.T1_Enter }}</td>
-                                    <td class="p-2 border-r border-gray-200 {{ start_load_color }}">{{ job.T2_StartLoad }}</td>
-                                    <td class="p-2 border-r border-gray-200">{{ job.T3_EndLoad }}</td>
-                                    <td class="p-2 border-r border-gray-200">{{ job.T4_SubmitDoc }}</td>
-                                    <td class="p-2 border-r border-gray-200">{{ job.T5_RecvDoc }}</td>
-                                    <td class="p-2 border-r border-gray-200">{{ job.T6_Exit }}</td>
+                                    <td class="p-2 border-r border-gray-200">
+                                        {% if not is_same %}{{ job.T1_Enter }}{% endif %}
+                                    </td>
+                                    <td class="p-2 border-r border-gray-200 {{ start_load_color }}">
+                                        {% if not is_same %}{{ job.T2_StartLoad }}{% endif %}
+                                    </td>
+                                    <td class="p-2 border-r border-gray-200">
+                                        {% if not is_same %}{{ job.T3_EndLoad }}{% endif %}
+                                    </td>
+                                    <td class="p-2 border-r border-gray-200">
+                                        {% if not is_same %}{{ job.T4_SubmitDoc }}{% endif %}
+                                    </td>
+                                    <td class="p-2 border-r border-gray-200">
+                                        {% if not is_same %}{{ job.T5_RecvDoc }}{% endif %}
+                                    </td>
+                                    <td class="p-2 border-r border-gray-200">
+                                        {% if not is_same %}{{ job.T6_Exit }}{% endif %}
+                                    </td>
                                     
                                     <td class="p-2 border-r font-bold text-green-700 bg-green-50/50 border-gray-200">{{ job.T7_ArriveBranch }}</td>
                                     <td class="p-2 font-bold text-red-600 bg-red-50/50">{{ job.T8_EndJob }}</td>

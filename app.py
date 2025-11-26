@@ -123,6 +123,31 @@ def manager_dashboard():
 
     filtered_jobs = sorted(filtered_jobs, key=sort_key_func)
     
+    # --- [NEW LOGIC] Pre-calculate Late Status (Midnight Crossover) ---
+    for job in filtered_jobs:
+        job['is_start_late'] = False # Default
+        
+        t_plan_str = str(job.get('Round', '')).strip()
+        t_act_str = str(job.get('T2_StartLoad', '')).strip()
+        
+        if t_plan_str and t_act_str:
+            try:
+                fmt_plan = "%H:%M" if len(t_plan_str) <= 5 else "%H:%M:%S"
+                fmt_act = "%H:%M" if len(t_act_str) <= 5 else "%H:%M:%S"
+                
+                t_plan = datetime.strptime(t_plan_str, fmt_plan)
+                t_act = datetime.strptime(t_act_str, fmt_act)
+                
+                # Logic ข้ามวัน: ถ้าเวลาแผน - เวลาจริง > 12 ชม. แปลว่าเวลาจริงคือวันถัดไป
+                if (t_plan - t_act).total_seconds() > 12 * 3600:
+                    t_act = t_act + timedelta(days=1)
+                
+                if t_act > t_plan:
+                    job['is_start_late'] = True
+            except:
+                pass
+    # ------------------------------------------------------------------
+    
     # 5. Pagination Dates
     try:
         current_date_obj = datetime.strptime(date_filter, "%Y-%m-%d")

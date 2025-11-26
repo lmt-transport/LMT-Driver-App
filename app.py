@@ -475,35 +475,57 @@ def export_pdf():
         if current_group:
             grouped_jobs.append(current_group)
 
-    # --- [NEW] คำนวณยอดสรุป (Summary Counts) ---
-    summary = {
-        'total': 0, 't1': 0, 't2': 0, 't3': 0, 't6': 0, 't7': 0, 't8': 0
-    }
+    # --- [NEW Logic] คำนวณยอดสรุปแยก Day/Night ---
+    # โครงสร้างตัวนับ
+    def create_counter():
+        return {'total': 0, 't1': 0, 't2': 0, 't3': 0, 't6': 0, 't7': 0, 't8': 0}
+
+    sum_day = create_counter()
+    sum_night = create_counter()
     
     for group in grouped_jobs:
         if not group: continue
-        summary['total'] += 1 # นับเป็น 1 เที่ยว
         
-        first_job = group[0]   # งานแรกของเที่ยว (สาขาแรก)
-        last_job = group[-1]   # งานสุดท้ายของเที่ยว (สาขาสุดท้าย)
+        first_job = group[0]   # งานแรกของเที่ยว (เช็คเวลา Round, สาขาแรก)
+        last_job = group[-1]   # งานสุดท้ายของเที่ยว (เช็คจบงาน)
         
-        if first_job.get('T1_Enter'): summary['t1'] += 1
-        if first_job.get('T2_StartLoad'): summary['t2'] += 1
-        if first_job.get('T3_EndLoad'): summary['t3'] += 1
-        if first_job.get('T6_Exit'): summary['t6'] += 1
+        # 1. เช็คกะ (Shift) จากเวลา Round
+        round_time = str(first_job.get('Round', '')).strip()
+        is_day_shift = True # Default
+        try:
+            # ดึงเฉพาะชั่วโมงมาเช็ค (HH:MM)
+            hour = int(round_time.split(':')[0])
+            if 6 <= hour <= 18:
+                is_day_shift = True
+            else:
+                is_day_shift = False
+        except:
+            pass # ถ้าเวลาผิด format ให้ลง Day ไปก่อน
+
+        # เลือกตัวแปรที่จะบวกค่า
+        target_sum = sum_day if is_day_shift else sum_night
+
+        # 2. เริ่มนับ
+        target_sum['total'] += 1
         
-        # ถึงสาขา: นับเฉพาะถ้าถึงสาขาแรกแล้ว
-        if first_job.get('T7_ArriveBranch'): summary['t7'] += 1
-        
-        # จบงาน: นับเฉพาะถ้าจบงานสาขาสุดท้ายแล้ว
-        if last_job.get('T8_EndJob'): summary['t8'] += 1
+        if first_job.get('T1_Enter'): target_sum['t1'] += 1
+        if first_job.get('T2_StartLoad'): target_sum['t2'] += 1
+        if first_job.get('T3_EndLoad'): target_sum['t3'] += 1
+        if first_job.get('T6_Exit'): target_sum['t6'] += 1
+        if first_job.get('T7_ArriveBranch'): target_sum['t7'] += 1 # สาขาแรก
+        if last_job.get('T8_EndJob'): target_sum['t8'] += 1       # สาขาสุดท้าย
+
+    # คำนวณยอดรวม (Total Sum)
+    sum_total = create_counter()
+    for key in sum_total:
+        sum_total[key] = sum_day[key] + sum_night[key]
 
 
     # --- 2. สร้าง PDF ด้วย FPDF2 ---
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.set_margins(7, 10, 7)
-    pdf.add_page()
     
+    # Path Setup
     basedir = os.path.abspath(os.path.dirname(__file__))
     font_path = os.path.join(basedir, 'static', 'fonts', 'Sarabun-Regular.ttf')
     logo_path = os.path.join(basedir, 'static', 'mylogo.png') 
@@ -532,7 +554,7 @@ def export_pdf():
 
         # Main Table Header
         cols = [12, 32, 38, 18, 56, 16, 35, 16, 16, 22, 22]
-        headers = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
+        headers = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', '1.เข้า', '2.เริ่ม', '3.เสร็จ', '6.ออก', '7.ถึงสาขา', '8.จบงาน']
         
         pdf.set_fill_color(46, 64, 83)
         pdf.set_text_color(255, 255, 255)
@@ -544,13 +566,14 @@ def export_pdf():
         pdf.set_text_color(0, 0, 0)
         pdf.set_font('Sarabun', '', 8)
 
+    # เริ่มหน้าแรก
+    pdf.add_page()
     print_header()
 
     # --- Main Table Content ---
     cols = [12, 32, 38, 18, 56, 16, 35, 16, 16, 22, 22]
     
     for group in grouped_jobs:
-        # Pre-calculate height
         group_total_height = 0
         for job in group:
             h = 9
@@ -623,52 +646,75 @@ def export_pdf():
 
             pdf.ln()
 
-    # --- [NEW] Draw Summary Table ---
-    pdf.ln(6) # เว้นบรรทัดจากตารางหลัก
+    # --- [NEW] Page: Summary (หน้าสรุป แยกเป็นหน้าสุดท้าย) ---
+    pdf.add_page()
+    
+    # เตรียมข้อมูลหัวข้อสรุป
+    po_date_thai = thai_date_filter(date_filter) if date_filter else "ทั้งหมด"
+    
+    # หัวข้อสรุป
+    pdf.set_font('Sarabun', '', 16)
+    pdf.set_y(20) # ขยับลงมาจากขอบบนนิดหน่อย
+    pdf.cell(0, 10, f'สรุปภาพรวมการจัดส่งสินค้า ประจำวันที่ {po_date_thai}', align='C', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(5)
 
-    # เช็คที่ว่าง ถ้าไม่พอขึ้นหน้าใหม่
-    if (pdf.page_break_trigger - pdf.get_y()) < 30:
-        pdf.add_page()
-        # หน้าใหม่ไม่ต้องปริ้น Header ใหญ่ เอาแค่หัวข้อสรุปก็พอ หรือจะโล่งๆ ก็ได้
-        # แต่เพื่อความสวยงาม ปล่อยโล่งแล้วเริ่มตารางเลย
+    # Config Table Summary
+    # คอลัมน์: รอบงาน, จำนวนเที่ยว, เข้าโรงงาน, เข้าโหลด, โหลดเสร็จ, ออกโรงงาน, ถึงสาขา, จบงาน
+    # รวม 8 คอลัมน์
+    sum_headers = ['รอบงาน', 'จำนวนเที่ยว', 'เข้าโรงงาน', 'เข้าโหลด', 'โหลดเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
+    # กำหนดความกว้าง (รวม = 220mm) -> จัดกึ่งกลางหน้า A4 Landscape (297mm)
+    sum_cols = [45, 25, 25, 25, 25, 25, 25, 25] 
     
-    # Summary Headers
-    sum_headers = ['จำนวนเที่ยวทั้งหมด', 'เข้าโรงงาน', 'เข้าโหลด', 'โหลดเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
-    sum_cols = [30, 25, 25, 25, 25, 25, 25] # ความกว้างรวม = 180mm
+    total_table_width = sum(sum_cols)
+    page_width = 297
+    start_x = (page_width - total_table_width) / 2 # คำนวณจุดเริ่ม X เพื่อจัดกึ่งกลาง
     
-    # วาดหัวตารางสรุป
-    pdf.set_fill_color(46, 64, 83)
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_font('Sarabun', '', 10)
-    
-    # จัดกึ่งกลางหน้ากระดาษ (Optional)
-    # A4 Width = 297, Margin = 14, Content = 283
-    # Table Width = 180
-    # Left Padding = (283 - 180) / 2 = 51.5
-    # pdf.set_x(7 + 51.5) # ถ้าอยากจัดกลางให้เปิดบรรทัดนี้
+    # Helper วาดแถว
+    def draw_sum_row(label, data, is_header=False, is_total=False):
+        pdf.set_x(start_x) # เริ่มที่จุดกึ่งกลาง
+        
+        if is_header:
+            pdf.set_fill_color(46, 64, 83)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font('Sarabun', '', 12) # หัวตารางใหญ่หน่อย
+        else:
+            pdf.set_text_color(0, 0, 0)
+            if is_total:
+                pdf.set_fill_color(230, 230, 230) # สีเทาอ่อนสำหรับยอดรวม
+                pdf.set_font('Sarabun', '', 11)   # ตัวหนาขึ้นนิดนึง (ใช้ FPDF ธรรมดาไม่มี Bold ในตัวแปร Font ต้อง load แยก แต่เพิ่มขนาดแทนได้)
+            else:
+                pdf.set_fill_color(255, 255, 255)
+                pdf.set_font('Sarabun', '', 11)
 
-    for i, h in enumerate(sum_headers):
-        pdf.cell(sum_cols[i], 8, h, border=1, align='C', fill=True)
-    pdf.ln()
-    
-    # วาดข้อมูลสรุป
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_font('Sarabun', '', 10)
-    # pdf.set_x(7 + 51.5) # ถ้าจัดกลาง ต้อง set_x อีกรอบ
+        # วาด Cell แรก (Label)
+        pdf.cell(sum_cols[0], 10, label, border=1, align='C', fill=True)
+        
+        # วาด Cell ข้อมูล (ถ้าเป็น Header ให้วาด text, ถ้าไม่ใช่ให้ดึงค่าจาก dict)
+        if is_header:
+            for i, h in enumerate(data):
+                pdf.cell(sum_cols[i+1], 10, h, border=1, align='C', fill=True)
+        else:
+            # data คือ dictionary (sum_day, sum_night)
+            vals = [
+                str(data['total']), str(data['t1']), str(data['t2']),
+                str(data['t3']), str(data['t6']), str(data['t7']), str(data['t8'])
+            ]
+            for i, val in enumerate(vals):
+                pdf.cell(sum_cols[i+1], 10, val, border=1, align='C', fill=True)
+        
+        pdf.ln()
 
-    sum_values = [
-        str(summary['total']),
-        str(summary['t1']),
-        str(summary['t2']),
-        str(summary['t3']),
-        str(summary['t6']),
-        str(summary['t7']),
-        str(summary['t8'])
-    ]
+    # 1. วาดหัวตาราง
+    draw_sum_row("รอบงาน", sum_headers[1:], is_header=True)
     
-    for i, val in enumerate(sum_values):
-        pdf.cell(sum_cols[i], 8, val, border=1, align='C')
-    pdf.ln()
+    # 2. รอบกลางวัน
+    draw_sum_row("รอบกลางวัน (06:00-18:00)", sum_day)
+    
+    # 3. รอบกลางคืน
+    draw_sum_row("รอบกลางคืน (19:00-05:00)", sum_night)
+    
+    # 4. ยอดรวม
+    draw_sum_row("ยอดรวมทั้งหมด", sum_total, is_total=True)
 
     pdf_bytes = pdf.output()
     filename = f"Report_{date_filter if date_filter else 'All'}.pdf"

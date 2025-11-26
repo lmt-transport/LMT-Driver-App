@@ -384,7 +384,20 @@
         const selectedDate = document.getElementById('report_date_filter').value;
         let url = '/export_excel';
         if (selectedDate) url += `?date_filter=${selectedDate}`;
-        window.open(url, '_blank');
+        
+        // ใช้ window.location.href แทน window.open สำหรับการดาวน์โหลดไฟล์
+        window.location.href = url;
+    }
+
+    function triggerCustomerPDF() {
+        const selectedDate = document.getElementById('report_date_filter').value;
+        let url = '/export_pdf';
+        if (selectedDate) {
+            url += `?date_filter=${selectedDate}`;
+        }
+        
+        // ใช้ window.location.href แทน window.open สำหรับการดาวน์โหลดไฟล์
+        window.location.href = url;
     }
 	
 	function triggerPrint() {

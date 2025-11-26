@@ -226,7 +226,7 @@
         if (selectedDate) {
             url += `?date_filter=${selectedDate}`;
         }
-        window.open(url, '_blank');
+        window.location.href = url;
     }
 
     // เพิ่มฟังก์ชันสำหรับปุ่ม PDF Export
@@ -236,7 +236,7 @@
         if (selectedDate) {
             url += `?date_filter=${selectedDate}`;
         }
-        window.open(url, '_blank');
+        window.location.href = url;
     }
 
     function triggerCustomerPrint() {

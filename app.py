@@ -549,16 +549,16 @@ def export_pdf():
         pdf.cell(0, 8, 'บริษัท แอลเอ็มที. ทรานสปอร์ต จำกัด', align='C', new_x="LMARGIN", new_y="NEXT")
 
         pdf.set_font_size(10)
-        pdf.cell(0, 6, f'วันที่เอกสาร: {po_date_thai} | พิมพ์เมื่อ: {print_date}', align='C', new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 12, f'วันที่เอกสาร: {po_date_thai} | พิมพ์เมื่อ: {print_date}', align='C', new_x="LMARGIN", new_y="NEXT")
         pdf.ln(4)
 
         # Main Table Header
-        cols = [12, 32, 38, 18, 56, 16, 35, 16, 16, 22, 22]
-        headers = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', '1.เข้าโรงงาน', '2.เริ่มโหลด', '3.โหลดเสร็จ', '6.ออกโรงงาน', '7.ถึงสาขา', '8.จบงาน']
+        cols = [12, 30, 30, 18, 60, 16, 35, 16, 16, 22, 22]
+        headers = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
         
         pdf.set_fill_color(46, 64, 83)
         pdf.set_text_color(255, 255, 255)
-        pdf.set_font('Sarabun', '', 10) 
+        pdf.set_font('Sarabun', '', 8) 
         for i, h in enumerate(headers):
             pdf.cell(cols[i], 8, h, border=1, align='C', fill=True)
         pdf.ln()
@@ -655,7 +655,7 @@ def export_pdf():
     pdf.set_font('Sarabun', '', 18) # เพิ่มขนาดฟอนต์หัวข้อ
     pdf.set_y(25) # ขยับลงมาให้ห่างจากขอบบนมากขึ้น
     # เพิ่ม h=15 (ความสูงบรรทัด) เพื่อไม่ให้สระบน/ล่างขาด
-    pdf.cell(0, 15, f'สรุปภาพรวมการจัดส่งสินค้า ประจำวันที่ {po_date_thai}', align='C', new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 20, f'สรุปภาพรวมการจัดส่งสินค้า ประจำวันที่ {po_date_thai}', align='C', new_x="LMARGIN", new_y="NEXT")
     pdf.ln(5) # เว้นระยะห่างก่อนเริ่มตาราง
 
     # --- Config Table Summary (Modern Design) ---

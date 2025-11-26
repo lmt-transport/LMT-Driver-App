@@ -201,7 +201,7 @@ def delete_job():
 
 @app.route('/export_excel')
 def export_excel():
-    # ... (ส่วนเตรียมข้อมูล) ...
+    # ... (ส่วนเตรียมข้อมูลจาก DB) ...
     sheet = get_db()
     raw_jobs = sheet.worksheet('Jobs').get_all_records()
     
@@ -228,18 +228,14 @@ def export_excel():
         current_trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
         is_same = (current_trip_key == prev_trip_key)
         
-        # --- 1. Logic คำนวณความล่าช้า (เพิ่มใหม่) ---
+        # --- Logic คำนวณความล่าช้า (คงเดิม) ---
         t2_display = job['T2_StartLoad']
-        if not is_same: # คำนวณเฉพาะบรรทัดแรกของกลุ่ม (ถ้าข้อมูลซ้ำไม่ต้องทำ)
+        if not is_same: 
             try:
-                # สมมติรูปแบบเวลาใน DB เป็น "HH:MM" หรือ "HH:MM:SS"
-                # แปลงเวลาแผน (Column C: Round)
                 plan_time_str = str(job['Round']).strip()
-                # แปลงเวลาจริง (T2_StartLoad)
                 actual_time_str = str(job['T2_StartLoad']).strip()
                 
                 if plan_time_str and actual_time_str:
-                    # รองรับ format สั้นๆ เช่น 08:00
                     fmt = "%H:%M" if len(plan_time_str) <= 5 else "%H:%M:%S"
                     fmt_act = "%H:%M" if len(actual_time_str) <= 5 else "%H:%M:%S"
                     
@@ -252,10 +248,11 @@ def export_excel():
                         hours = int(total_seconds // 3600)
                         minutes = int((total_seconds % 3600) // 60)
                         
+                        # เพิ่มข้อความล่าช้า (ใช้ตรวจสอบเงื่อนไขสีแดงทีหลัง)
                         delay_msg = f" (ล่าช้า {hours} ชม./{minutes} น.)"
                         t2_display = f"{actual_time_str}{delay_msg}"
             except (ValueError, TypeError):
-                pass # ถ้า format เวลาผิดพลาด ให้แสดงข้อมูลเดิม
+                pass 
         # ----------------------------------------
 
         formatted_date = job['PO_Date']
@@ -268,12 +265,12 @@ def export_excel():
         row = {
             'ลำดับรถ': "" if is_same else job['Car_No'],
             'PO Date': "" if is_same else formatted_date,
-            'เวลาโหลด': "" if is_same else job['Round'], # Column C
+            'เวลาโหลด': "" if is_same else job['Round'], 
             'คนขับ': "" if is_same else job['Driver'],
             'ปลายทาง (สาขา)': job['Branch_Name'],
             'ทะเบียนรถ': "" if is_same else job['Plate'],
             '1.เข้าโรงงาน': "" if is_same else job['T1_Enter'],
-            '2.เริ่มโหลด': "" if is_same else t2_display, # ใช้ค่าที่คำนวณล่าช้าแล้ว
+            '2.เริ่มโหลด': "" if is_same else t2_display, 
             '3.โหลดเสร็จ': "" if is_same else job['T3_EndLoad'],
             '4.ยื่นเอกสาร': "" if is_same else job['T4_SubmitDoc'],
             '5.รับเอกสาร': "" if is_same else job['T5_RecvDoc'],
@@ -298,8 +295,6 @@ def export_excel():
     
     # Styles
     font_header = Font(name='Cordia New', size=14, bold=True, color='FFFFFF') 
-    font_body = Font(name='Cordia New', size=14)
-    font_body_bold = Font(name='Cordia New', size=14, bold=True) # --- 2. Font ตัวหนาสำหรับคอลัมน์พิเศษ ---
     
     side_thin = Side(border_style="thin", color="000000")
     side_none = Side(border_style=None) 
@@ -357,41 +352,60 @@ def export_excel():
         )
 
         for cell in row:
-            # Override สีและ Font ตามคอลัมน์
             col_name = ws.cell(row=1, column=cell.column).value
             
-            # --- 2. เงื่อนไข Font ตัวหนา ---
+            # --- กำหนด Font, Bold, และ Color แบบ Dynamic ---
+            f_bold = False
+            f_color = '000000' # สีดำ (Default)
+
+            # 1. เงื่อนไข Bold
             if col_name in ['7.ถึงสาขา', '8.จบงาน']:
-                cell.font = font_body_bold
-            else:
-                cell.font = font_body
+                f_bold = True
+
+            # 2. เงื่อนไขสีตัวอักษร คอลัมน์ '2.เริ่มโหลด'
+            if col_name == '2.เริ่มโหลด':
+                cell_val_str = str(cell.value) if cell.value else ""
+                if "(ล่าช้า" in cell_val_str:
+                    f_color = 'C0392B' # สีแดงเข้ม (Dark Red)
+                elif cell_val_str.strip() != "":
+                    f_color = '196F3D' # สีเขียวเข้ม (Dark Green) สำหรับคันที่ทันเวลา
+
+            # สร้าง Font Object ใหม่สำหรับเซลล์นี้
+            cell.font = Font(name='Cordia New', size=14, bold=f_bold, color=f_color)
             
             cell.border = current_border 
             cell.fill = row_fill
             
+            # Override สีพื้นหลัง
             if col_name == '7.ถึงสาขา':
                 cell.fill = fill_green_branch
             elif col_name == '8.จบงาน':
                 cell.fill = fill_red_end
             
+            # Alignment
             if col_name in ['คนขับ', 'ปลายทาง (สาขา)', 'ทะเบียนรถ']:
                 cell.alignment = align_left
             else:
                 cell.alignment = align_center
 
-    # --- 3. ปรับความกว้างคอลัมน์ให้พอดี (Auto Fit) ---
+    # --- ปรับความกว้างคอลัมน์ ---
     for column_cells in ws.columns:
-        length = 0
-        for cell in column_cells:
-            # คำนวณความยาวข้อความ (นับบรรทัดใหม่ด้วยถ้ายาวมาก)
-            val = str(cell.value) if cell.value else ""
-            lines = val.split('\n')
-            longest_line = max(len(line) for line in lines) if lines else 0
-            if longest_line > length:
-                length = longest_line
+        col_letter = get_column_letter(column_cells[0].column)
+        col_header = column_cells[0].value
         
-        # สูตรคำนวณ: Base length + Padding, จำกัดสูงสุดที่ 50 (เผื่อข้อความล่าช้า)
-        ws.column_dimensions[get_column_letter(column_cells[0].column)].width = min(length + 4, 50)
+        # เงื่อนไขความกว้าง
+        if col_header == '2.เริ่มโหลด':
+            ws.column_dimensions[col_letter].width = 19.00
+        else:
+            # Auto fit สำหรับคอลัมน์อื่นๆ
+            length = 0
+            for cell in column_cells:
+                val = str(cell.value) if cell.value else ""
+                lines = val.split('\n')
+                longest_line = max(len(line) for line in lines) if lines else 0
+                if longest_line > length:
+                    length = longest_line
+            ws.column_dimensions[col_letter].width = min(length + 4, 50)
 
     ws.auto_filter.ref = ws.dimensions
 

@@ -463,40 +463,64 @@ def export_pdf():
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
     
-    # --- แก้ไขตรงนี้ (Path Fix) ---
-    # หาตำแหน่งที่ตั้งจริงของไฟล์ app.py
+    # Path Setup
     basedir = os.path.abspath(os.path.dirname(__file__))
-    # สร้าง path ไปยังไฟล์ฟอนต์
     font_path = os.path.join(basedir, 'static', 'fonts', 'Sarabun-Regular.ttf')
+    # *** เปลี่ยนชื่อไฟล์ logo ของคุณที่นี่ (เช่น logo.png) ***
+    logo_path = os.path.join(basedir, 'static', 'logo.png') 
     
-    # ตรวจสอบก่อนโหลด (Optional: เพื่อความชัวร์ใน Log)
+    # Load Font
     if not os.path.exists(font_path):
         print(f"ERROR: Font not found at {font_path}")
-        # อาจจะใช้ font มาตรฐานแทนชั่วคราวถ้าหาไม่เจอ เพื่อไม่ให้ error 500
-        # pdf.set_font('Arial', '', 14) 
-    
     pdf.add_font('Sarabun', '', font_path)
     pdf.set_font('Sarabun', '', 14)
 
-    # หัวกระดาษ
+    # --- ส่วนหัวกระดาษ & Logo ---
+    # 1. แสดง Logo (ถ้ามีไฟล์)
+    if os.path.exists(logo_path):
+        # x=10 (ซ้ายสุด), y=8 (ขอบบน), w=25 (ความกว้างรูป 25mm)
+        pdf.image(logo_path, x=10, y=8, w=25)
+    
+    # 2. ข้อความหัวกระดาษ (ขยับ Y ลงมานิดหน่อย หรือจัด Center)
     po_date_thai = thai_date_filter(date_filter) if date_filter else "ทั้งหมด"
     print_date = datetime.now().strftime("%d/%m/%Y %H:%M")
     
-    pdf.set_font_size(16)
+    # บรรทัด 1: ชื่อรายงาน
+    pdf.set_y(10) # Set Y ให้ตรงกับระดับ logo หรือต่ำกว่านิดหน่อย
+    pdf.set_font_size(18) # เพิ่มขนาดหัวข้อ
+    # ใช้ cell(0) คือเต็มความกว้าง page เพื่อให้ align='C' ทำงานกลางหน้ากระดาษ
     pdf.cell(0, 10, 'รายงานสรุปการจัดส่งสินค้า (Daily Jobs Report)', align='C', new_x="LMARGIN", new_y="NEXT")
+    
+    # บรรทัด 2: วันที่
     pdf.set_font_size(12)
     pdf.cell(0, 8, f'วันที่เอกสาร: {po_date_thai} | พิมพ์เมื่อ: {print_date}', align='C', new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(2)
+    pdf.ln(4) # เว้นบรรทัดก่อนเริ่มตาราง
 
-    # ตั้งค่าหัวตาราง
-    # กำหนดความกว้างคอลัมน์ (รวมกันต้องไม่เกินประมาณ 277 มม. สำหรับ A4 แนวนอน)
-    cols = [15, 20, 25, 20, 40, 20, 35, 20, 20, 25, 25] # รวม ~265
+    # --- การตั้งค่าตาราง (Table Config) ---
+    # ปรับความกว้างคอลัมน์ใหม่ (รวมกันต้องไม่เกิน ~277mm)
+    # เดิม: [15, 20, 25, 20, 40, 20, 35, 20, 20, 25, 25] = 265
+    # ใหม่: ลดช่องเวลา เพิ่มช่องชื่อ
+    cols = [
+        12,  # 0. คันที่ (ลดจาก 15)
+        28,  # 1. ทะเบียน (เพิ่มจาก 20) **สำคัญ
+        32,  # 2. คนขับ (เพิ่มจาก 25) **สำคัญ
+        18,  # 3. เวลาโหลด (ลดจาก 20)
+        48,  # 4. ปลายทาง (เพิ่มจาก 40) **สำคัญ
+        16,  # 5. 1.เข้า (ลดจาก 20)
+        35,  # 6. 2.เริ่มโหลด (เท่าเดิม เผื่อข้อความแดง)
+        16,  # 7. 3.โหลดเสร็จ (ลดจาก 20)
+        16,  # 8. 6.ออก (ลดจาก 20)
+        22,  # 9. 7.ถึงสาขา (ลดจาก 25)
+        22   # 10. 8.จบงาน (ลดจาก 25)
+    ] 
+    # Sum = 265mm (เท่าเดิม แต่เกลี่ยใหม่)
+
     headers = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', '1.เข้า', '2.เริ่ม', '3.เสร็จ', '6.ออก', '7.ถึงสาขา', '8.จบงาน']
     
     # วาดหัวตาราง
     pdf.set_fill_color(46, 64, 83) # สีน้ำเงินเข้ม
     pdf.set_text_color(255, 255, 255) # สีขาว
-    pdf.set_font('Sarabun', '', 10)
+    pdf.set_font('Sarabun', '', 10) # หัวตารางใช้ 10pt
     
     for i, h in enumerate(headers):
         pdf.cell(cols[i], 8, h, border=1, align='C', fill=True)
@@ -504,19 +528,17 @@ def export_pdf():
 
     # วาดข้อมูล
     pdf.set_text_color(0, 0, 0) # สีดำ
-    pdf.set_font('Sarabun', '', 10)
+    # *** ปรับ Font เนื้อหาเหลือ 9pt เพื่อลดโอกาสล้น ***
+    pdf.set_font('Sarabun', '', 9) 
     
     prev_trip_key = None
     
     for job in jobs:
-        # Logic ตรวจสอบแถวซ้ำ (Group)
         current_trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
         is_same = (current_trip_key == prev_trip_key)
         
-        # สีพื้นหลังสลับ (optional) หรือใช้สีขาวล้วน
         pdf.set_fill_color(255, 255, 255)
         
-        # ข้อมูลที่จะแสดง (ถ้าซ้ำให้เป็นว่าง)
         c_no = str(job['Car_No']) if not is_same else ""
         plate = str(job['Plate']) if not is_same else ""
         driver = str(job['Driver']) if not is_same else ""
@@ -524,7 +546,6 @@ def export_pdf():
         branch = str(job['Branch_Name'])
         t1 = str(job['T1_Enter']) if not is_same else ""
         
-        # จัดการช่อง T2 (เริ่มโหลด) - แสดงความล่าช้า
         t2_text = ""
         is_late_row = False
         if not is_same:
@@ -538,72 +559,73 @@ def export_pdf():
         t7 = str(job['T7_ArriveBranch'])
         t8 = str(job['T8_EndJob'])
 
-        # คำนวณความสูงของแถว (เผื่อมีข้อความยาวหรือบรรทัดใหม่)
-        # ใช้ 8mm เป็นฐาน ถ้ามี delay_msg อาจต้องสูงขึ้น
+        # ความสูงแถว
         row_height = 8
         if is_late_row: row_height = 12 
 
-        # วาด Cell
-        # เก็บตำแหน่ง X, Y ก่อนวาด
-        x_start = pdf.get_x()
-        y_start = pdf.get_y()
-
-        # เช็คหน้ากระดาษ ถ้าใกล้หมดให้ขึ้นหน้าใหม่
-        if y_start + row_height > pdf.page_break_trigger:
+        # Page Break Check
+        if pdf.get_y() + row_height > pdf.page_break_trigger:
             pdf.add_page()
-            # วาดหัวตารางซ้ำ
+            # วาดหัวตารางซ้ำในหน้าใหม่
             pdf.set_fill_color(46, 64, 83)
             pdf.set_text_color(255, 255, 255)
+            pdf.set_font('Sarabun', '', 10)
             for i, h in enumerate(headers):
                 pdf.cell(cols[i], 8, h, border=1, align='C', fill=True)
             pdf.ln()
             pdf.set_text_color(0, 0, 0)
-            x_start = pdf.get_x()
-            y_start = pdf.get_y()
+            pdf.set_font('Sarabun', '', 9) # กลับมาใช้ 9pt
 
-        # วาดทีละช่อง
+        # --- วาด Cell ---
+        
+        # 0. คันที่
         pdf.cell(cols[0], row_height, c_no, border=1, align='C')
+        
+        # 1. ทะเบียน (Align Center เพราะมักจะสั้น)
         pdf.cell(cols[1], row_height, plate, border=1, align='C')
         
-        # คนขับ (ตัดคำถ้ายาว)
-        # ใช้ MultiCell ไม่ได้ง่ายๆ ในตารางบรรทัดเดียว ต้องใช้ cell ธรรมดาแล้วตัดคำเอา หรือใช้ x,y set
-        # เพื่อความง่ายใช้ Cell ธรรมดา
+        # 2. คนขับ (Align Left เพราะชื่อยาว)
+        # ใช้ Cell ธรรมดา แต่ถ้าชื่อยาวมากๆ มันจะถูกตัด (Clip) โดยอัตโนมัติด้วยความกว้างที่เราเพิ่มให้
         pdf.cell(cols[2], row_height, driver, border=1, align='L')
         
+        # 3. เวลา
         pdf.cell(cols[3], row_height, round_t, border=1, align='C')
-        pdf.cell(cols[4], row_height, branch, border=1, align='L') # ปลายทาง
+        
+        # 4. ปลายทาง (Align Left)
+        pdf.cell(cols[4], row_height, branch, border=1, align='L')
+        
+        # 5. เข้า
         pdf.cell(cols[5], row_height, t1, border=1, align='C')
 
-        # ช่อง T2 พิเศษ (สีแดงถ้าช้า)
+        # 6. เริ่ม (MultiCell จำลอง)
         current_x = pdf.get_x()
         current_y = pdf.get_y()
         if is_late_row:
             pdf.set_text_color(192, 57, 43) # แดง
-            # ใช้ MultiCell จำลอง
             pdf.multi_cell(cols[6], row_height/2 if '\n' in t2_text else row_height, t2_text, border=1, align='C')
-            pdf.set_xy(current_x + cols[6], current_y) # ย้าย Cursor กลับมาต่อท้าย
-            pdf.set_text_color(0, 0, 0) # กลับเป็นดำ
+            pdf.set_xy(current_x + cols[6], current_y)
+            pdf.set_text_color(0, 0, 0)
         else:
             if not is_same and t2_text: pdf.set_text_color(25, 111, 61) # เขียว
             pdf.cell(cols[6], row_height, t2_text.split('\n')[0], border=1, align='C')
             pdf.set_text_color(0, 0, 0)
 
+        # 7. เสร็จ
         pdf.cell(cols[7], row_height, t3, border=1, align='C')
+        # 8. ออก
         pdf.cell(cols[8], row_height, t6, border=1, align='C')
         
-        # T7 เขียวอ่อน
+        # 9. ถึงสาขา (เขียวอ่อน)
         pdf.set_fill_color(213, 245, 227)
         pdf.cell(cols[9], row_height, t7, border=1, align='C', fill=True)
         
-        # T8 แดงอ่อน
+        # 10. จบงาน (แดงอ่อน)
         pdf.set_fill_color(250, 219, 216)
         pdf.cell(cols[10], row_height, t8, border=1, align='C', fill=True)
 
         pdf.ln()
         prev_trip_key = current_trip_key
 
-    # --- 4. ส่งไฟล์กลับ ---
-    # FPDF2 output() คืนค่าเป็น byte string
     pdf_bytes = pdf.output()
     
     filename = f"Report_{date_filter if date_filter else 'All'}.pdf"

@@ -367,7 +367,7 @@ def export_excel():
     
 @app.route('/print_report')
 def print_report():
-    # อนุญาตให้เข้าถึงได้ทั่วไป (เหมือน export_excel) เพื่อให้ลูกค้ากดได้
+    # อนุญาตให้เข้าถึงได้ทั่วไป (เหมือน export_excel)
     
     sheet = get_db()
     raw_jobs = sheet.worksheet('Jobs').get_all_records()

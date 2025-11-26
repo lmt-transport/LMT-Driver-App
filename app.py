@@ -500,6 +500,39 @@ def customer_view():
 
     jobs = sorted(jobs, key=sort_key_func)
     
+    # --- เพิ่ม Logic คำนวณความล่าช้าสำหรับแสดงผล (แทรกตรงนี้) ---
+    for job in jobs:
+        job['is_late'] = False
+        job['delay_tooltip'] = ""
+        
+        # ตรวจสอบว่ามีข้อมูลเวลาทั้งคู่หรือไม่
+        t_plan_str = str(job['Round']).strip()
+        t_act_str = str(job['T2_StartLoad']).strip()
+        
+        if t_plan_str and t_act_str:
+            try:
+                # แปลงรูปแบบเวลา (รองรับทั้ง HH:MM และ HH:MM:SS)
+                fmt_plan = "%H:%M" if len(t_plan_str) <= 5 else "%H:%M:%S"
+                fmt_act = "%H:%M" if len(t_act_str) <= 5 else "%H:%M:%S"
+                
+                t_plan = datetime.strptime(t_plan_str, fmt_plan)
+                t_act = datetime.strptime(t_act_str, fmt_act)
+                
+                if t_act > t_plan:
+                    # กรณีล่าช้า
+                    job['is_late'] = True
+                    diff = t_act - t_plan
+                    total_seconds = diff.total_seconds()
+                    hours = int(total_seconds // 3600)
+                    minutes = int((total_seconds % 3600) // 60)
+                    job['delay_tooltip'] = f"ล่าช้า {hours} ชม. {minutes} น."
+                else:
+                    # กรณีทันเวลา หรือก่อนเวลา
+                    job['delay_tooltip'] = "เข้าโหลดตรงตามเวลา"
+            except (ValueError, TypeError):
+                pass
+    # --------------------------------------------------------
+    
     return render_template('customer_view.html', 
                            jobs=jobs, all_dates=all_dates, current_date=date_filter,
                            total_trips=total_trips, completed_trips=completed_trips,

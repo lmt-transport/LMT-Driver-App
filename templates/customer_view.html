@@ -167,7 +167,28 @@
                                 <td class="p-3 border-r border-gray-100 bg-gray-50/30" colspan="4"></td>
                             {% else %}
                                 <td class="p-3 border-r border-gray-100">{{ time_display(job.T1_Enter, job.L1_Loc) }}</td>
-                                <td class="p-3 border-r border-gray-100">{{ time_display(job.T2_StartLoad, job.L2_Loc) }}</td>
+                                <td class="p-3 border-r border-gray-100">
+							{% if job.T2_StartLoad %}
+							{% set text_color = 'text-red-600' if job.is_late else 'text-green-600' %}
+							{% set bg_color = 'bg-red-50' if job.is_late else 'bg-green-50' %}
+        
+							{% if job.L2_Loc %}
+							<a href="https://maps.google.com/maps?q={{ job.L2_Loc }}" target="_blank" 
+							class="inline-flex items-center gap-1 {{ bg_color }} {{ text_color }} px-2 py-0.5 rounded-full border border-gray-200 hover:bg-gray-100 transition group cursor-help" 
+							title="{{ job.delay_tooltip }}">
+							<span class="font-bold">{{ job.T2_StartLoad }}</span> 
+							<i class="fa-solid fa-location-arrow text-[8px] opacity-50 group-hover:opacity-100"></i>
+							</a>
+							{% else %}
+							<span class="{{ text_color }} font-bold cursor-help border-b border-dotted border-gray-300" 
+							title="{{ job.delay_tooltip }}">
+							{{ job.T2_StartLoad }}
+							</span>
+							{% endif %}
+							{% else %}
+							<span class="text-gray-300">-</span>
+							{% endif %}
+							</td>
                                 <td class="p-3 border-r border-gray-100">{{ time_display(job.T3_EndLoad, job.L3_Loc) }}</td>
                                 <td class="p-3 border-r border-gray-100">{{ time_display(job.T6_Exit, job.L6_Loc) }}</td>
                             {% endif %}

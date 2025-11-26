@@ -839,6 +839,10 @@ def customer_view():
                 
                 t_plan = datetime.strptime(t_plan_str, fmt_plan)
                 t_act = datetime.strptime(t_act_str, fmt_act)
+
+                # Check Midnight Crossover
+                if (t_plan - t_act).total_seconds() > 12 * 3600:
+                    t_act = t_act + timedelta(days=1)
                 
                 if t_act > t_plan:
                     # กรณีล่าช้า

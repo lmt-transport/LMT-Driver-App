@@ -8,54 +8,69 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        /* บังคับใช้ Font Kanit ทั้งหมด */
-        body { font-family: 'Kanit', sans-serif; background-color: #f8fafc; }
-        .glass-nav { 
-            background: rgba(30, 58, 138, 0.95); /* indigo-900 with transparency */
-            backdrop-filter: blur(10px); 
+        /* Font Setting */
+        body { font-family: 'Kanit', sans-serif; }
+        
+        /* Background Pattern (Modern Look) */
+        .bg-modern {
+            background-color: #f8fafc;
+            background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
+            background-size: 24px 24px;
         }
-        /* ซ่อน Scrollbar สำหรับ Element ที่ใช้ */
+
+        /* Navbar Glass Effect */
+        .nav-glass { 
+            background: rgba(15, 23, 42, 0.95); /* Slate-900 */
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Utility to hide scrollbar */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
-<body class="text-gray-800 h-screen flex flex-col overflow-hidden">
+<body class="text-gray-800 h-screen flex flex-col overflow-hidden bg-modern">
     
-    <nav class="glass-nav text-white shadow-lg z-50">
+    <nav class="nav-glass text-white shadow-xl z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
                 
                 <div class="flex items-center gap-3">
-                    
-                    <img src="{{ url_for('static', filename='mylogo.png') }}" alt="LMT Logo" class="h-10 w-auto rounded-full bg-white p-1 shadow-md">
+                    <div class="relative group">
+                        <div class="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full opacity-50 blur transition duration-200 group-hover:opacity-100"></div>
+                        <img src="{{ url_for('static', filename='mylogo.png') }}" alt="LMT Logo" class="relative h-10 w-auto rounded-full bg-white p-0.5 shadow-sm">
+                    </div>
                     
                     <div class="flex flex-col">
-                        <span class="font-bold text-lg leading-tight tracking-wide">LMT.</span>
-                        <span class="text-[10px] text-gray-300 font-light tracking-wider">DRIVER APP</span>
+                        <span class="font-bold text-lg leading-none tracking-wide text-white">LMT.</span>
+                        <span class="text-[10px] text-indigo-200 font-medium tracking-widest mt-0.5">DRIVER APP</span>
                     </div>
                 </div>
 
                 <div>
-                    {% if session.get('user') %}
-                    <div class="flex items-center gap-3">
-                        <span class="text-sm hidden sm:inline opacity-90">สวัสดี, {{ session['user'] }}</span>
-                        <a href="/logout" class="text-xs bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded-full transition shadow">
-                            ออก
-                        </a>
-                    </div>
-                    {% else %}
-                    <a href="/" class="text-sm hover:text-yellow-300 transition flex items-center gap-1">
-                        <i class="fa-solid fa-house"></i> หน้าหลัก
-                    </a>
-                    {% endif %}
-                </div>
+    {% if session.get('user') %}
+    <div class="flex items-center gap-3">
+        <span class="text-sm hidden sm:inline opacity-90">สวัสดี, {{ session['user'] }}</span>
+        <a href="/logout" class="group flex items-center gap-2 text-xs font-bold bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white px-4 py-1.5 rounded-full transition-all shadow-md active:scale-95">
+            <i class="fa-solid fa-power-off"></i> <span class="hidden xs:inline">ออก</span>
+        </a>
+    </div>
+    {% else %}
+        {% if request.path != '/tracking' %}
+        <a href="/" class="flex items-center gap-2 text-xs font-bold bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-full transition-all border border-white/10">
+            <i class="fa-solid fa-house"></i> หน้าหลัก
+        </a>
+        {% endif %}
+    {% endif %}
+</div>
             </div>
         </div>
     </nav>
 
-    <main class="flex-1 overflow-y-auto no-scrollbar p-4 pb-20 relative">
-        <div class="absolute inset-0 z-0 opacity-5 pointer-events-none flex justify-center items-center overflow-hidden">
-             <i class="fa-solid fa-truck text-[400px]"></i>
+    <main class="flex-1 overflow-y-auto no-scrollbar p-4 pb-24 relative">
+        <div class="absolute top-10 left-1/2 transform -translate-x-1/2 opacity-[0.03] pointer-events-none">
+             <i class="fa-solid fa-truck-fast text-[300px]"></i>
         </div>
         
         <div class="relative z-10">
@@ -63,8 +78,12 @@
         </div>
     </main>
 
-    <footer class="bg-white border-t text-center py-3 text-xs text-gray-400 font-light">
-        © 2025 LMT. Transport System. All rights reserved.
+    <footer class="bg-white/80 backdrop-blur-sm border-t border-gray-200 text-center py-3 text-[10px] text-gray-400 font-light absolute bottom-0 w-full z-40">
+        <div class="flex justify-center items-center gap-1">
+            <span>© 2025 LMT Transport System</span>
+            <span class="w-1 h-1 bg-gray-300 rounded-full"></span>
+            <span>v1.0.2</span>
+        </div>
     </footer>
 
 </body>

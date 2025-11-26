@@ -1,5 +1,6 @@
-from flask import Flask, render_template, request, redirect, url_for, session, send_file
+from flask import Flask, render_template, request, redirect, url_for, session, send_file, make_response
 from flask_cors import CORS
+from weasyprint import HTML, CSS
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
@@ -249,7 +250,7 @@ def export_excel():
                         minutes = int((total_seconds % 3600) // 60)
                         
                         # เพิ่มข้อความล่าช้า
-                        delay_msg = f" (ล่าช้า {hours} ชม./{minutes} น.)"
+                        delay_msg = f" (ล่าช้า {hours} ชม. {minutes} น.)"
                         t2_display = f"{actual_time_str}{delay_msg}"
             except (ValueError, TypeError):
                 pass 
@@ -415,6 +416,72 @@ def export_excel():
     
     filename = f"Report_{date_filter if date_filter else 'All'}.xlsx"
     return send_file(final_output, download_name=filename, as_attachment=True)
+    
+@app.route('/export_pdf')
+def export_pdf():
+    # --- 1. ส่วนเตรียมข้อมูล (Copy Logic เดียวกับ export_excel มาได้เลย) ---
+    sheet = get_db()
+    raw_jobs = sheet.worksheet('Jobs').get_all_records()
+    
+    date_filter = request.args.get('date_filter')
+    if date_filter:
+        jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
+    else:
+        jobs = raw_jobs
+        
+    # Sort Data
+    def sort_key_func(job):
+        po_date = str(job['PO_Date'])
+        car_no_str = str(job['Car_No']).strip()
+        try: car_no_int = int(car_no_str)
+        except ValueError: car_no_int = 99999 
+        return (po_date, car_no_int)
+
+    jobs = sorted(jobs, key=sort_key_func)
+
+    # คำนวณความล่าช้า (Logic เดียวกับที่คุณเพิ่งเพิ่ม)
+    for job in jobs:
+        job['is_late'] = False
+        job['delay_msg'] = ""
+        t_plan_str = str(job['Round']).strip()
+        t_act_str = str(job['T2_StartLoad']).strip()
+        if t_plan_str and t_act_str:
+            try:
+                fmt_plan = "%H:%M" if len(t_plan_str) <= 5 else "%H:%M:%S"
+                fmt_act = "%H:%M" if len(t_act_str) <= 5 else "%H:%M:%S"
+                t_plan = datetime.strptime(t_plan_str, fmt_plan)
+                t_act = datetime.strptime(t_act_str, fmt_act)
+                if t_act > t_plan:
+                    job['is_late'] = True
+                    diff = t_act - t_plan
+                    total_seconds = diff.total_seconds()
+                    hours = int(total_seconds // 3600)
+                    minutes = int((total_seconds % 3600) // 60)
+                    job['delay_msg'] = f"(ช้า {hours} ชม. {minutes} น.)"
+            except: pass
+
+    # --- 2. Render HTML Template เป็น String (ไม่ได้ส่งไปแสดงผลหน้าเว็บ) ---
+    # แปลงวันที่เป็นรูปแบบไทยเพื่อแสดงในหัวกระดาษ
+    print_date = datetime.now().strftime("%d/%m/%Y %H:%M")
+    po_date_thai = thai_date_filter(date_filter) if date_filter else "ทั้งหมด"
+
+    rendered_html = render_template('pdf_template.html', 
+                                    jobs=jobs, 
+                                    po_date=po_date_thai,
+                                    print_date=print_date)
+
+    # --- 3. สร้าง PDF ---
+    # ใช้ base_url='.' เพื่อให้ load รูปภาพหรือ font จาก local ได้
+    pdf = HTML(string=rendered_html, base_url=request.base_url).write_pdf()
+
+    # --- 4. สร้าง Response ส่งไฟล์กลับไปให้ User ดาวน์โหลด ---
+    response = make_response(pdf)
+    response.headers['Content-Type'] = 'application/pdf'
+    # inline = เปิดดูใน browser, attachment = บังคับดาวน์โหลด
+    filename = f"Report_{date_filter if date_filter else 'All'}.pdf"
+    response.headers['Content-Disposition'] = f'inline; filename={filename}'
+    
+    return response
     
 @app.route('/print_report')
 def print_report():

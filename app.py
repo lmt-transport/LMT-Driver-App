@@ -460,12 +460,21 @@ def export_pdf():
             except: pass
 
     # --- 2. สร้าง PDF ด้วย FPDF2 ---
-    # ตั้งค่ากระดาษ A4 แนวนอน (Landscape)
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
     
-    # ลงทะเบียนฟอนต์ภาษาไทย (ต้องมีไฟล์ static/fonts/Sarabun-Regular.ttf)
-    font_path = os.path.join(os.getcwd(), 'static', 'fonts', 'Sarabun-Regular.ttf')
+    # --- แก้ไขตรงนี้ (Path Fix) ---
+    # หาตำแหน่งที่ตั้งจริงของไฟล์ app.py
+    basedir = os.path.abspath(os.path.dirname(__file__))
+    # สร้าง path ไปยังไฟล์ฟอนต์
+    font_path = os.path.join(basedir, 'static', 'fonts', 'Sarabun-Regular.ttf')
+    
+    # ตรวจสอบก่อนโหลด (Optional: เพื่อความชัวร์ใน Log)
+    if not os.path.exists(font_path):
+        print(f"ERROR: Font not found at {font_path}")
+        # อาจจะใช้ font มาตรฐานแทนชั่วคราวถ้าหาไม่เจอ เพื่อไม่ให้ error 500
+        # pdf.set_font('Arial', '', 14) 
+    
     pdf.add_font('Sarabun', '', font_path)
     pdf.set_font('Sarabun', '', 14)
 

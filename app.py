@@ -419,7 +419,7 @@ def export_excel():
     
 @app.route('/export_pdf')
 def export_pdf():
-    # --- 1. เตรียมข้อมูล (Logic เดิม) ---
+    # --- 1. เตรียมข้อมูล ---
     sheet = get_db()
     raw_jobs = sheet.worksheet('Jobs').get_all_records()
     
@@ -459,11 +459,10 @@ def export_pdf():
                     job['delay_msg'] = f"(ช้า {hours} ชม. {minutes} น.)"
             except: pass
 
-    # --- [NEW Logic] จัดกลุ่มข้อมูลตามคันรถก่อนเริ่มวาด ---
+    # --- จัดกลุ่มข้อมูล (Grouping) ---
     grouped_jobs = []
     if jobs:
         current_group = []
-        # Key สำหรับการจัดกลุ่ม: PO + คันที่ + รอบ + คนขับ
         prev_key = (str(jobs[0]['PO_Date']), str(jobs[0]['Car_No']), str(jobs[0]['Round']), str(jobs[0]['Driver']))
         
         for job in jobs:
@@ -476,46 +475,64 @@ def export_pdf():
         if current_group:
             grouped_jobs.append(current_group)
 
+    # --- [NEW] คำนวณยอดสรุป (Summary Counts) ---
+    summary = {
+        'total': 0, 't1': 0, 't2': 0, 't3': 0, 't6': 0, 't7': 0, 't8': 0
+    }
+    
+    for group in grouped_jobs:
+        if not group: continue
+        summary['total'] += 1 # นับเป็น 1 เที่ยว
+        
+        first_job = group[0]   # งานแรกของเที่ยว (สาขาแรก)
+        last_job = group[-1]   # งานสุดท้ายของเที่ยว (สาขาสุดท้าย)
+        
+        if first_job.get('T1_Enter'): summary['t1'] += 1
+        if first_job.get('T2_StartLoad'): summary['t2'] += 1
+        if first_job.get('T3_EndLoad'): summary['t3'] += 1
+        if first_job.get('T6_Exit'): summary['t6'] += 1
+        
+        # ถึงสาขา: นับเฉพาะถ้าถึงสาขาแรกแล้ว
+        if first_job.get('T7_ArriveBranch'): summary['t7'] += 1
+        
+        # จบงาน: นับเฉพาะถ้าจบงานสาขาสุดท้ายแล้ว
+        if last_job.get('T8_EndJob'): summary['t8'] += 1
+
+
     # --- 2. สร้าง PDF ด้วย FPDF2 ---
     pdf = FPDF(orientation='L', unit='mm', format='A4')
-    pdf.set_margins(7, 10, 7) # ขอบแคบ
+    pdf.set_margins(7, 10, 7)
     pdf.add_page()
     
-    # Path Setup
     basedir = os.path.abspath(os.path.dirname(__file__))
     font_path = os.path.join(basedir, 'static', 'fonts', 'Sarabun-Regular.ttf')
     logo_path = os.path.join(basedir, 'static', 'mylogo.png') 
     
-    if not os.path.exists(font_path):
-        print(f"ERROR: Font not found at {font_path}")
+    if not os.path.exists(font_path): print(f"ERROR: Font not found at {font_path}")
     pdf.add_font('Sarabun', '', font_path)
     
-    # --- ส่วนหัวกระดาษ (Header) ---
+    # --- Header Function ---
     def print_header():
-        # Logo
         if os.path.exists(logo_path):
             pdf.image(logo_path, x=7, y=8, w=18)
         
         po_date_thai = thai_date_filter(date_filter) if date_filter else "ทั้งหมด"
         print_date = datetime.now().strftime("%d/%m/%Y %H:%M")
         
-        # บรรทัด 1: ชื่อรายงาน (ใหญ่สุด)
         pdf.set_font('Sarabun', '', 16) 
         pdf.set_y(10)
         pdf.cell(0, 8, 'รายงานสรุปการจัดส่งสินค้า (Daily Jobs Report)', align='C', new_x="LMARGIN", new_y="NEXT")
         
-        # บรรทัด 2: ชื่อบริษัท (รองลงมา)
         pdf.set_font_size(14)
         pdf.cell(0, 8, 'บริษัท แอลเอ็มที. ทรานสปอร์ต จำกัด', align='C', new_x="LMARGIN", new_y="NEXT")
 
-        # บรรทัด 3: วันที่ (เล็กสุด)
         pdf.set_font_size(10)
         pdf.cell(0, 6, f'วันที่เอกสาร: {po_date_thai} | พิมพ์เมื่อ: {print_date}', align='C', new_x="LMARGIN", new_y="NEXT")
         pdf.ln(4)
 
-        # วาดหัวตาราง
+        # Main Table Header
         cols = [12, 32, 38, 18, 56, 16, 35, 16, 16, 22, 22]
-        headers = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', '1.เข้า', '2.เริ่ม', '3.เสร็จ', '6.ออก', '7.ถึงสาขา', '8.จบงาน']
+        headers = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
         
         pdf.set_fill_color(46, 64, 83)
         pdf.set_text_color(255, 255, 255)
@@ -524,58 +541,39 @@ def export_pdf():
             pdf.cell(cols[i], 8, h, border=1, align='C', fill=True)
         pdf.ln()
         
-        # Reset สีและ Font สำหรับเนื้อหา
         pdf.set_text_color(0, 0, 0)
         pdf.set_font('Sarabun', '', 8)
 
-    # เรียกหัวกระดาษครั้งแรก
     print_header()
 
-    # --- Config Table ---
+    # --- Main Table Content ---
     cols = [12, 32, 38, 18, 56, 16, 35, 16, 16, 22, 22]
     
-    # --- Loop วาดข้อมูลทีละกลุ่ม (Trip) ---
     for group in grouped_jobs:
-        
-        # 1. คำนวณความสูงรวมของกลุ่มนี้ล่วงหน้า (Pre-calculation)
+        # Pre-calculate height
         group_total_height = 0
         for job in group:
-            h = 9 # ความสูงปกติ
-            # เช็คเงื่อนไขล่าช้าเพื่อเพิ่มความสูง
-            is_late = job.get('is_late', False)
-            t_plan_str = str(job['Round']).strip()
-            t_act_str = str(job['T2_StartLoad']).strip()
-            # (Logic ล่าช้าซ้ำนิดหน่อยเพื่อให้แน่ใจ แต่ใช้ค่าที่คำนวณมาแล้วได้)
-            if is_late: h = 13
+            h = 9
+            if job.get('is_late', False): h = 13
             group_total_height += h
 
-        # 2. ตรวจสอบที่ว่างหน้ากระดาษ
-        # page_break_trigger ปกติประมาณ 270-280mm สำหรับ A4
-        # ถ้าตำแหน่งปัจจุบัน + ความสูงทั้งกลุ่ม > จุดตัดหน้า -> ขึ้นหน้าใหม่
-        space_left = pdf.page_break_trigger - pdf.get_y()
-        if group_total_height > space_left:
+        if group_total_height > (pdf.page_break_trigger - pdf.get_y()):
             pdf.add_page()
-            print_header() # วาดหัวกระดาษใหม่ทุกครั้งที่ขึ้นหน้าใหม่
+            print_header()
 
-        # 3. วาดข้อมูลในกลุ่ม
         for idx, job in enumerate(group):
-            # แถวแรกของกลุ่มให้แสดงข้อมูลรถ แถวถัดไปให้ว่างไว้
             is_first_row = (idx == 0)
-            
             pdf.set_fill_color(255, 255, 255)
             
             c_no = str(job['Car_No']) if is_first_row else ""
             plate = str(job['Plate']) if is_first_row else ""
             driver = str(job['Driver']) if is_first_row else ""
             round_t = str(job['Round']) if is_first_row else ""
-            
             branch = str(job['Branch_Name'])
             t1 = str(job['T1_Enter']) if is_first_row else ""
             
             t2_text = ""
             is_late_row = False
-            # T2 แสดงเฉพาะบรรทัดแรกของกลุ่ม (หรือตาม Logic เดิมคือแสดงทุกบรรทัดที่ไม่ซ้ำ แต่ในกลุ่มนี้คือรถคันเดิม)
-            # แต่ปกติ T2 (เริ่มโหลด) เป็นค่าของ Trip ดังนั้นแสดงแค่บรรทัดแรกก็พอ
             if is_first_row:
                 t2_text = str(job['T2_StartLoad'])
                 if job['is_late']:
@@ -590,23 +588,18 @@ def export_pdf():
             row_height = 9
             if is_late_row: row_height = 13
 
-            # Set Font 8pt
             pdf.set_font('Sarabun', '', 8)
-
-            # Draw Cells
             pdf.cell(cols[0], row_height, c_no, border=1, align='C')
             pdf.cell(cols[1], row_height, plate, border=1, align='C')
             pdf.cell(cols[2], row_height, driver, border=1, align='L')
             pdf.cell(cols[3], row_height, round_t, border=1, align='C')
             
-            # ปลายทาง Font 7pt
             pdf.set_font_size(7) 
             pdf.cell(cols[4], row_height, branch, border=1, align='L')
             pdf.set_font_size(8) 
             
             pdf.cell(cols[5], row_height, t1, border=1, align='C')
 
-            # T2 Red/Green
             current_x = pdf.get_x()
             current_y = pdf.get_y()
             if is_late_row:
@@ -629,6 +622,53 @@ def export_pdf():
             pdf.cell(cols[10], row_height, t8, border=1, align='C', fill=True)
 
             pdf.ln()
+
+    # --- [NEW] Draw Summary Table ---
+    pdf.ln(6) # เว้นบรรทัดจากตารางหลัก
+
+    # เช็คที่ว่าง ถ้าไม่พอขึ้นหน้าใหม่
+    if (pdf.page_break_trigger - pdf.get_y()) < 30:
+        pdf.add_page()
+        # หน้าใหม่ไม่ต้องปริ้น Header ใหญ่ เอาแค่หัวข้อสรุปก็พอ หรือจะโล่งๆ ก็ได้
+        # แต่เพื่อความสวยงาม ปล่อยโล่งแล้วเริ่มตารางเลย
+    
+    # Summary Headers
+    sum_headers = ['จำนวนเที่ยวทั้งหมด', 'เข้าโรงงาน', 'เข้าโหลด', 'โหลดเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
+    sum_cols = [30, 25, 25, 25, 25, 25, 25] # ความกว้างรวม = 180mm
+    
+    # วาดหัวตารางสรุป
+    pdf.set_fill_color(46, 64, 83)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font('Sarabun', '', 10)
+    
+    # จัดกึ่งกลางหน้ากระดาษ (Optional)
+    # A4 Width = 297, Margin = 14, Content = 283
+    # Table Width = 180
+    # Left Padding = (283 - 180) / 2 = 51.5
+    # pdf.set_x(7 + 51.5) # ถ้าอยากจัดกลางให้เปิดบรรทัดนี้
+
+    for i, h in enumerate(sum_headers):
+        pdf.cell(sum_cols[i], 8, h, border=1, align='C', fill=True)
+    pdf.ln()
+    
+    # วาดข้อมูลสรุป
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font('Sarabun', '', 10)
+    # pdf.set_x(7 + 51.5) # ถ้าจัดกลาง ต้อง set_x อีกรอบ
+
+    sum_values = [
+        str(summary['total']),
+        str(summary['t1']),
+        str(summary['t2']),
+        str(summary['t3']),
+        str(summary['t6']),
+        str(summary['t7']),
+        str(summary['t8'])
+    ]
+    
+    for i, val in enumerate(sum_values):
+        pdf.cell(sum_cols[i], 8, val, border=1, align='C')
+    pdf.ln()
 
     pdf_bytes = pdf.output()
     filename = f"Report_{date_filter if date_filter else 'All'}.pdf"

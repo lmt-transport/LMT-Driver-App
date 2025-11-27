@@ -112,7 +112,7 @@ def manager_dashboard():
     total_trips = len(jobs_by_trip_key)
     total_running_jobs = total_branches - total_done_jobs
 
-    # 4. Sorting (Basic Sort for Table)
+    # 4. Sorting
     def sort_key_func(job):
         po_date = str(job['PO_Date'])
         car_no_str = str(job['Car_No']).strip()
@@ -123,7 +123,7 @@ def manager_dashboard():
 
     filtered_jobs = sorted(filtered_jobs, key=sort_key_func)
     
-    # --- [NEW] Prepare Data for LINE Share (Split Day/Night) ---
+    # --- [UPDATED] Prepare Data for LINE Share (Fix Day/Night Logic) ---
     line_data_day = []
     line_data_night = []
     
@@ -145,30 +145,37 @@ def manager_dashboard():
         first = group[0]
         round_str = str(first['Round']).strip()
         
-        # Calculate Logic
-        is_day = True
+        # --- Logic ใหม่ที่แม่นยำขึ้น ---
+        is_day = True # Default
         show_date_str = ""
         
         try:
             po_dt = datetime.strptime(first['PO_Date'], "%Y-%m-%d")
-            if len(round_str) >= 5:
-                try: hour = int(round_str.split(':')[0])
-                except: hour = 0
+            
+            # พยายามแปลงเวลาไม่ว่าจะเป็น "9:00", "09:00", "0:30"
+            try:
+                round_dt = datetime.strptime(round_str, "%H:%M")
+                hour = round_dt.hour
                 
-                # Check Shift
-                if not (6 <= hour <= 18):
+                # Check Shift: กลางวัน = 06:00 - 18:59
+                # กลางคืน = 19:00 - 05:59
+                if hour < 6 or hour >= 19:
                     is_day = False
                 
-                # Check Date
+                # Check Date: ถ้า 00:00-05:59 ให้ถือเป็นวันที่โหลดจริง (PO+1)
                 load_date = po_dt
-                if 0 <= hour <= 5:
+                if hour < 6:
                     load_date = po_dt + timedelta(days=1)
                 
+                # Format Date
                 thai_year = load_date.year + 543
                 show_date_str = load_date.strftime(f"%d/%m/{str(thai_year)[2:]}")
-            else:
+                
+            except ValueError:
+                # กรณีเวลาผิดรูปแบบ ให้ใช้วันที่ PO เดิม
                 thai_year = po_dt.year + 543
                 show_date_str = po_dt.strftime(f"%d/%m/{str(thai_year)[2:]}")
+
         except:
             show_date_str = first['PO_Date']
 
@@ -186,31 +193,20 @@ def manager_dashboard():
         else:
             line_data_night.append(trip_data)
 
-    # --- [UPDATED] Sorting Logic for LINE Data ---
-    
-    # รอบกลางวัน: เรียงตามเวลาปกติ (06:00 -> 18:00)
+    # Sort Logic
     line_data_day.sort(key=lambda x: x['round'])
     
-    # รอบกลางคืน: เรียงแบบพิเศษ (19:00 -> 23:59 -> 00:00 -> 05:00)
-    def night_sort_key(item):
+    # Sort Night: 19:00 -> 23:59 -> 00:00 -> 05:00
+    def night_sort(item):
         try:
-            t_str = item['round']
-            if not t_str or ':' not in t_str: return 99999
-            h, m = map(int, t_str.split(':')[:2])
-            
-            # ถ้าเป็นเวลาหลังเที่ยงคืน (00:00 - 11:59) ให้บวก 24 ชม.
-            # เพื่อให้ค่ามากกว่าเวลาหัวค่ำ (เช่น 01:00 -> 25:00 ซึ่งมากกว่า 20:00)
-            if 0 <= h < 12:
-                h += 24
-            
-            return h * 60 + m
-        except:
-            return 99999
+            h, m = map(int, item['round'].split(':'))
+            return (h + 24 if h < 6 else h) * 60 + m
+        except: return 99999
+        
+    line_data_night.sort(key=night_sort)
+    # -----------------------------------------------------------------
 
-    line_data_night.sort(key=night_sort_key)
-    # ---------------------------------------------
-
-    # [NEW] Pre-calculate Late Status
+    # Pre-calculate Late Status
     for job in filtered_jobs:
         job['is_start_late'] = False
         t_plan_str = str(job.get('Round', '')).strip()
@@ -230,7 +226,7 @@ def manager_dashboard():
                     job['is_start_late'] = True
             except: pass
 
-    # 5. Pagination Dates
+    # 5. Pagination
     try:
         current_date_obj = datetime.strptime(date_filter, "%Y-%m-%d")
         prev_date = (current_date_obj - timedelta(days=1)).strftime("%Y-%m-%d")

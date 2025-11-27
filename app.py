@@ -69,7 +69,7 @@ def manager_dashboard():
     if 'user' not in session: return redirect(url_for('manager_login'))
     
     sheet = get_db()
-    # ดึงข้อมูลทั้งหมด (Header แถวแรกต้องมี Load_Date แล้ว)
+    # ดึงข้อมูลทั้งหมด
     raw_jobs = sheet.worksheet('Jobs').get_all_records()
     drivers = sheet.worksheet('Drivers').get_all_records()
 
@@ -81,10 +81,10 @@ def manager_dashboard():
     if not date_filter:
         date_filter = today_date
 
-    # 2. Filter Jobs
+    # 2. Filter Jobs by PO Date
     filtered_jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
 
-    # 3. Stats
+    # 3. Stats Calculation
     jobs_by_trip_key = {}
     total_done_jobs = 0
     total_branches = len(filtered_jobs)
@@ -112,40 +112,41 @@ def manager_dashboard():
     total_trips = len(jobs_by_trip_key)
     total_running_jobs = total_branches - total_done_jobs
 
-    # --- [NEW] Logic: คำนวณรถที่ยังไม่เข้าคลัง (Late Arrivals) แยกตาม PO ---
+    # --- [FEATURE 1] Late Arrival Alert Logic (รถยังไม่เข้าคลัง) ---
     late_arrivals_by_po = {}
     total_late_cars = 0
 
     for job in filtered_jobs:
-        # เงื่อนไข: ยังไม่ลงเวลา T1 (เข้าโรงงาน) และ สถานะยังไม่จบ
+        # เงื่อนไข: ยังไม่ลงเวลา T1 และ สถานะยังไม่จบ
         if not job.get('T1_Enter') and job['Status'] != 'Done':
             try:
-                # สร้าง DateTime ของกำหนดการ
                 load_date_str = job.get('Load_Date', job['PO_Date'])
                 round_str = str(job['Round']).strip()
-                plan_dt_str = f"{load_date_str} {round_str}"
                 
-                # รองรับ format เวลา
+                # สร้าง DateTime ของกำหนดการ
+                plan_dt_str = f"{load_date_str} {round_str}"
                 try: plan_dt = datetime.strptime(plan_dt_str, "%Y-%m-%d %H:%M")
                 except: plan_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
                 
-                # เช็คว่าเลยเวลาปัจจุบันหรือยัง
+                # ถ้าเลยเวลาปัจจุบันแล้ว
                 if now_thai > plan_dt:
                     po_key = str(job['PO_Date'])
                     if po_key not in late_arrivals_by_po:
                         late_arrivals_by_po[po_key] = []
                     
-                    # คำนวณว่าสายไปกี่นาที
                     diff = now_thai - plan_dt
                     hours = int(diff.total_seconds() // 3600)
                     mins = int((diff.total_seconds() % 3600) // 60)
                     
                     job['late_duration'] = f"{hours} ชม. {mins} น."
-                    late_arrivals_by_po[po_key].append(job)
-                    total_late_cars += 1
+                    
+                    # ป้องกันการนับซ้ำใน Trip เดียวกัน (เช็คว่า Car No นี้มีใน list หรือยัง)
+                    if not any(x['Car_No'] == job['Car_No'] for x in late_arrivals_by_po[po_key]):
+                        late_arrivals_by_po[po_key].append(job)
+                        total_late_cars += 1
             except: 
                 pass
-    # -------------------------------------------------------------------
+    # -----------------------------------------------------------
 
     # 4. Sorting
     def sort_key_func(job):
@@ -158,7 +159,7 @@ def manager_dashboard():
 
     filtered_jobs = sorted(filtered_jobs, key=sort_key_func)
     
-# --- Prepare Data for LINE Share & Update Status ---
+    # --- Prepare Data for LINE Share & Update Status ---
     line_data_day = []
     line_data_night = []
     
@@ -180,62 +181,78 @@ def manager_dashboard():
         round_str = str(first['Round']).strip()
         load_date_raw = str(first.get('Load_Date', first['PO_Date'])).strip()
         
-        # จัดรูปแบบวันที่
+        # Format Date for Display
         show_date_str = load_date_raw
         try:
             ld_obj = datetime.strptime(load_date_raw, "%Y-%m-%d")
             thai_year = ld_obj.year + 543
-            show_date_str = ld_obj.strftime(f"%d.%m.{thai_year}") # Format: 28.11.2025
+            show_date_str = ld_obj.strftime(f"%d/%m/{str(thai_year)[2:]}")
         except: pass
 
-        # แยกกะ เช้า/ค่ำ
+        # Determine Shift (Day/Night)
         is_day = True
         try:
             h = int(round_str.split(':')[0])
             if h < 6 or h >= 19: is_day = False
         except: pass
 
-        # --- [NEW] Logic หา "สถานะล่าสุด" (Latest Status) ---
+        # --- [FEATURE 2] Advanced Latest Status Logic ---
         status_txt = "รอเข้า"
         status_time = ""
+        found_branch_activity = False
 
-        # เช็คย้อนกลับจากจบงาน -> เริ่มต้น
-        is_all_done = all(j['Status'] == 'Done' for j in group)
-        
-        if is_all_done:
-            status_txt = "จบงาน"
-            # เวลาจบของสาขาสุดท้าย
+        # 1. เช็คว่าจบงานครบทุกสาขาไหม
+        if all(j['Status'] == 'Done' for j in group):
+            status_txt = "จบงานทุกสาขา"
             status_time = group[-1].get('T8_EndJob', '')
-        elif first.get('T6_Exit'):
-            # ออกโรงงานแล้ว เช็คว่าถึงสาขาไหนหรือยัง
-            status_txt = "ออกโรงงาน"
-            status_time = first.get('T6_Exit')
-            for b in group:
-                if b.get('T7_ArriveBranch') and not b.get('T8_EndJob'):
-                    status_txt = f"ถึง{b['Branch_Name']}"
-                    status_time = b.get('T7_ArriveBranch')
-                    break
-        elif first.get('T5_RecvDoc'):
-            status_txt = "รับเอกสาร"
-            status_time = first.get('T5_RecvDoc')
-        elif first.get('T4_SubmitDoc'):
-            status_txt = "ยื่นเอกสาร"
-            status_time = first.get('T4_SubmitDoc')
-        elif first.get('T3_EndLoad'):
-            status_txt = "โหลดเสร็จ"
-            status_time = first.get('T3_EndLoad')
-        elif first.get('T2_StartLoad'):
-            status_txt = "กำลังโหลด"
-            status_time = first.get('T2_StartLoad')
-        elif first.get('T1_Enter'):
-            status_txt = "เข้าโรงงาน"
-            status_time = first.get('T1_Enter')
+            found_branch_activity = True
+        else:
+            # 2. เช็คความคืบหน้ารายสาขา
+            latest_branch_txt = ""
+            latest_branch_time = ""
+            
+            for idx, j in enumerate(group, 1): # เริ่มนับสาขาที่ 1
+                t8 = j.get('T8_EndJob')
+                t7 = j.get('T7_ArriveBranch')
+                
+                if t8:
+                    latest_branch_txt = f"จบงานสาขา {idx}"
+                    latest_branch_time = t8
+                elif t7:
+                    latest_branch_txt = f"ถึงสาขา {idx}"
+                    latest_branch_time = t7
+            
+            if latest_branch_txt:
+                status_txt = latest_branch_txt
+                status_time = latest_branch_time
+                found_branch_activity = True
+
+        # 3. ถ้าไม่มีกิจกรรมที่สาขา เช็คโรงงาน
+        if not found_branch_activity:
+            if first.get('T6_Exit'):
+                status_txt = "ออกโรงงาน"
+                status_time = first.get('T6_Exit')
+            elif first.get('T5_RecvDoc'):
+                status_txt = "รับเอกสาร"
+                status_time = first.get('T5_RecvDoc')
+            elif first.get('T4_SubmitDoc'):
+                status_txt = "ยื่นเอกสาร"
+                status_time = first.get('T4_SubmitDoc')
+            elif first.get('T3_EndLoad'):
+                status_txt = "โหลดเสร็จ"
+                status_time = first.get('T3_EndLoad')
+            elif first.get('T2_StartLoad'):
+                status_txt = "กำลังโหลด"
+                status_time = first.get('T2_StartLoad')
+            elif first.get('T1_Enter'):
+                status_txt = "เข้าโรงงาน"
+                status_time = first.get('T1_Enter')
         
-        # จัดรูปแบบข้อความสถานะ (ถ้ามีเวลา ให้ใส่วงเล็บ)
+        # Format Status String
         full_status = f"{status_txt}"
         if status_time:
             full_status = f"{status_txt} ({status_time})"
-        # ----------------------------------------------------
+        # ------------------------------------------------
 
         trip_data = {
             'round': round_str,
@@ -244,7 +261,7 @@ def manager_dashboard():
             'driver': first['Driver'],
             'branches': [j['Branch_Name'] for j in group],
             'load_date': show_date_str,
-            'latest_status': full_status # ส่งค่าสถานะไปหน้าบ้าน
+            'latest_status': full_status 
         }
         
         if is_day: line_data_day.append(trip_data)
@@ -259,7 +276,7 @@ def manager_dashboard():
     line_data_night.sort(key=night_sort)
     # -----------------------------------------------------------------
 
-    # Pre-calculate Late Status (Time compare only, date is handled by logic)
+    # Pre-calculate Late Status for Display
     for job in filtered_jobs:
         job['is_start_late'] = False
         t_plan_str = str(job.get('Round', '')).strip()
@@ -270,7 +287,6 @@ def manager_dashboard():
                 fmt_act = "%H:%M" if len(t_act_str) <= 5 else "%H:%M:%S"
                 t_plan = datetime.strptime(t_plan_str, fmt_plan)
                 t_act = datetime.strptime(t_act_str, fmt_act)
-                # Simple logic: ถ้าเวลาจริง > เวลาแผน เกิน 12 ชม ถือว่าข้ามวัน (หรือใช้ Load_Date เทียบก็ได้)
                 if (t_plan - t_act).total_seconds() > 12 * 3600: t_act += timedelta(days=1)
                 if t_act > t_plan: job['is_start_late'] = True
             except: pass
@@ -302,8 +318,9 @@ def manager_dashboard():
                            trip_last_end_time=trip_last_end_time,
                            line_data_day=line_data_day,
                            line_data_night=line_data_night,
-                           late_arrivals_by_po=late_arrivals_by_po, # เพิ่มตัวแปร
-                           total_late_cars=total_late_cars          # เพิ่มตัวแปร
+                           late_arrivals_by_po=late_arrivals_by_po,
+                           total_late_cars=total_late_cars
+                           )
                            )
 
 @app.route('/create_job', methods=['POST'])

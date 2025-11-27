@@ -533,21 +533,17 @@
         copyToClipboard(msg, "ตารางงาน");
     }
 	
-	// --- [NEW] Update Status Share Logic ---
+// --- [UPDATED] Update Status Share Logic ---
     function copyUpdateText(shiftType) {
-        // รับข้อมูลชุดเดิมจาก Python (เพราะเราเพิ่ม latest_status เข้าไปแล้ว)
         const dayData = {{ line_data_day | tojson | safe }};
         const nightData = {{ line_data_night | tojson | safe }};
         
         const dataList = (shiftType === 'day') ? dayData : nightData;
-        const shiftLabel = (shiftType === 'day') ? 'รอบบ่าย' : 'รอบดึก'; // ตามรูปแบบที่ขอ
+        const shiftLabel = (shiftType === 'day') ? 'รอบบ่าย' : 'รอบดึก';
         
-        // รับค่า PO Date
         const poDateVal = getFilterDate(); 
         if (!poDateVal) { alert("กรุณาเลือกวันที่ก่อน"); return; }
         const [py, pm, pd] = poDateVal.split('-').map(Number);
-        
-        // Format Header: LMT PO.28.11.2025
         const poDateFormatted = `${pd.toString().padStart(2,'0')}.${pm.toString().padStart(2,'0')}.${py + 543}`; 
 
         if (!dataList || dataList.length === 0) {
@@ -555,34 +551,34 @@
             return;
         }
 
-        // สร้าง Header
+        // Header
         let msg = `อัพเดท รอบโหลด (${shiftLabel})\n`;
         msg += `🚛 LMT PO.${poDateFormatted}\n\n`;
 
-        // Group by Round
+        // Grouping
         let groupedByRound = {};
         dataList.forEach(item => {
             let r = item.round || "ไม่ระบุ";
-            // แปลง : เป็น . ตามตัวอย่าง (เช่น 0:30 -> 0.30)
-            r = r.replace(':', '.'); 
+            r = r.replace(':', '.'); // เปลี่ยน 00:30 เป็น 00.30 ตามตัวอย่าง
             if (!groupedByRound[r]) groupedByRound[r] = [];
             groupedByRound[r].push(item);
         });
 
-        // Loop สร้างเนื้อหา
+        // Loop Content
         for (const [roundTime, cars] of Object.entries(groupedByRound)) {
             msg += `🕒 รอบโหลด : ${roundTime}\n`;
             
             cars.forEach(car => {
-                // รูปแบบ: คันที่ 80 บห-3169 = สถานะล่าสุด (เวลา)
+                // รูปแบบ: คันที่ 88 ถอ 4110 กทม. = ถึงสาขา 1 (05:37)
                 msg += `คันที่ ${car.car_no} ${car.plate} = ${car.latest_status}\n`;
             });
             
-            msg += `\n`; // เว้นบรรทัดระหว่างรอบ
+            msg += `\n`; 
         }
 
         copyToClipboard(msg, "ข้อความอัพเดทสถานะ");
     }
+	
 </script>
 
 {% endblock %}

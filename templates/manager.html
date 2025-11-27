@@ -5,10 +5,10 @@
     body, h1, h2, h3, h4, h5, h6, p, span, div, table, input, select, button {
         font-family: 'Kanit', sans-serif !important;
     }
-    .table-data { font-size: 0.85rem; } 
+    /* ลดขนาดฟอนต์ลงเล็กน้อยเพื่อให้พอดีกับจอ */
+    .table-data { font-size: 0.8rem; } 
     .table-header { font-size: 0.75rem; }
     
-    /* Custom Scrollbar for better look */
     .custom-scrollbar::-webkit-scrollbar {
         height: 8px;
         width: 8px;
@@ -26,7 +26,7 @@
     }
 </style>
 
-<div class="w-full max-w-[98%] mx-auto pb-10 px-2 md:px-4">
+<div class="w-full max-w-[99%] mx-auto pb-10">
     
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500">
@@ -69,11 +69,11 @@
                 </h3>
                 <form method="GET" action="/manager" class="flex items-center gap-2 bg-white p-1.5 rounded-lg border border-gray-300 shadow-sm">
                     <input type="hidden" name="tab" value="monitor">
-                    <a href="/manager?tab=monitor&date_filter={{ prev_date }}" class="px-2 text-gray-500 hover:text-indigo-600 border-r border-gray-200" title="วันก่อนหน้า"><i class="fa-solid fa-chevron-left"></i></a>
+                    <a href="/manager?tab=monitor&date_filter={{ prev_date }}" class="px-2 text-gray-500 hover:text-indigo-600 border-r border-gray-200"><i class="fa-solid fa-chevron-left"></i></a>
                     <span class="text-xs font-bold text-gray-500 pl-1">PO:</span>
                     <input type="date" name="date_filter" value="{{ current_filter_date }}" onchange="this.form.submit()" class="text-sm border-none focus:ring-0 cursor-pointer font-medium text-gray-700 h-8 bg-transparent">
-                    <a href="/manager?tab=monitor&date_filter={{ next_date }}" class="px-2 text-gray-500 hover:text-indigo-600 border-l border-gray-200" title="วันถัดไป"><i class="fa-solid fa-chevron-right"></i></a>
-                    <a href="/manager?tab=monitor" class="text-gray-400 hover:text-indigo-600 px-2 border-l border-gray-200" title="วันนี้"><i class="fa-solid fa-rotate-right"></i></a>
+                    <a href="/manager?tab=monitor&date_filter={{ next_date }}" class="px-2 text-gray-500 hover:text-indigo-600 border-l border-gray-200"><i class="fa-solid fa-chevron-right"></i></a>
+                    <a href="/manager?tab=monitor" class="text-gray-400 hover:text-indigo-600 px-2 border-l border-gray-200"><i class="fa-solid fa-rotate-right"></i></a>
                 </form>
             </div>
             <div class="overflow-x-auto custom-scrollbar">
@@ -108,11 +108,11 @@
                                     {% set status_badge = '<span class="inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-1 rounded-full border border-indigo-200"><i class="fa-solid fa-warehouse"></i> ถึงคลังแล้ว</span>' %}
                                 {% else %}
                                     {% if is_late %}
-                                        {% set status_badge = '<span class="inline-flex items-center gap-1 bg-red-100 text-red-700 text-xs font-bold px-3 py-1 rounded-full border border-red-200 animate-pulse"><i class="fa-solid fa-circle-exclamation"></i> ยังไม่เข้า (ล่าช้า)</span>' %}
+                                        {% set status_badge = '<span class="inline-flex items-center gap-1 bg-red-100 text-red-700 text-xs font-bold px-3 py-1 rounded-full border border-red-200 animate-pulse"><i class="fa-solid fa-circle-exclamation"></i> ล่าช้า</span>' %}
                                     {% elif job.PO_Date > today_date %}
-                                        {% set status_badge = '<span class="inline-flex items-center gap-1 bg-gray-100 text-gray-500 text-xs font-bold px-3 py-1 rounded-full border border-gray-200"><i class="fa-regular fa-clock"></i> ยังไม่ถึงวัน</span>' %}
+                                        {% set status_badge = '<span class="inline-flex items-center gap-1 bg-gray-100 text-gray-500 text-xs font-bold px-3 py-1 rounded-full border border-gray-200"><i class="fa-regular fa-clock"></i> รอวัน</span>' %}
                                     {% else %}
-                                        {% set status_badge = '<span class="inline-flex items-center gap-1 bg-gray-200 text-gray-700 text-xs font-bold px-3 py-1 rounded-full border border-gray-300">ยังไม่เข้าคลัง</span>' %}
+                                        {% set status_badge = '<span class="inline-flex items-center gap-1 bg-gray-200 text-gray-700 text-xs font-bold px-3 py-1 rounded-full border border-gray-300">รอเข้า</span>' %}
                                     {% endif %}
                                 {% endif %}
                                 <tr class="hover:bg-indigo-50/30 transition">
@@ -150,7 +150,7 @@
     </div>
 
     <div id="tab-create" class="tab-content hidden">
-        <div class="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-8 border border-gray-100">
+         <div class="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-8 border border-gray-100">
             <h3 class="text-xl font-bold text-gray-800 mb-6 border-b pb-2 flex items-center gap-2"><i class="fa-solid fa-pen-to-square text-indigo-600"></i> สร้างใบงานใหม่</h3>
             <form action="/create_job" method="POST" class="space-y-5">
                 <div class="grid grid-cols-2 gap-4">
@@ -199,12 +199,12 @@
                         <a href="/manager?tab=report&date_filter={{ next_date }}" class="px-2 text-gray-500 hover:text-indigo-600 border-l border-gray-200"><i class="fa-solid fa-chevron-right"></i></a>
                     </div>
                     <a href="#" onclick="triggerCustomerPDF()" class="bg-red-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-red-700 transition shadow-md flex items-center gap-2 transform active:scale-95">
-                        <i class="fa-solid fa-file-pdf"></i> <span class="hidden sm:inline">PDF Export</span>
+                        <i class="fa-solid fa-file-pdf"></i> <span class="hidden sm:inline">PDF</span>
                     </a>
                     <a href="#" onclick="triggerCompactPDF()" class="bg-orange-500 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-orange-600 transition shadow-md flex items-center gap-2 transform active:scale-95">
-                        <i class="fa-solid fa-file-contract"></i> <span class="hidden sm:inline">PDF Summary</span>
+                        <i class="fa-solid fa-file-contract"></i> <span class="hidden sm:inline">Summary</span>
                     </a>
-                    <a href="#" onclick="triggerExport()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-bold shadow transition flex items-center gap-2"><i class="fa-solid fa-file-excel"></i> Export Excel</a>
+                    <a href="#" onclick="triggerExport()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-bold shadow transition flex items-center gap-2"><i class="fa-solid fa-file-excel"></i> Excel</a>
                     <button type="button" onclick="shareLine('day')" class="bg-[#06C755] text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#05b34c] transition shadow-md flex items-center gap-1 transform active:scale-95" title="คัดลอกรอบกลางวัน">
                         <i class="fa-brands fa-line text-lg"></i> <i class="fa-solid fa-sun text-yellow-300"></i>
                     </button>
@@ -219,20 +219,20 @@
                 <table class="w-full text-center border-collapse whitespace-nowrap table-data">
                     <thead>
                         <tr class="text-white table-header font-bold tracking-wide">
-                            <th class="p-2 bg-green-700 border-r border-green-600 sticky left-0 z-10 shadow-lg">ลำดับรถ</th>
-                            <th class="p-2 bg-green-600 border-r border-green-500">PO Date</th>
-                            <th class="p-2 bg-green-600 border-r border-green-500">เวลาโหลด</th>
-                            <th class="p-2 bg-green-600 border-r border-green-500 min-w-[150px]">ปลายทาง (สาขา)</th>
-                            <th class="p-2 bg-green-600 border-r border-green-500">ทะเบียนรถ</th>
-                            <th class="p-2 bg-green-600 border-r border-green-500">ชื่อคนขับ</th>
-                            <th class="p-2 bg-[#c0504d] border-r border-[#a64d4d]">1.เข้าโรงงาน</th>
-                            <th class="p-2 bg-[#c0504d] border-r border-[#a64d4d]">2.เริ่มโหลด</th>
-                            <th class="p-2 bg-[#c0504d] border-r border-[#a64d4d]">3.โหลดเสร็จ</th>
-                            <th class="p-2 bg-[#c0504d] border-r border-[#a64d4d]">4.ยื่นเอกสาร</th>
-                            <th class="p-2 bg-[#c0504d] border-r border-[#a64d4d]">5.รับเอกสาร</th>
-                            <th class="p-2 bg-[#c0504d] border-r border-[#a64d4d]">6.ออกโรงงาน</th>
-                            <th class="p-2 bg-[#9bbb59] border-r border-[#8aa64f]">7.ถึงสาขา</th>
-                            <th class="p-2 bg-[#9bbb59]">8.จบงาน</th>
+                            <th class="px-2 py-2 bg-green-700 border-r border-green-600 sticky left-0 z-10 shadow-lg">ลำดับ</th>
+                            <th class="px-2 py-2 bg-green-600 border-r border-green-500">PO Date</th>
+                            <th class="px-2 py-2 bg-green-600 border-r border-green-500">เวลา</th>
+                            <th class="px-2 py-2 bg-green-600 border-r border-green-500 min-w-[150px]">ปลายทาง (สาขา)</th>
+                            <th class="px-2 py-2 bg-green-600 border-r border-green-500">ทะเบียน</th>
+                            <th class="px-2 py-2 bg-green-600 border-r border-green-500">คนขับ</th>
+                            <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">1.เข้า</th>
+                            <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">2.เริ่ม</th>
+                            <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">3.เสร็จ</th>
+                            <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">4.ยื่น</th>
+                            <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">5.รับ</th>
+                            <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">6.ออก</th>
+                            <th class="px-2 py-2 bg-[#9bbb59] border-r border-[#8aa64f]">7.ถึงสาขา</th>
+                            <th class="px-2 py-2 bg-[#9bbb59]">8.จบงาน</th>
                         </tr>
                     </thead>
                     <tbody class="text-gray-700 bg-white">
@@ -242,8 +242,8 @@
                             {% macro report_time_cell(time_val, loc_val, text_class='') %}
                                 {% if time_val %}
                                     {% if loc_val %}
-                                        <a href="https://maps.google.com/maps?q={{ loc_val }}" target="_blank" class="inline-flex items-center justify-center gap-1 hover:bg-gray-100/80 px-1.5 py-0.5 rounded transition group cursor-pointer {{ text_class }}" title="คลิกเพื่อดูพิกัดบนแผนที่">
-                                            {{ time_val }} <i class="fa-solid fa-location-dot text-[10px] opacity-30 group-hover:opacity-100 group-hover:text-blue-600"></i>
+                                        <a href="https://maps.google.com/maps?q={{ loc_val }}" target="_blank" class="inline-flex items-center justify-center gap-1 hover:bg-gray-100/80 px-1.5 py-0.5 rounded transition group cursor-pointer {{ text_class }}" title="ดูพิกัด">
+                                            {{ time_val }} <i class="fa-solid fa-location-dot text-[9px] opacity-30 group-hover:opacity-100 group-hover:text-blue-600"></i>
                                         </a>
                                     {% else %}
                                         <span class="{{ text_class }}">{{ time_val }}</span>
@@ -267,20 +267,20 @@
                                 {% endif %}
                                 
                                 <tr class="border-b hover:bg-gray-50 transition">
-                                    <td class="p-2 border-r font-bold bg-gray-50 sticky left-0 z-10 border-gray-200 text-indigo-900">{% if not is_same %} คันที่ {{ job.Car_No }} {% endif %}</td>
-                                    <td class="p-2 border-r border-gray-200">{% if not is_same %}{{ job.PO_Date | thai_date }}{% endif %}</td>
-                                    <td class="p-2 border-r border-gray-200 font-bold">{% if not is_same %}{{ job.Round }}{% endif %}</td>
-                                    <td class="p-2 border-r border-gray-200 text-left pl-4 font-bold text-indigo-700">{{ job.Branch_Name }}</td>
-                                    <td class="p-2 border-r border-gray-200">{% if not is_same %} {{ job.Plate }} {% endif %}</td>
-                                    <td class="p-2 border-r border-gray-200 font-medium">{% if not is_same %} {{ job.Driver }} {% endif %}</td>
-                                    <td class="p-2 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T1_Enter, job.L1_Loc) }}{% endif %}</td>
-                                    <td class="p-2 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T2_StartLoad, job.L2_Loc, start_load_color) }}{% endif %}</td>
-                                    <td class="p-2 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T3_EndLoad, job.L3_Loc) }}{% endif %}</td>
-                                    <td class="p-2 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T4_SubmitDoc, job.L4_Loc) }}{% endif %}</td>
-                                    <td class="p-2 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T5_RecvDoc, job.L5_Loc) }}{% endif %}</td>
-                                    <td class="p-2 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T6_Exit, job.L6_Loc) }}{% endif %}</td>
-                                    <td class="p-2 border-r font-bold text-green-700 bg-green-50/50 border-gray-200">{{ report_time_cell(job.T7_ArriveBranch, job.L7_Loc, 'text-green-800') }}</td>
-                                    <td class="p-2 font-bold text-red-600 bg-red-50/50">{{ report_time_cell(job.T8_EndJob, job.L8_Loc, 'text-red-700') }}</td>
+                                    <td class="px-2 py-1 border-r font-bold bg-gray-50 sticky left-0 z-10 border-gray-200 text-indigo-900 text-center">{% if not is_same %} #{{ job.Car_No }} {% endif %}</td>
+                                    <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %}{{ job.PO_Date | thai_date }}{% endif %}</td>
+                                    <td class="px-2 py-1 border-r border-gray-200 font-bold">{% if not is_same %}{{ job.Round }}{% endif %}</td>
+                                    <td class="px-2 py-1 border-r border-gray-200 text-left pl-2 font-bold text-indigo-700 truncate max-w-[200px]" title="{{ job.Branch_Name }}">{{ job.Branch_Name }}</td>
+                                    <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %} {{ job.Plate }} {% endif %}</td>
+                                    <td class="px-2 py-1 border-r border-gray-200 font-medium truncate max-w-[120px]" title="{{ job.Driver }}">{% if not is_same %} {{ job.Driver }} {% endif %}</td>
+                                    <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T1_Enter, job.L1_Loc) }}{% endif %}</td>
+                                    <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T2_StartLoad, job.L2_Loc, start_load_color) }}{% endif %}</td>
+                                    <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T3_EndLoad, job.L3_Loc) }}{% endif %}</td>
+                                    <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T4_SubmitDoc, job.L4_Loc) }}{% endif %}</td>
+                                    <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T5_RecvDoc, job.L5_Loc) }}{% endif %}</td>
+                                    <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T6_Exit, job.L6_Loc) }}{% endif %}</td>
+                                    <td class="px-2 py-1 border-r font-bold text-green-700 bg-green-50/50 border-gray-200">{{ report_time_cell(job.T7_ArriveBranch, job.L7_Loc, 'text-green-800') }}</td>
+                                    <td class="px-2 py-1 font-bold text-red-600 bg-red-50/50">{{ report_time_cell(job.T8_EndJob, job.L8_Loc, 'text-red-700') }}</td>
                                 </tr>
                             {% endfor %}
                         {% endif %}

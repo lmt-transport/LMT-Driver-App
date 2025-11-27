@@ -1,50 +1,54 @@
 {% extends "layout.html" %}
 {% block content %}
 
-<div class="max-w-lg mx-auto px-4 py-10 min-h-[80vh] flex flex-col justify-center">
+<div class="flex-grow flex flex-col justify-center py-6 md:py-12">
     
-    <div class="text-center mb-12">
-        <div class="inline-flex p-4 bg-white rounded-full shadow-md mb-5 animate-bounce">
-            <div class="bg-indigo-100 p-3 rounded-full">
-                <i class="fa-solid fa-truck-fast text-4xl text-indigo-600"></i>
-            </div>
+    <div class="text-center mb-10 md:mb-14">
+        <div class="inline-flex p-4 bg-white rounded-2xl shadow-lg shadow-indigo-100 mb-6 animate-bounce">
+            <i class="fa-solid fa-truck-fast text-4xl text-indigo-600"></i>
         </div>
-        <h1 class="text-3xl font-bold text-gray-800 tracking-tight">ยินดีต้อนรับ</h1>
-        <p class="text-gray-500 mt-2 text-sm">LMT Driver Application<br>ระบบบริหารจัดการงานขนส่ง</p>
+        <h1 class="text-3xl md:text-4xl font-bold text-slate-800 tracking-tight mb-2">ระบบบริหารจัดการงานขนส่ง</h1>
+        <p class="text-slate-500 text-sm md:text-base">LMT. Driver Application Portal</p>
     </div>
 
-    <div class="space-y-5">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-4xl mx-auto w-full px-2">
         
-        <a href="/manager_login" class="group relative block w-full bg-white border border-gray-100 rounded-3xl p-1 shadow-sm hover:shadow-xl transition-all duration-300 active:scale-95">
-            <div class="flex items-center p-5">
-                <div class="bg-indigo-50 text-indigo-600 h-14 w-14 rounded-2xl flex items-center justify-center text-2xl mr-5 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">
-                    <i class="fa-solid fa-user-tie"></i>
+        <a href="/manager_login" class="group relative bg-white border border-slate-100 rounded-3xl p-6 shadow-sm hover:shadow-xl hover:border-indigo-100 transition-all duration-300 transform hover:-translate-y-1">
+            <div class="flex flex-col h-full justify-between">
+                <div class="flex items-start justify-between mb-6">
+                    <div class="bg-indigo-50 text-indigo-600 h-14 w-14 rounded-2xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform duration-300">
+                        <i class="fa-solid fa-user-tie"></i>
+                    </div>
+                    <div class="text-gray-300 group-hover:text-indigo-500 transition-colors">
+                        <i class="fa-solid fa-arrow-right-long text-xl"></i>
+                    </div>
                 </div>
-                <div class="flex-1 text-left">
-                    <h3 class="text-lg font-bold text-gray-800 group-hover:text-indigo-700 transition-colors">ผู้จัดการ</h3>
-                    <span class="text-xs text-gray-400 font-medium uppercase tracking-wide">Manager Login</span>
-                </div>
-                <div class="text-gray-300 group-hover:text-indigo-500 pr-2">
-                    <i class="fa-solid fa-chevron-right"></i>
+                <div>
+                    <h3 class="text-xl font-bold text-slate-800 mb-1 group-hover:text-indigo-700">ผู้จัดการ</h3>
+                    <p class="text-xs text-slate-400 font-medium uppercase tracking-wide">Manager Login</p>
+                    <p class="text-sm text-slate-500 mt-3 opacity-80">เข้าสู่ระบบเพื่อจัดการงาน สร้างใบงาน และดูรายงาน</p>
                 </div>
             </div>
         </a>
 
-        <a href="/driver" class="group relative block w-full bg-gradient-to-r from-indigo-600 to-blue-600 rounded-3xl p-1 shadow-lg shadow-indigo-200 hover:shadow-indigo-300 hover:-translate-y-1 transition-all duration-300 active:scale-95">
-            <div class="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-                <i class="fa-solid fa-road text-7xl text-white transform rotate-12"></i>
+        <a href="/driver" class="group relative bg-gradient-to-br from-indigo-600 to-blue-700 rounded-3xl p-6 shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transition-all duration-300 transform hover:-translate-y-1 overflow-hidden">
+            <div class="absolute -right-4 -bottom-4 text-white opacity-10 transform rotate-12 group-hover:scale-110 transition-transform duration-500">
+                <i class="fa-solid fa-road text-9xl"></i>
             </div>
             
-            <div class="flex items-center p-5 relative z-10">
-                <div class="bg-white/20 h-14 w-14 rounded-2xl flex items-center justify-center text-2xl mr-5 backdrop-blur-sm text-white border border-white/10">
-                    <i class="fa-solid fa-id-card"></i>
+            <div class="flex flex-col h-full justify-between relative z-10">
+                <div class="flex items-start justify-between mb-6">
+                    <div class="bg-white/20 backdrop-blur-md border border-white/20 text-white h-14 w-14 rounded-2xl flex items-center justify-center text-2xl">
+                        <i class="fa-solid fa-id-card"></i>
+                    </div>
+                    <div class="bg-white/20 h-8 w-8 rounded-full flex items-center justify-center text-white text-xs backdrop-blur-sm group-hover:bg-white group-hover:text-indigo-600 transition-colors">
+                        <i class="fa-solid fa-arrow-right"></i>
+                    </div>
                 </div>
-                <div class="flex-1 text-left text-white">
-                    <h3 class="text-xl font-bold">พนักงานขับรถ</h3>
-                    <p class="text-blue-100 text-xs opacity-90 mt-0.5">เข้าสู่ระบบเพื่อลงเวลางาน</p>
-                </div>
-                <div class="bg-white/20 h-8 w-8 rounded-full flex items-center justify-center text-white text-xs backdrop-blur-sm">
-                    <i class="fa-solid fa-arrow-right"></i>
+                <div class="text-white">
+                    <h3 class="text-2xl font-bold mb-1">พนักงานขับรถ</h3>
+                    <p class="text-indigo-100 text-xs font-medium uppercase tracking-wide">Driver Login</p>
+                    <p class="text-sm text-indigo-100 mt-3 opacity-90">เข้าสู่ระบบเพื่อรับงาน ลงเวลา และดูประวัติการวิ่ง</p>
                 </div>
             </div>
         </a>
@@ -52,11 +56,10 @@
     </div>
 
     <div class="mt-12 text-center">
-        <div class="inline-flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-full border border-gray-200">
-            <i class="fa-solid fa-circle-info text-indigo-500 text-sm"></i>
-            <span class="text-xs text-gray-500 font-medium">คนขับใช้งานผ่านมือถือได้ทันที</span>
+        <div class="inline-flex items-center gap-2 bg-white/50 backdrop-blur px-4 py-2 rounded-full border border-slate-200 shadow-sm">
+            <i class="fa-solid fa-mobile-screen-button text-slate-400"></i>
+            <span class="text-xs text-slate-500">รองรับการใช้งานผ่านมือถือและแท็บเล็ต</span>
         </div>
-        <p class="text-[10px] text-gray-300 mt-6">Version 1.0.0 &bull; LMT Transport</p>
     </div>
 
 </div>

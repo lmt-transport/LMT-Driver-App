@@ -1277,11 +1277,12 @@ def driver_select():
     driver_info = {} 
     for name in drivers:
         driver_info[name] = {
-            'pending_count': 0,
+            'pending_set': set(), # [NEW] ใช้ Set เพื่อเก็บ Key ของเที่ยววิ่ง (ไม่ซ้ำ)
+            'pending_count': 0,   # ตัวเลขที่จะแสดงผล
             'urgent_msg': '',    
             'urgent_color': '',  
             'urgent_time': '',   
-            'sort_weight': 999   # ค่าความสำคัญ (ยิ่งน้อยยิ่งด่วน)
+            'sort_weight': 999
         }
 
     for job in all_jobs:
@@ -1290,9 +1291,12 @@ def driver_select():
         
         # นับงานค้าง (Status != Done)
         if job['Status'] != 'Done':
-            driver_info[d_name]['pending_count'] += 1
+            # [NEW] สร้าง Key ของเที่ยววิ่ง (PO + เวลา + ทะเบียน)
+            # ถ้าเป็นเที่ยวเดียวกัน key จะเหมือนกัน ระบบ Set จะนับแค่ 1
+            trip_key = f"{job['PO_Date']}_{job['Round']}_{job['Car_No']}"
+            driver_info[d_name]['pending_set'].add(trip_key)
             
-            # --- START: MIDNIGHT CROSSOVER LOGIC (เหมือน Driver Tasks) ---
+            # --- LOGIC การแจ้งเตือน (Midnight Crossover) คงเดิม ---
             try:
                 # 1. เตรียมข้อมูล
                 po_dt = datetime.strptime(job['PO_Date'], "%Y-%m-%d")
@@ -1305,8 +1309,6 @@ def driver_select():
                 except: h, m = 0, 0
 
                 # 2. คำนวณ "วันที่โหลดจริง"
-                # 06:00 - 23:59 -> PO - 1 วัน
-                # 00:00 - 05:59 -> PO วันเดิม
                 if 6 <= h <= 23:
                     load_dt = po_dt - timedelta(days=1)
                 else:
@@ -1319,21 +1321,20 @@ def driver_select():
                 diff = job_dt - now_thai
                 hours_diff = diff.total_seconds() / 3600
                 
-                # 4. กำหนด Badge การแจ้งเตือนหน้าแรก
+                # 4. กำหนด Badge
                 msg = ""
                 color = ""
                 weight = 999
                 
-                # กรณี A: ถึงเวลาแล้ว / ล่าช้า
+                # A: ถึงเวลาแล้ว / ล่าช้า
                 if hours_diff <= 0:
-                    if hours_diff > -12: # ถ้าเพิ่งเลยมาไม่เกิน 12 ชม. ให้เตือนด่วน
-                        msg = "❗ เข้าโหลดงานตอนนี้"
+                    if hours_diff > -12: 
+                        msg = "❗ โหลดตอนนี้"
                         color = "bg-red-500 text-white border-red-600 animate-pulse shadow-red-200"
                         weight = 1
                 
-                # กรณี B: งานในช่วง 16 ชม. (เช้านี้ / บ่ายนี้ / คืนนี้)
+                # B: งานในช่วง 16 ชม.
                 elif 0 < hours_diff <= 16:
-                    # ใช้ h (ชั่วโมงงาน) เพื่อบอกช่วงเวลา
                     if 6 <= h <= 12:
                          msg = "☀️ โหลดเช้านี้"
                          color = "bg-yellow-100 text-yellow-700 border-yellow-200"
@@ -1345,18 +1346,17 @@ def driver_select():
                          color = "bg-indigo-100 text-indigo-700 border-indigo-200"
                     weight = 2
                 
-                # กรณี C: งานวันพรุ่งนี้ (หรือคืนพรุ่งนี้) 16-40 ชม.
+                # C: งานวันพรุ่งนี้
                 elif 16 < hours_diff <= 40:
                     period_next = "วันพรุ่งนี้"
                     if h >= 19 or h <= 5: period_next = "คืนพรุ่งนี้"
                     
-                    # แสดงเฉพาะถ้ายังไม่มีงานที่ด่วนกว่า
                     if driver_info[d_name]['sort_weight'] > 3:
                         msg = f"⏩ เตรียมโหลด{period_next}"
                         color = "bg-gray-100 text-gray-500 border-gray-200"
                         weight = 3
 
-                # Update ข้อมูลถ้างานนี้ด่วนกว่า (Weight น้อยกว่า) งานเก่าที่เคยเช็ค
+                # Update ถ้าเจองานที่ด่วนกว่า
                 if weight < driver_info[d_name]['sort_weight']:
                     driver_info[d_name]['urgent_msg'] = msg
                     driver_info[d_name]['urgent_color'] = color
@@ -1365,7 +1365,10 @@ def driver_select():
 
             except Exception as e:
                 pass
-            # --- END LOGIC ---
+    
+    # [NEW] คำนวณจำนวนงานค้างจากขนาดของ Set
+    for name in drivers:
+        driver_info[name]['pending_count'] = len(driver_info[name]['pending_set'])
 
     return render_template('driver_select.html', drivers=drivers, driver_info=driver_info)
 

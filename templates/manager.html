@@ -392,7 +392,7 @@
 
     function copyCustomerLink() {
         let url = window.location.origin + "/tracking";
-        navigator.clipboard.writeText(url).then(() => alert("✅ คัดลอกลิงค์สำหรับลูกค้าแล้ว:\n" + url));
+        copyToClipboard(url, "ลิงค์สำหรับลูกค้า");
     }
 
     // --- Export Functions ---
@@ -415,9 +415,50 @@
         let url = '/export_pdf_summary'; 
         if (selectedDate) url += `?date_filter=${selectedDate}`;
         window.location.href = url;
+    }   
+
+    // --- [CORE] ฟังก์ชัน Copy ที่รองรับทุกอุปกรณ์ ---
+    async function copyToClipboard(text, successMessage) {
+        // วิธีที่ 1: ใช้ Clipboard API (Modern)
+        if (navigator.clipboard && window.isSecureContext) {
+            try {
+                await navigator.clipboard.writeText(text);
+                alert("✅ คัดลอก" + successMessage + "เรียบร้อยแล้ว!");
+                return;
+            } catch (err) {
+                console.error('Async: Could not copy text: ', err);
+            }
+        }
+
+        // วิธีที่ 2: ใช้ textarea (Fallback สำหรับมือถือรุ่นเก่าหรือ HTTP)
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        
+        // ทำให้ textarea มองไม่เห็นแต่อยู่ในหน้าจอ (ป้องกันการเด้ง)
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        textArea.style.top = "0";
+        document.body.appendChild(textArea);
+        
+        textArea.focus();
+        textArea.select();
+        
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                alert("✅ คัดลอก" + successMessage + "เรียบร้อยแล้ว!");
+            } else {
+                alert("❌ ไม่สามารถคัดลอกได้ กรุณาลองใหม่");
+            }
+        } catch (err) {
+            console.error('Fallback: Oops, unable to copy', err);
+            alert("❌ Browser นี้ไม่รองรับการคัดลอกอัตโนมัติ");
+        }
+        
+        document.body.removeChild(textArea);
     }
 
-    // --- [UPDATED] LINE Copy Function ---
+    // --- LINE Share Logic (สร้างข้อความแล้วส่งไป Copy) ---
     function shareLine(shiftType) {
         // 1. รับข้อมูล
         const dayData = {{ line_data_day | tojson }};
@@ -440,10 +481,9 @@
 
         const loadDateShow = dataList[0].load_date; 
 
-        // --- สร้างข้อความ Header ---
+        // 3. สร้างข้อความ (Format ใหม่ที่ขอมา)
         let msg = `📄 LMT PO ${poDateThai} (${shiftEmoji} ${shiftName} วันที่ ${loadDateShow})\n\n`;
 
-        // จัดกลุ่มตามเวลา
         let groupedByRound = {};
         dataList.forEach(item => {
             let r = item.round || "ไม่ระบุเวลา";
@@ -451,16 +491,12 @@
             groupedByRound[r].push(item);
         });
 
-        // Loop ตามเวลา
         for (const [roundTime, cars] of Object.entries(groupedByRound)) {
-            // หัวข้อเวลา
             msg += `🕒 รอบโหลด ${roundTime} น.\n`;
             
             cars.forEach(car => {
-                // ข้อมูลรถ
                 msg += `🚛 คันที่ ${car.car_no} ${car.plate} ${car.driver}\n`;
                 
-                // รายชื่อสาขา
                 car.branches.forEach(branch => {
                     msg += `📍 ${branch}\n`;
                 });
@@ -469,20 +505,8 @@
             });
         }
 
-        // --- [CHANGE] Copy to Clipboard ---
-        navigator.clipboard.writeText(msg).then(() => {
-            alert("✅ คัดลอกตารางงานเรียบร้อยแล้ว!\nคุณสามารถนำไปวาง (Paste) ใน LINE กลุ่มได้เลย");
-        }).catch(err => {
-            console.error('Failed to copy: ', err);
-            // Fallback กรณี Clipboard API ไม่รองรับ (เช่น เว็บไม่ได้รันบน HTTPS)
-            const textArea = document.createElement("textarea");
-            textArea.value = msg;
-            document.body.appendChild(textArea);
-            textArea.select();
-            document.execCommand("copy");
-            document.body.removeChild(textArea);
-            alert("✅ คัดลอกตารางงานเรียบร้อยแล้ว!");
-        });
+        // 4. ส่งไป Copy (ไม่ต้อง window.open แล้ว)
+        copyToClipboard(msg, "ตารางงาน");
     }
 </script>
 

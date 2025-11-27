@@ -263,19 +263,31 @@ def delete_job():
     if 'user' not in session: return redirect(url_for('manager_login'))
     sheet = get_db()
     ws = sheet.worksheet('Jobs')
+    
     po_date = request.form['po_date']
     round_time = request.form['round_time']
     car_no = request.form['car_no']
+    
     try:
         all_values = ws.get_all_values()
         rows_to_delete = []
+        
         for i, row in enumerate(all_values):
-            if i > 0:
-                # ปรับ Index: 0=PO, 1=Load, 2=Round, 3=Car
-                if (row[0] == po_date and str(row[2]) == str(round_time) and str(row[3]) == str(car_no)):
+            if i > 0: # ข้าม Header
+                # --- [แก้ไข] ปรับ Index การเช็คข้อมูล ---
+                # row[0] = PO (A)
+                # row[1] = Load (B)
+                # row[2] = Round (C)
+                # row[3] = Car (D)
+                if (row[0] == po_date and 
+                    str(row[2]) == str(round_time) and  # แก้จาก 1 เป็น 2
+                    str(row[3]) == str(car_no)):        # แก้จาก 2 เป็น 3
+                    
                     rows_to_delete.append(i + 1)
+                    
         for row_idx in sorted(rows_to_delete, reverse=True):
             ws.delete_rows(row_idx)
+            
         return redirect(url_for('manager_dashboard'))
     except Exception as e: return f"Error: {e}"
 
@@ -1409,35 +1421,71 @@ def update_status():
     sheet = get_db()
     ws = sheet.worksheet('Jobs')
     
-    # [IMPORTANT] Updated Column Indices (+1 from old due to Load_Date)
-    # T1=8(H), T2=9(I), T3=10(J), T4=11(K), T5=12(L), T6=13(M), T7=14(N), T8=15(O)
-    time_col_map = {'1': 8, '2': 9, '3': 10, '4': 11, '5': 12, '6': 13, '7': 14, '8': 15}
-    # L1=17(Q)...
-    loc_col_map = {'1': 17, '2': 18, '3': 19, '4': 20, '5': 21, '6': 22, '7': 23, '8': 24}
+    # --- [แก้ไขจุดที่ 1] ปรับ Map คอลัมน์ให้ตรงกับ Google Sheet ใหม่ (ขยับ +1) ---
+    # T1 เริ่มที่คอลัมน์ H (ลำดับที่ 8)
+    time_col_map = {
+        '1': 8,  # T1_Enter
+        '2': 9,  # T2_StartLoad
+        '3': 10, # T3_EndLoad
+        '4': 11, # T4_SubmitDoc
+        '5': 12, # T5_RecvDoc
+        '6': 13, # T6_Exit
+        '7': 14, # T7_ArriveBranch
+        '8': 15  # T8_EndJob
+    }
+    
+    # L1 เริ่มที่คอลัมน์ Q (ลำดับที่ 17)
+    loc_col_map = {
+        '1': 17, # L1
+        '2': 18, 
+        '3': 19, 
+        '4': 20, 
+        '5': 21, 
+        '6': 22, 
+        '7': 23, 
+        '8': 24
+    }
     
     time_col = time_col_map.get(step)
     loc_col = loc_col_map.get(step)
     updates = []
 
+    # กรณี Step 1-6 (งานโรงงาน) ต้องอัปเดตทุกแถวที่เป็นเที่ยววิ่งเดียวกัน
     if step in ['1', '2', '3', '4', '5', '6']:
         target_row_data = ws.row_values(row_id_target)
-        # Indices: 0=PO, 1=Load, 2=Round, 3=Car
+        
+        # --- [แก้ไขจุดที่ 2] การอ่านข้อมูลจากแถวเป้าหมาย (ขยับ Index) ---
+        # Index 0 = PO Date (A)
+        # Index 1 = Load Date (B) <-- ข้าม
+        # Index 2 = Round (C)
+        # Index 3 = Car No (D)
+        
         if len(target_row_data) < 4: return redirect(url_for('driver_tasks', name=driver_name))
+        
         target_po = target_row_data[0] 
-        target_round = target_row_data[2] # Round is now index 2
-        target_car = target_row_data[3]   # Car is now index 3
+        target_round = target_row_data[2] # แก้จาก 1 เป็น 2
+        target_car = target_row_data[3]   # แก้จาก 2 เป็น 3
         
         all_values = ws.get_all_values()
+        
         for i, row in enumerate(all_values[1:]): 
             current_row_id = i + 2 
-            # Check row[0], row[2], row[3]
-            if (len(row) > 3 and row[0] == target_po and row[2] == target_round and row[3] == target_car):
+            # ตรวจสอบเงื่อนไขว่าใช่เที่ยวเดียวกันไหม
+            if (len(row) > 3 and 
+                row[0] == target_po and 
+                row[2] == target_round and  # แก้จาก 1 เป็น 2
+                row[3] == target_car):      # แก้จาก 2 เป็น 3
+                
                 cell_coord_time = gspread.utils.rowcol_to_a1(current_row_id, time_col)
                 updates.append({'range': cell_coord_time, 'values': [[current_time]]})
+                
                 if location_str:
                     cell_coord_loc = gspread.utils.rowcol_to_a1(current_row_id, loc_col)
                     updates.append({'range': cell_coord_loc, 'values': [[location_str]]})
+        
         if updates: ws.batch_update(updates)
+
+    # กรณี Step 7-8 (งานสาขา) อัปเดตเฉพาะบรรทัดนั้น
     elif step in ['7', '8']:
         cell_coord_time = gspread.utils.rowcol_to_a1(row_id_target, time_col)
         updates.append({'range': cell_coord_time, 'values': [[current_time]]})
@@ -1446,8 +1494,10 @@ def update_status():
             updates.append({'range': cell_coord_loc, 'values': [[location_str]]})
         if updates: ws.batch_update(updates)
 
-    # Status Column is now 16 (P)
-    if step == '8': ws.update_cell(row_id_target, 16, "Done")
+    # --- [แก้ไขจุดที่ 3] คอลัมน์ Status ย้ายไป P (ลำดับที่ 16) ---
+    if step == '8': 
+        ws.update_cell(row_id_target, 16, "Done") # แก้จาก 15 เป็น 16
+        
     return redirect(url_for('driver_tasks', name=driver_name))
 
 @app.route('/')

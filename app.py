@@ -869,14 +869,8 @@ def export_pdf_summary():
                 if t_act > t_plan: job['is_late'] = True
             except: pass
 
-    # Grouping Data
+    # Grouping
     grouped_jobs = []
-    
-    # Counters
-    def create_counter(): return {'count':0, 't1':0, 't2':0, 't3':0, 't4':0, 't5':0, 't6':0, 't7':0, 't8':0}
-    sum_day = create_counter()
-    sum_night = create_counter()
-
     if jobs:
         current_group = []
         prev_key = (str(jobs[0]['PO_Date']), str(jobs[0]['Car_No']), str(jobs[0]['Round']), str(jobs[0]['Driver']))
@@ -890,6 +884,10 @@ def export_pdf_summary():
         if current_group: grouped_jobs.append(current_group)
 
     # Calculate Summary
+    def create_counter(): return {'count':0, 't1':0, 't2':0, 't3':0, 't4':0, 't5':0, 't6':0, 't7':0, 't8':0}
+    sum_day = create_counter()
+    sum_night = create_counter()
+
     for group in grouped_jobs:
         if not group: continue
         first_job = group[0]
@@ -917,16 +915,13 @@ def export_pdf_summary():
     for k in sum_total: sum_total[k] = sum_day[k] + sum_night[k]
 
 
-    # --- 2. Setup PDF Class (Portrait A4) ---
+    # --- 2. Setup PDF Class ---
     basedir = os.path.abspath(os.path.dirname(__file__))
     font_path = os.path.join(basedir, 'static', 'fonts', 'Sarabun-Regular.ttf')
     logo_path = os.path.join(basedir, 'static', 'mylogo.png') 
     po_date_thai = thai_date_filter(date_filter) if date_filter else "ทั้งหมด"
     print_date = (datetime.now() + timedelta(hours=7)).strftime("%d/%m/%Y %H:%M")
 
-    # [CONFIG] Main Table Columns (Total 196mm)
-    # ปรับ: ลดทะเบียน(20->18), เพิ่มคนขับ(22->27 +20%), ลดปลายทาง(53->50)
-    # รวม: 10 + 18 + 27 + 13 + 50 + 13 + 13 + 13 + 13 + 13 + 13 = 196 mm (OK)
     COLS = [10, 18, 27, 13, 50, 13, 13, 13, 13, 13, 13]
     HEADERS = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
 
@@ -937,31 +932,39 @@ def export_pdf_summary():
             if os.path.exists(logo_path):
                 self.image(logo_path, x=7, y=6, w=10)
             
-            self.set_font('Sarabun', '', 14) 
-            self.set_y(8)
-            self.cell(0, 8, f'สรุปรายงานการจัดส่งสินค้า (Compact View) - วันที่: {po_date_thai}', align='C', new_x="LMARGIN", new_y="NEXT")
+            # Header Line 1: Report Name
+            self.set_font('Sarabun', '', 16) 
+            self.set_y(6)
+            self.cell(0, 8, 'สรุปรายงานการจัดส่งสินค้า (Compact View)', align='C', new_x="LMARGIN", new_y="NEXT")
             
-            self.ln(5)
+            # [NEW] Header Line 2: Company Name
+            self.set_font_size(14)
+            self.cell(0, 7, 'บริษัท แอลเอ็มที. ทรานสปอร์ต จำกัด', align='C', new_x="LMARGIN", new_y="NEXT")
+
+            # Header Line 3: Date
+            self.set_font_size(10)
+            self.cell(0, 6, f'วันที่เอกสาร: {po_date_thai} | พิมพ์เมื่อ: {print_date}', align='C', new_x="LMARGIN", new_y="NEXT")
+            
+            self.ln(3)
             
             # Table Header
             self.set_fill_color(44, 62, 80)
             self.set_text_color(255, 255, 255)
             self.set_draw_color(100, 100, 100)
-            
-            # [ADJUST 1] Font Header 7pt
-            self.set_font('Sarabun', '', 7) 
+            self.set_font('Sarabun', '', 7)
             
             for i, h in enumerate(HEADERS):
-                self.cell(COLS[i], 8, h, border=1, align='C', fill=True)
+                self.cell(COLS[i], 7, h, border=1, align='C', fill=True)
             self.ln()
             
             self.set_text_color(0, 0, 0)
+            self.set_draw_color(200, 200, 200)
 
         def footer(self):
             self.set_y(-10)
             self.set_font('Sarabun', '', 6)
             self.set_text_color(150)
-            self.cell(0, 10, f'หน้า {self.page_no()}/{{nb}} | พิมพ์เมื่อ: {print_date}', align='R')
+            self.cell(0, 10, f'หน้า {self.page_no()}/{{nb}}', align='R')
 
     # --- Generate PDF ---
     pdf = PDFSummary(orientation='P', unit='mm', format='A4')
@@ -972,7 +975,6 @@ def export_pdf_summary():
     group_count = 0
     
     for group in grouped_jobs:
-        # Zebra Grouping
         if group_count % 2 == 0: pdf.set_fill_color(255, 255, 255) 
         else: pdf.set_fill_color(245, 247, 249) 
         group_count += 1
@@ -999,22 +1001,20 @@ def export_pdf_summary():
             t7 = str(job['T7_ArriveBranch'])
             t8 = str(job['T8_EndJob'])
 
-            # [ADJUST] Row Height 7.5mm (เหมาะสมกับ Font 7pt)
-            row_height = 7.5 
+            # [ADJUST] ลดความสูงแถวลงเหลือ 5.8mm (ลดลง ~10% จาก 6.5mm)
+            row_height = 5.8
 
             if pdf.get_y() + row_height > pdf.page_break_trigger:
                 pdf.add_page()
                 if (group_count - 1) % 2 == 0: pdf.set_fill_color(255, 255, 255)
                 else: pdf.set_fill_color(245, 247, 249)
 
-            # [ADJUST 1] Font Body 7pt
             pdf.set_font('Sarabun', '', 7)
             pdf.set_draw_color(180, 180, 180) 
             
             pdf.cell(COLS[0], row_height, c_no, border=1, align='C', fill=True)
             pdf.cell(COLS[1], row_height, plate, border=1, align='C', fill=True)
             
-            # Driver (Width 27mm)
             if pdf.get_string_width(driver) > COLS[2] - 2:
                  while pdf.get_string_width(driver + "..") > COLS[2] - 2 and len(driver) > 0:
                      driver = driver[:-1]
@@ -1023,7 +1023,6 @@ def export_pdf_summary():
             
             pdf.cell(COLS[3], row_height, round_t, border=1, align='C', fill=True)
             
-            # Branch (Width 50mm)
             if pdf.get_string_width(branch) > COLS[4] - 2:
                  while pdf.get_string_width(branch + "..") > COLS[4] - 2 and len(branch) > 0:
                      branch = branch[:-1]
@@ -1040,7 +1039,6 @@ def export_pdf_summary():
             pdf.cell(COLS[7], row_height, t3, border=1, align='C', fill=True)
             pdf.cell(COLS[8], row_height, t6, border=1, align='C', fill=True)
             
-            # Status Colors
             base_r, base_g, base_b = (255, 255, 255) if (group_count - 1) % 2 == 0 else (245, 247, 249)
             pdf.set_fill_color(240, 253, 244)
             pdf.cell(COLS[9], row_height, t7, border=1, align='C', fill=True)
@@ -1058,21 +1056,16 @@ def export_pdf_summary():
                 pdf.set_line_width(0.2)
                 pdf.set_draw_color(180, 180, 180)
 
-    # --- Draw Summary Table ---
+    # --- Summary Table ---
     pdf.ln(5)
     if pdf.get_y() + 30 > pdf.page_break_trigger:
         pdf.add_page()
     
-    # [ADJUST 3] Summary Headers (Full Name)
-    # รวมกว้าง 196mm
-    # รอบ=20, จำนวน=16, เวลา(8 col)=20mm each -> 20+16+160 = 196 mm
     SUM_HEADERS = ['รอบงาน', 'จำนวน', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ยื่นเอกสาร', 'รับเอกสาร', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
     SUM_COLS = [20, 16, 20, 20, 20, 20, 20, 20, 20, 20]
     
     pdf.set_fill_color(44, 62, 80)
     pdf.set_text_color(255, 255, 255)
-    
-    # [ADJUST 3] Summary Header Font 6pt
     pdf.set_font('Sarabun', '', 6)
     
     for i, h in enumerate(SUM_HEADERS):
@@ -1084,7 +1077,7 @@ def export_pdf_summary():
         else: pdf.set_fill_color(255, 255, 255)
             
         pdf.set_text_color(0, 0, 0)
-        pdf.set_font('Sarabun', '', 7) # เนื้อหาตารางสรุป 7pt
+        pdf.set_font('Sarabun', '', 7)
         
         pdf.cell(SUM_COLS[0], 8, label, border=1, align='C', fill=True)
         
@@ -1093,14 +1086,13 @@ def export_pdf_summary():
             pdf.cell(SUM_COLS[i+1], 8, str(v), border=1, align='C', fill=True)
         pdf.ln()
 
-    # [ADJUST 4] Short Labels
     draw_sum_row('กลางวัน', sum_day)
     draw_sum_row('กลางคืน', sum_night)
     draw_sum_row('รวม', sum_total, is_total=True)
 
     pdf_bytes = pdf.output()
     filename = f"Summary_{date_filter if date_filter else 'All'}.pdf"
-    return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)   
+    return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename) 
 
 @app.route('/tracking')
 def customer_view():

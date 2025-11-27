@@ -482,7 +482,9 @@
         }
     }
 
+// --- LINE Share Logic (Date at Top Once) ---
     function shareLine(shiftType) {
+        // รับข้อมูลจาก Python
         const dayData = {{ line_data_day | tojson | safe }};
         const nightData = {{ line_data_night | tojson | safe }};
         
@@ -505,8 +507,15 @@
             return;
         }
 
-        let msg = `📄 LMT PO ${poDateThai} (${shiftEmoji} ${shiftName})\n\n`;
+        // 1. สร้าง Header
+        let msg = `📄 LMT PO ${poDateThai} (${shiftEmoji} ${shiftName})\n`;
 
+        // 2. [แก้ไข] แสดงวันที่โหลดครั้งเดียวตรงนี้ (ดึงจากรายการแรกสุด)
+        if (dataList.length > 0) {
+            msg += `📅 โหลดวันที่: ${dataList[0].load_date}\n\n`;
+        }
+
+        // จัดกลุ่มตามเวลา
         let groupedByRound = {};
         dataList.forEach(item => {
             let r = item.round || "ไม่ระบุเวลา";
@@ -514,11 +523,11 @@
             groupedByRound[r].push(item);
         });
 
+        // 3. Loop สร้างรายการรถ (ไม่ต้องแสดงวันที่ในนี้แล้ว)
         for (const [roundTime, cars] of Object.entries(groupedByRound)) {
             msg += `🕒 รอบโหลด ${roundTime} น.\n`;
             
             cars.forEach(car => {
-                msg += `📅 โหลดวันที่: ${car.load_date}\n`;
                 msg += `🚛 คันที่ ${car.car_no} ${car.plate}\n`; 
                 msg += `👨‍✈️ ${car.driver}\n`; 
                 

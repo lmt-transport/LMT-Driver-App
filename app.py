@@ -1269,13 +1269,49 @@ def driver_select():
     sheet = get_db()
     drivers = sheet.worksheet('Drivers').col_values(1)[1:]
     all_jobs = sheet.worksheet('Jobs').get_all_records()
+    
+    # วันที่ปัจจุบัน (สำหรับการแสดงผลงานวันนี้)
+    now_thai = datetime.now() + timedelta(hours=7)
+    today_date = now_thai.strftime("%Y-%m-%d")
+
     driver_pending_trips = {name: set() for name in drivers}
+    
+    # สร้าง Dictionary เก็บข้อมูลงานวันนี้ของแต่ละคน
+    # Format: { 'Name': {'has_today': False, 'first_time': '99:99'} }
+    driver_today_info = {name: {'has_today': False, 'first_time': None} for name in drivers}
+
     for job in all_jobs:
-        if job['Status'] != 'Done' and job['Driver'] in driver_pending_trips:
+        d_name = job['Driver']
+        
+        # 1. Logic เดิม: นับงานค้าง (Status != Done)
+        if job['Status'] != 'Done' and d_name in driver_pending_trips:
             trip_key = (str(job['PO_Date']), str(job['Round']), str(job['Car_No']))
-            driver_pending_trips[job['Driver']].add(trip_key)
+            driver_pending_trips[d_name].add(trip_key)
+            
+        # 2. Logic ใหม่: เช็คงานวันนี้
+        if str(job['PO_Date']).strip() == today_date and d_name in driver_today_info:
+            driver_today_info[d_name]['has_today'] = True
+            
+            # เช็คเวลาเริ่มงานที่เร็วที่สุด
+            job_time = str(job['Round']).strip()
+            current_min = driver_today_info[d_name]['first_time']
+            
+            # ถ้ายังไม่มีเวลา หรือ เวลาปัจจุบันน้อยกว่าเวลาที่เก็บไว้ ให้ update
+            if not current_min:
+                driver_today_info[d_name]['first_time'] = job_time
+            else:
+                try:
+                    # แปลงเปรียบเทียบเวลา (แบบง่าย String compare ก็พอใช้ได้ถ้ารูปแบบเหมือนกัน แต่แปลง Date ชัวร์กว่า)
+                    if job_time < current_min:
+                         driver_today_info[d_name]['first_time'] = job_time
+                except: pass
+
     driver_counts = {name: len(trips) for name, trips in driver_pending_trips.items()}
-    return render_template('driver_select.html', drivers=drivers, driver_counts=driver_counts)
+    
+    return render_template('driver_select.html', 
+                           drivers=drivers, 
+                           driver_counts=driver_counts,
+                           driver_today_info=driver_today_info) # ส่งตัวแปรใหม่ไป
 
 @app.route('/driver/tasks', methods=['GET'])
 def driver_tasks():

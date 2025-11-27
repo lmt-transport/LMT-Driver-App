@@ -84,15 +84,15 @@
             <a href="#" onclick="triggerCustomerPrint()" class="bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-indigo-700 transition shadow-md flex items-center gap-2 transform active:scale-95">
                 <i class="fa-solid fa-print"></i> <span class="hidden sm:inline">Print View</span>
             </a>
-			
-			<a href="#" onclick="triggerCustomerPDF()" class="bg-red-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-red-700 transition shadow-md flex items-center gap-2 transform active:scale-95">
-				<i class="fa-solid fa-file-pdf"></i> <span class="hidden sm:inline">PDF Export</span>
-			</a>
-			
-			<a href="#" onclick="triggerCompactPDF()" class="bg-orange-500 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-orange-600 transition shadow-md flex items-center gap-2 transform active:scale-95">
-				<i class="fa-solid fa-file-contract"></i> <span class="hidden sm:inline">PDF Summary</span>
-			</a>
-			
+            
+            <a href="#" onclick="triggerCustomerPDF()" class="bg-red-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-red-700 transition shadow-md flex items-center gap-2 transform active:scale-95">
+                <i class="fa-solid fa-file-pdf"></i> <span class="hidden sm:inline">PDF Export</span>
+            </a>
+            
+            <a href="#" onclick="triggerCompactPDF()" class="bg-orange-500 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-orange-600 transition shadow-md flex items-center gap-2 transform active:scale-95">
+                <i class="fa-solid fa-file-contract"></i> <span class="hidden sm:inline">PDF Summary</span>
+            </a>
+            
             <a href="#" onclick="triggerCustomerExport()" class="bg-green-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-green-700 transition shadow-md flex items-center gap-2 transform active:scale-95">
                 <i class="fa-solid fa-file-excel"></i> <span class="hidden sm:inline">Excel Export</span>
             </a>
@@ -242,16 +242,17 @@
         }
         window.location.href = url;
     }
-		
-	function triggerCompactPDF() {
-		const selectedDate = document.getElementById('report_date_filter').value;
-		let url = '/export_pdf_summary'; 
-		if (selectedDate) {
-			url += `?date_filter=${selectedDate}`;
-		}
-		window.location.href = url;
-	}
-	
+    
+    // [FIXED] เปลี่ยน ID เป็น customer_date_filter ให้ถูกต้องตามที่มีในหน้านี้
+    function triggerCompactPDF() {
+        const selectedDate = document.getElementById('customer_date_filter').value;
+        let url = '/export_pdf_summary'; 
+        if (selectedDate) {
+            url += `?date_filter=${selectedDate}`;
+        }
+        window.location.href = url;
+    }
+    
     function triggerCustomerPrint() {
         const selectedDate = document.getElementById('customer_date_filter').value;
         let url = '/print_report';

@@ -833,6 +833,193 @@ def export_pdf():
     filename = f"Report_{date_filter if date_filter else 'All'}.pdf"
     return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
     
+@app.route('/export_pdf_summary')
+def export_pdf_summary():
+    # --- 1. เตรียมข้อมูล (เหมือนเดิม) ---
+    sheet = get_db()
+    raw_jobs = sheet.worksheet('Jobs').get_all_records()
+    
+    date_filter = request.args.get('date_filter')
+    if date_filter:
+        jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
+    else:
+        jobs = raw_jobs
+        
+    def sort_key_func(job):
+        po_date = str(job['PO_Date'])
+        car_no_str = str(job['Car_No']).strip()
+        try: car_no_int = int(car_no_str)
+        except ValueError: car_no_int = 99999 
+        return (po_date, car_no_int)
+
+    jobs = sorted(jobs, key=sort_key_func)
+
+    # คำนวณความล่าช้า
+    for job in jobs:
+        job['is_late'] = False
+        t_plan_str = str(job['Round']).strip()
+        t_act_str = str(job['T2_StartLoad']).strip()
+        if t_plan_str and t_act_str:
+            try:
+                fmt_plan = "%H:%M" if len(t_plan_str) <= 5 else "%H:%M:%S"
+                fmt_act = "%H:%M" if len(t_act_str) <= 5 else "%H:%M:%S"
+                t_plan = datetime.strptime(t_plan_str, fmt_plan)
+                t_act = datetime.strptime(t_act_str, fmt_act)
+                
+                # Midnight Logic
+                if (t_plan - t_act).total_seconds() > 12 * 3600: t_act += timedelta(days=1)
+                
+                if t_act > t_plan:
+                    job['is_late'] = True
+                    # ในโหมดสรุป เราอาจจะไม่แสดงข้อความยาวๆ ว่าช้ากี่นาที เพื่อประหยัดที่
+            except: pass
+
+    # --- 2. Setup PDF Class (แบบ Compact) ---
+    basedir = os.path.abspath(os.path.dirname(__file__))
+    font_path = os.path.join(basedir, 'static', 'fonts', 'Sarabun-Regular.ttf')
+    logo_path = os.path.join(basedir, 'static', 'mylogo.png') 
+    po_date_thai = thai_date_filter(date_filter) if date_filter else "ทั้งหมด"
+    print_date = (datetime.now() + timedelta(hours=7)).strftime("%d/%m/%Y %H:%M")
+
+    class PDFSummary(FPDF):
+        def header(self):
+            self.add_font('Sarabun', '', font_path, uni=True)
+            
+            # Header กะทัดรัด
+            if os.path.exists(logo_path):
+                self.image(logo_path, x=7, y=6, w=12) # โลโก้เล็กลง
+            
+            self.set_font('Sarabun', '', 14) 
+            self.set_y(6)
+            # ปรับ X ให้หลบโลโก้
+            self.set_x(22) 
+            self.cell(0, 8, f'สรุปรายงานการจัดส่งสินค้า (Compact View) - วันที่: {po_date_thai}', align='L', new_x="LMARGIN", new_y="NEXT")
+            
+            # หัวตาราง (Compact)
+            self.ln(2)
+            cols = [10, 25, 30, 15, 50, 15, 20, 15, 15, 20, 20] # ปรับขนาดให้พอดี
+            headers = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลา', 'ปลายทาง', 'เข้า', 'เริ่ม', 'เสร็จ', 'ออก', 'ถึงสาขา', 'จบงาน']
+            
+            self.set_fill_color(44, 62, 80)
+            self.set_text_color(255, 255, 255)
+            self.set_font('Sarabun', '', 9) # หัวตาราง 9pt
+            for i, h in enumerate(headers):
+                self.cell(cols[i], 7, h, border=1, align='C', fill=True)
+            self.ln()
+            self.set_text_color(0, 0, 0)
+
+        def footer(self):
+            self.set_y(-10)
+            self.set_font('Sarabun', '', 7)
+            self.set_text_color(128)
+            self.cell(0, 10, f'หน้า {self.page_no()}/{{nb}} | พิมพ์เมื่อ: {print_date}', align='R')
+
+    # --- Generate PDF ---
+    pdf = PDFSummary(orientation='L', unit='mm', format='A4')
+    pdf.alias_nb_pages()
+    pdf.set_margins(7, 7, 7) # ขอบบางมาก
+    pdf.add_page()
+    
+    # Config Columns (ต้องตรงกับ Header)
+    cols = [10, 25, 30, 15, 50, 15, 20, 15, 15, 20, 20]
+    
+    # ตัวแปรช่วย Grouping
+    prev_trip_key = None
+    
+    for job in jobs:
+        # Check Group
+        current_trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
+        is_same = (current_trip_key == prev_trip_key)
+        
+        # Prepare Data
+        c_no = str(job['Car_No']) if not is_same else ""
+        plate = str(job['Plate']) if not is_same else ""
+        driver = str(job['Driver']) if not is_same else ""
+        # ตัดชื่อคนขับถ้ายาวเกินไป (Optional)
+        if len(driver) > 18: driver = driver[:16] + ".."
+            
+        round_t = str(job['Round']) if not is_same else ""
+        branch = str(job['Branch_Name'])
+        # ตัดชื่อสาขาถ้ายาวเกินไป
+        if len(branch) > 35: branch = branch[:33] + ".."
+            
+        t1 = str(job['T1_Enter']) if not is_same else ""
+        
+        # T2 (Start Load)
+        t2 = ""
+        is_late_row = False
+        if not is_same:
+            t2 = str(job['T2_StartLoad'])
+            if job['is_late']: is_late_row = True
+
+        t3 = str(job['T3_EndLoad']) if not is_same else ""
+        t6 = str(job['T6_Exit']) if not is_same else ""
+        t7 = str(job['T7_ArriveBranch'])
+        t8 = str(job['T8_EndJob'])
+
+        # ** Compact Row Height **
+        row_height = 6 # สูงแค่ 6mm พอ (สำหรับ 8pt)
+
+        # Page Break Check (แบบละเอียด)
+        if pdf.get_y() + row_height > pdf.page_break_trigger:
+            pdf.add_page()
+
+        # Set Font 8pt
+        pdf.set_font('Sarabun', '', 8)
+        
+        # Zebra Striping (สลับสีบรรทัดเพื่อให้อ่านง่าย)
+        if pdf.page_no() % 2 == 0:
+             # หน้าคู่
+             pass
+        # ใช้สีพื้นหลังสลับตาม Group ดีกว่า
+        # (ข้ามส่วนนี้ไปก่อนเพื่อความ Clean หรือจะใส่ก็ได้)
+
+        # Draw Cells
+        # ใช้ border=1 (เส้นบางๆ รอบตัว) เพื่อความประหยัดพื้นที่ หรือ 'LR' ก็ได้
+        # ในโหมด Compact เส้นเต็ม (1) จะดูเป็นระเบียบกว่า
+        
+        pdf.cell(cols[0], row_height, c_no, border=1, align='C')
+        pdf.cell(cols[1], row_height, plate, border=1, align='C')
+        pdf.cell(cols[2], row_height, driver, border=1, align='L')
+        pdf.cell(cols[3], row_height, round_t, border=1, align='C')
+        
+        # สาขา (7pt)
+        pdf.set_font_size(7)
+        pdf.cell(cols[4], row_height, branch, border=1, align='L')
+        pdf.set_font_size(8)
+        
+        pdf.cell(cols[5], row_height, t1, border=1, align='C')
+
+        # T2 Color
+        if is_late_row:
+            pdf.set_text_color(192, 57, 43) # Red
+            pdf.set_font('Sarabun', '', 8) # ตัวหนาไม่ได้ใน standard font ต้อง load ttf bold
+            # ในโหมด Compact เราไม่แสดง text "(ช้า ...)" เพราะที่น้อย
+            # แค่เปลี่ยนสีตัวเลขก็พอ
+        elif t2:
+            pdf.set_text_color(25, 111, 61) # Green
+        
+        pdf.cell(cols[6], row_height, t2, border=1, align='C')
+        pdf.set_text_color(0, 0, 0) # Reset
+
+        pdf.cell(cols[7], row_height, t3, border=1, align='C')
+        pdf.cell(cols[8], row_height, t6, border=1, align='C')
+        
+        # T7, T8 Fill
+        pdf.set_fill_color(235, 250, 240) # เขียวจางๆ
+        pdf.cell(cols[9], row_height, t7, border=1, align='C', fill=True)
+        
+        pdf.set_fill_color(253, 237, 236) # แดงจางๆ
+        pdf.cell(cols[10], row_height, t8, border=1, align='C', fill=True)
+
+        pdf.ln()
+        prev_trip_key = current_trip_key
+
+    # Output
+    pdf_bytes = pdf.output()
+    filename = f"Summary_{date_filter if date_filter else 'All'}.pdf"
+    return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
+    
 @app.route('/print_report')
 def print_report():
     # อนุญาตให้เข้าถึงได้ทั่วไป (เหมือน export_excel)

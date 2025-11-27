@@ -356,7 +356,10 @@
         const tabParam = urlParams.get('tab');
         const savedTab = localStorage.getItem('activeTab') || 'tab-monitor';
         if(tabParam) switchTab('tab-' + tabParam); else switchTab(savedTab);
-        document.getElementById('report-time').innerText = new Date().toLocaleString('th-TH');
+        
+        // Update Time if element exists
+        const timeEl = document.getElementById('report-time');
+        if (timeEl) timeEl.innerText = new Date().toLocaleString('th-TH');
     });
 
     // --- Tab Logic ---
@@ -368,8 +371,10 @@
         });
         document.getElementById(tabId).classList.remove('hidden');
         let btn = document.getElementById(tabId.replace('tab-', 'btn-'));
-        btn.classList.remove('bg-white', 'text-gray-600');
-        btn.classList.add('bg-indigo-600', 'text-white', 'shadow');
+        if (btn) {
+            btn.classList.remove('bg-white', 'text-gray-600');
+            btn.classList.add('bg-indigo-600', 'text-white', 'shadow');
+        }
         localStorage.setItem('activeTab', tabId);
     }
 
@@ -396,70 +401,63 @@
     }
 
     // --- Export Functions ---
+    // Helper to get date safely
+    function getFilterDate() {
+        // ลองหาจากหลายๆ ID ที่อาจจะเป็นไปได้ในหน้า Manager
+        let el = document.getElementById('report_date_filter'); // ใน Tab Report
+        if (!el) el = document.querySelector('input[name="date_filter"]'); // ทั่วไป
+        return el ? el.value : null;
+    }
+
     function triggerCustomerExport() {
-        const selectedDate = document.getElementById('customer_date_filter').value;
+        const selectedDate = getFilterDate();
         let url = '/export_excel'; 
         if (selectedDate) url += `?date_filter=${selectedDate}`;
         window.location.href = url;
     }
 
     function triggerCustomerPDF() {
-        const selectedDate = document.getElementById('customer_date_filter').value;
+        const selectedDate = getFilterDate();
         let url = '/export_pdf'; 
         if (selectedDate) url += `?date_filter=${selectedDate}`;
         window.location.href = url;
     }
     
     function triggerCompactPDF() {
-        const selectedDate = document.getElementById('customer_date_filter').value;
+        const selectedDate = getFilterDate();
         let url = '/export_pdf_summary'; 
         if (selectedDate) url += `?date_filter=${selectedDate}`;
         window.location.href = url;
     }
-
-    // --- [CORE] ฟังก์ชัน Copy ที่รองรับทุกอุปกรณ์ ---
+    
+    // --- [CORE] Copy Function ---
     async function copyToClipboard(text, successMessage) {
-        // Fallback วิธีที่ 1: ใช้ textarea (เสถียรสุดบน Mobile บางรุ่น และ HTTP)
-        const textArea = document.createElement("textarea");
-        textArea.value = text;
-        
-        // ทำให้ textarea มองไม่เห็นแต่อยู่ในหน้าจอ (ป้องกันการเด้ง)
-        textArea.style.position = "fixed";
-        textArea.style.left = "-9999px";
-        textArea.style.top = "0";
-        document.body.appendChild(textArea);
-        
-        textArea.focus();
-        textArea.select();
-        
-        try {
-            const successful = document.execCommand('copy');
-            document.body.removeChild(textArea);
-            if (successful) {
-                alert("✅ คัดลอก" + successMessage + "เรียบร้อยแล้ว!");
-                return;
-            }
-        } catch (err) {
-            console.error('Fallback copy failed.', err);
-            document.body.removeChild(textArea);
-        }
-
-        // Fallback วิธีที่ 2: ใช้ Clipboard API (Modern HTTPS)
         if (navigator.clipboard && window.isSecureContext) {
             try {
                 await navigator.clipboard.writeText(text);
                 alert("✅ คัดลอก" + successMessage + "เรียบร้อยแล้ว!");
-            } catch (err) {
-                console.error('Async Copy failed.', err);
-                alert("❌ ไม่สามารถคัดลอกได้ กรุณาลองใหม่");
-            }
+                return;
+            } catch (err) { console.error('Async Copy failed', err); }
         }
+        
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            alert("✅ คัดลอก" + successMessage + "เรียบร้อยแล้ว!");
+        } catch (err) {
+            alert("❌ ไม่สามารถคัดลอกได้");
+        }
+        document.body.removeChild(textArea);
     }
 
     // --- LINE Share Logic ---
     function shareLine(shiftType) {
-        // ดึงข้อมูลจาก Python (Jinja2)
-        // ใช้ tojson|safe เพื่อให้แน่ใจว่าได้ string JSON ที่ถูกต้อง
         const dayData = {{ line_data_day | tojson | safe }};
         const nightData = {{ line_data_night | tojson | safe }};
         
@@ -467,8 +465,14 @@
         const shiftName = (shiftType === 'day') ? 'รอบโหลดกลางวัน' : 'รอบโหลดกลางคืน';
         const shiftEmoji = (shiftType === 'day') ? '☀️' : '🌙';
         
-        // Format วันที่ PO
-        const poDateVal = document.getElementById('customer_date_filter').value;
+        // [FIXED] ใช้ฟังก์ชัน getFilterDate() เพื่อหาค่าวันที่อย่างปลอดภัย
+        const poDateVal = getFilterDate();
+        
+        if (!poDateVal) {
+            alert("⚠️ ไม่พบข้อมูลวันที่");
+            return;
+        }
+
         const [py, pm, pd] = poDateVal.split('-');
         const yearThaiShort = (parseInt(py) + 543).toString().slice(2);
         const poDateThai = `${pd}.${pm}.${yearThaiShort}`; 
@@ -480,7 +484,6 @@
 
         const loadDateShow = dataList[0].load_date; 
 
-        // สร้างข้อความ
         let msg = `📄 LMT PO ${poDateThai} (${shiftEmoji} ${shiftName} วันที่ ${loadDateShow})\n\n`;
 
         let groupedByRound = {};
@@ -504,8 +507,6 @@
             });
         }
 
-        // ส่งไป Copy
-        // console.log("Text to copy:", msg); // Uncomment เพื่อ Debug ดูข้อความใน Console
         copyToClipboard(msg, "ตารางงาน");
     }
 </script>

@@ -112,6 +112,41 @@ def manager_dashboard():
     total_trips = len(jobs_by_trip_key)
     total_running_jobs = total_branches - total_done_jobs
 
+    # --- [NEW] Logic: คำนวณรถที่ยังไม่เข้าคลัง (Late Arrivals) แยกตาม PO ---
+    late_arrivals_by_po = {}
+    total_late_cars = 0
+
+    for job in filtered_jobs:
+        # เงื่อนไข: ยังไม่ลงเวลา T1 (เข้าโรงงาน) และ สถานะยังไม่จบ
+        if not job.get('T1_Enter') and job['Status'] != 'Done':
+            try:
+                # สร้าง DateTime ของกำหนดการ
+                load_date_str = job.get('Load_Date', job['PO_Date'])
+                round_str = str(job['Round']).strip()
+                plan_dt_str = f"{load_date_str} {round_str}"
+                
+                # รองรับ format เวลา
+                try: plan_dt = datetime.strptime(plan_dt_str, "%Y-%m-%d %H:%M")
+                except: plan_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
+                
+                # เช็คว่าเลยเวลาปัจจุบันหรือยัง
+                if now_thai > plan_dt:
+                    po_key = str(job['PO_Date'])
+                    if po_key not in late_arrivals_by_po:
+                        late_arrivals_by_po[po_key] = []
+                    
+                    # คำนวณว่าสายไปกี่นาที
+                    diff = now_thai - plan_dt
+                    hours = int(diff.total_seconds() // 3600)
+                    mins = int((diff.total_seconds() % 3600) // 60)
+                    
+                    job['late_duration'] = f"{hours} ชม. {mins} น."
+                    late_arrivals_by_po[po_key].append(job)
+                    total_late_cars += 1
+            except: 
+                pass
+    # -------------------------------------------------------------------
+
     # 4. Sorting
     def sort_key_func(job):
         po_date = str(job['PO_Date'])
@@ -223,7 +258,9 @@ def manager_dashboard():
                            next_date=next_date,
                            trip_last_end_time=trip_last_end_time,
                            line_data_day=line_data_day,
-                           line_data_night=line_data_night
+                           line_data_night=line_data_night,
+                           late_arrivals_by_po=late_arrivals_by_po, # เพิ่มตัวแปร
+                           total_late_cars=total_late_cars          # เพิ่มตัวแปร
                            )
 
 @app.route('/create_job', methods=['POST'])

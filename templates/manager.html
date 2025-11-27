@@ -7,11 +7,28 @@
     }
     .table-data { font-size: 0.85rem; } 
     .table-header { font-size: 0.75rem; }
+    
+    /* Custom Scrollbar for better look */
+    .custom-scrollbar::-webkit-scrollbar {
+        height: 8px;
+        width: 8px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+        background: #f1f1f1; 
+        border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #cbd5e1; 
+        border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8; 
+    }
 </style>
 
-<div class="max-w-7xl mx-auto pb-10">
+<div class="w-full max-w-[98%] mx-auto pb-10 px-2 md:px-4">
     
-    <div class="grid grid-cols-6 gap-3 mb-6">
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500">
             <div class="text-gray-500 text-xs font-bold uppercase">เที่ยววิ่งทั้งหมด</div>
             <div class="text-2xl font-bold text-gray-800">{{ total_trips }}</div>
@@ -59,7 +76,7 @@
                     <a href="/manager?tab=monitor" class="text-gray-400 hover:text-indigo-600 px-2 border-l border-gray-200" title="วันนี้"><i class="fa-solid fa-rotate-right"></i></a>
                 </form>
             </div>
-            <div class="overflow-x-auto">
+            <div class="overflow-x-auto custom-scrollbar">
                 <table class="w-full text-left text-gray-600 table-data">
                     <thead class="text-gray-700 uppercase bg-gray-100 border-b table-header">
                         <tr>
@@ -198,24 +215,24 @@
                 </form>
             </div>
 
-            <div class="border rounded-lg overflow-hidden overflow-x-auto shadow-inner bg-gray-500">
+            <div class="border rounded-lg overflow-hidden overflow-x-auto shadow-inner bg-gray-500 custom-scrollbar">
                 <table class="w-full text-center border-collapse whitespace-nowrap table-data">
                     <thead>
                         <tr class="text-white table-header font-bold tracking-wide">
-                            <th class="p-3 bg-green-700 border-r border-green-600 sticky left-0 z-10 shadow-lg">ลำดับรถ</th>
-                            <th class="p-3 bg-green-600 border-r border-green-500">PO Date</th>
-                            <th class="p-3 bg-green-600 border-r border-green-500">เวลาโหลด</th>
-                            <th class="p-3 bg-green-600 border-r border-green-500 min-w-[150px]">ปลายทาง (สาขา)</th>
-                            <th class="p-3 bg-green-600 border-r border-green-500">ทะเบียนรถ</th>
-                            <th class="p-3 bg-green-600 border-r border-green-500">ชื่อคนขับ</th>
-                            <th class="p-3 bg-[#c0504d] border-r border-[#a64d4d]">1.เข้าโรงงาน</th>
-                            <th class="p-3 bg-[#c0504d] border-r border-[#a64d4d]">2.เริ่มโหลด</th>
-                            <th class="p-3 bg-[#c0504d] border-r border-[#a64d4d]">3.โหลดเสร็จ</th>
-                            <th class="p-3 bg-[#c0504d] border-r border-[#a64d4d]">4.ยื่นเอกสาร</th>
-                            <th class="p-3 bg-[#c0504d] border-r border-[#a64d4d]">5.รับเอกสาร</th>
-                            <th class="p-3 bg-[#c0504d] border-r border-[#a64d4d]">6.ออกโรงงาน</th>
-                            <th class="p-3 bg-[#9bbb59] border-r border-[#8aa64f]">7.ถึงสาขา</th>
-                            <th class="p-3 bg-[#9bbb59]">8.จบงาน</th>
+                            <th class="p-2 bg-green-700 border-r border-green-600 sticky left-0 z-10 shadow-lg">ลำดับรถ</th>
+                            <th class="p-2 bg-green-600 border-r border-green-500">PO Date</th>
+                            <th class="p-2 bg-green-600 border-r border-green-500">เวลาโหลด</th>
+                            <th class="p-2 bg-green-600 border-r border-green-500 min-w-[150px]">ปลายทาง (สาขา)</th>
+                            <th class="p-2 bg-green-600 border-r border-green-500">ทะเบียนรถ</th>
+                            <th class="p-2 bg-green-600 border-r border-green-500">ชื่อคนขับ</th>
+                            <th class="p-2 bg-[#c0504d] border-r border-[#a64d4d]">1.เข้าโรงงาน</th>
+                            <th class="p-2 bg-[#c0504d] border-r border-[#a64d4d]">2.เริ่มโหลด</th>
+                            <th class="p-2 bg-[#c0504d] border-r border-[#a64d4d]">3.โหลดเสร็จ</th>
+                            <th class="p-2 bg-[#c0504d] border-r border-[#a64d4d]">4.ยื่นเอกสาร</th>
+                            <th class="p-2 bg-[#c0504d] border-r border-[#a64d4d]">5.รับเอกสาร</th>
+                            <th class="p-2 bg-[#c0504d] border-r border-[#a64d4d]">6.ออกโรงงาน</th>
+                            <th class="p-2 bg-[#9bbb59] border-r border-[#8aa64f]">7.ถึงสาขา</th>
+                            <th class="p-2 bg-[#9bbb59]">8.จบงาน</th>
                         </tr>
                     </thead>
                     <tbody class="text-gray-700 bg-white">

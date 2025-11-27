@@ -879,7 +879,7 @@ def export_pdf_summary():
     # กำหนดความกว้างคอลัมน์ใหม่ให้เต็มหน้า A4 (297mm - 14mm margin = 283mm)
     # รวม: 12+28+45+15+75+16+16+16+16+22+22 = 283 mm
     COLS = [12, 28, 45, 15, 75, 16, 16, 16, 16, 22, 22]
-    HEADERS = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
+    HEADERS = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
 
     class PDFSummary(FPDF):
         def header(self):
@@ -887,9 +887,9 @@ def export_pdf_summary():
             
             # Logo & Title
             if os.path.exists(logo_path):
-                self.image(logo_path, x=7, y=6, w=15)
+                self.image(logo_path, x=3.5, y=3, w=7.5)
             
-            self.set_font('Sarabun', '', 16) 
+            self.set_font('Sarabun', '', 12) 
             self.set_y(8)
             self.set_x(25) 
             self.cell(0, 8, f'สรุปรายงานการจัดส่งสินค้า (Compact View) - วันที่: {po_date_thai}', align='L', new_x="LMARGIN", new_y="NEXT")
@@ -900,7 +900,7 @@ def export_pdf_summary():
             self.set_fill_color(44, 62, 80) # Midnight Blue
             self.set_text_color(255, 255, 255) # White
             self.set_draw_color(44, 62, 80) # Border matches header
-            self.set_font('Sarabun', '', 9) 
+            self.set_font('Sarabun', '', 6) 
             
             for i, h in enumerate(HEADERS):
                 self.cell(COLS[i], 8, h, border=1, align='C', fill=True)
@@ -912,7 +912,7 @@ def export_pdf_summary():
 
         def footer(self):
             self.set_y(-10)
-            self.set_font('Sarabun', '', 7)
+            self.set_font('Sarabun', '', 6)
             self.set_text_color(150)
             self.cell(0, 10, f'หน้า {self.page_no()}/{{nb}} | พิมพ์เมื่อ: {print_date}', align='R')
 
@@ -949,7 +949,7 @@ def export_pdf_summary():
         t8 = str(job['T8_EndJob'])
 
         # Row Height
-        row_height = 7 # เพิ่มเป็น 7mm เพื่อความโปร่ง
+        row_height = 8 # เพิ่มเป็น 7mm เพื่อความโปร่ง
 
         # Page Break Check
         if pdf.get_y() + row_height > pdf.page_break_trigger:
@@ -964,7 +964,7 @@ def export_pdf_summary():
         else:
             pdf.set_fill_color(245, 245, 245) # Very Light Gray
         
-        pdf.set_font('Sarabun', '', 8)
+        pdf.set_font('Sarabun', '', 6)
         
         # วาด Cells
         # ใช้ border=1 (เส้นบางสีเทา) เพื่อความเป็นระเบียบ
@@ -990,7 +990,7 @@ def export_pdf_summary():
         # T2 Color Logic
         if is_late_row:
             pdf.set_text_color(192, 57, 43) # Red
-            pdf.set_font('Sarabun', '', 8) 
+            pdf.set_font('Sarabun', '', 6) 
         elif t2:
             pdf.set_text_color(39, 174, 96) # Green
         
@@ -998,7 +998,7 @@ def export_pdf_summary():
         
         # Reset text color & font
         pdf.set_text_color(0, 0, 0) 
-        pdf.set_font('Sarabun', '', 8)
+        pdf.set_font('Sarabun', '', 6)
 
         pdf.cell(COLS[7], row_height, t3, border=1, align='C', fill=True)
         pdf.cell(COLS[8], row_height, t6, border=1, align='C', fill=True)

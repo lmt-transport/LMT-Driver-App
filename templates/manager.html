@@ -350,7 +350,16 @@
 </div>
 
 <script>
-    // Tab Logic
+    // --- Initial Setup ---
+    document.addEventListener("DOMContentLoaded", function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tabParam = urlParams.get('tab');
+        const savedTab = localStorage.getItem('activeTab') || 'tab-monitor';
+        if(tabParam) switchTab('tab-' + tabParam); else switchTab(savedTab);
+        document.getElementById('report-time').innerText = new Date().toLocaleString('th-TH');
+    });
+
+    // --- Tab Logic ---
     function switchTab(tabId) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
         document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -364,7 +373,7 @@
         localStorage.setItem('activeTab', tabId);
     }
 
-    // Helper Functions
+    // --- Helper Functions ---
     function updatePlate() {
         const select = document.getElementById('driver_select');
         const selectedOption = select.options[select.selectedIndex];
@@ -388,40 +397,27 @@
 
     // --- Export Functions ---
     function triggerCustomerExport() {
-        const selectedDate = document.getElementById('report_date_filter').value;
-        let url = '/export_excel';
+        const selectedDate = document.getElementById('customer_date_filter').value;
+        let url = '/export_excel'; 
         if (selectedDate) url += `?date_filter=${selectedDate}`;
         window.location.href = url;
     }
 
     function triggerCustomerPDF() {
-        const selectedDate = document.getElementById('report_date_filter').value;
-        let url = '/export_pdf';
-        if (selectedDate) {
-            url += `?date_filter=${selectedDate}`;
-        }
+        const selectedDate = document.getElementById('customer_date_filter').value;
+        let url = '/export_pdf'; 
+        if (selectedDate) url += `?date_filter=${selectedDate}`;
         window.location.href = url;
     }
     
     function triggerCompactPDF() {
-        const selectedDate = document.getElementById('report_date_filter').value;
+        const selectedDate = document.getElementById('customer_date_filter').value;
         let url = '/export_pdf_summary'; 
-        if (selectedDate) {
-            url += `?date_filter=${selectedDate}`;
-        }
+        if (selectedDate) url += `?date_filter=${selectedDate}`;
         window.location.href = url;
     }
-    
-    function triggerCustomerPrint() {
-        const selectedDate = document.getElementById('report_date_filter').value;
-        let url = '/print_report';
-        if (selectedDate) {
-            url += `?date_filter=${selectedDate}`;
-        }
-        window.open(url, '_blank');
-    }
-	
-	// --- [UPDATED & FIXED] LINE Share Function ---
+
+    // --- [UPDATED] LINE Copy Function ---
     function shareLine(shiftType) {
         // 1. รับข้อมูล
         const dayData = {{ line_data_day | tojson }};
@@ -432,7 +428,7 @@
         const shiftEmoji = (shiftType === 'day') ? '☀️' : '🌙';
         
         // 2. Format วันที่ PO
-        const poDateVal = document.getElementById('report_date_filter').value;
+        const poDateVal = document.getElementById('customer_date_filter').value;
         const [py, pm, pd] = poDateVal.split('-');
         const yearThaiShort = (parseInt(py) + 543).toString().slice(2);
         const poDateThai = `${pd}.${pm}.${yearThaiShort}`; 
@@ -457,11 +453,14 @@
 
         // Loop ตามเวลา
         for (const [roundTime, cars] of Object.entries(groupedByRound)) {
+            // หัวข้อเวลา
             msg += `🕒 รอบโหลด ${roundTime} น.\n`;
             
             cars.forEach(car => {
+                // ข้อมูลรถ
                 msg += `🚛 คันที่ ${car.car_no} ${car.plate} ${car.driver}\n`;
                 
+                // รายชื่อสาขา
                 car.branches.forEach(branch => {
                     msg += `📍 ${branch}\n`;
                 });
@@ -470,24 +469,21 @@
             });
         }
 
-        // Encode Message
-        const encodedMsg = encodeURIComponent(msg);
-        
-        // [FIXED] ใช้ URL Scheme นี้แทน social-plugins
-        const lineUrl = `https://line.me/R/msg/text/?${encodedMsg}`;
-        
-        // เปิดหน้าต่างใหม่
-        window.open(lineUrl, '_blank');
+        // --- [CHANGE] Copy to Clipboard ---
+        navigator.clipboard.writeText(msg).then(() => {
+            alert("✅ คัดลอกตารางงานเรียบร้อยแล้ว!\nคุณสามารถนำไปวาง (Paste) ใน LINE กลุ่มได้เลย");
+        }).catch(err => {
+            console.error('Failed to copy: ', err);
+            // Fallback กรณี Clipboard API ไม่รองรับ (เช่น เว็บไม่ได้รันบน HTTPS)
+            const textArea = document.createElement("textarea");
+            textArea.value = msg;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand("copy");
+            document.body.removeChild(textArea);
+            alert("✅ คัดลอกตารางงานเรียบร้อยแล้ว!");
+        });
     }
-
-    document.addEventListener("DOMContentLoaded", function() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const tabParam = urlParams.get('tab');
-        const savedTab = localStorage.getItem('activeTab') || 'tab-monitor';
-        if(tabParam) switchTab('tab-' + tabParam); else switchTab(savedTab);
-        document.getElementById('report-time').innerText = new Date().toLocaleString('th-TH');
-    });
-
 </script>
 
 {% endblock %}

@@ -933,16 +933,16 @@ def export_pdf_summary():
                 self.image(logo_path, x=7, y=6, w=10)
             
             # Header Line 1: Report Name
-            self.set_font('Sarabun', '', 16) 
+            self.set_font('Sarabun', '', 12) 
             self.set_y(6)
             self.cell(0, 8, 'สรุปรายงานการจัดส่งสินค้า (Compact View)', align='C', new_x="LMARGIN", new_y="NEXT")
             
             # [NEW] Header Line 2: Company Name
-            self.set_font_size(14)
+            self.set_font_size(10)
             self.cell(0, 7, 'บริษัท แอลเอ็มที. ทรานสปอร์ต จำกัด', align='C', new_x="LMARGIN", new_y="NEXT")
 
             # Header Line 3: Date
-            self.set_font_size(10)
+            self.set_font_size(8)
             self.cell(0, 6, f'วันที่เอกสาร: {po_date_thai} | พิมพ์เมื่อ: {print_date}', align='C', new_x="LMARGIN", new_y="NEXT")
             
             self.ln(3)

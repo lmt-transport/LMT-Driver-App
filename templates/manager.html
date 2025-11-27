@@ -420,17 +420,10 @@
         }
         window.open(url, '_blank');
     }
-
-    document.addEventListener("DOMContentLoaded", function() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const tabParam = urlParams.get('tab');
-        const savedTab = localStorage.getItem('activeTab') || 'tab-monitor';
-        if(tabParam) switchTab('tab-' + tabParam); else switchTab(savedTab);
-        document.getElementById('report-time').innerText = new Date().toLocaleString('th-TH');
-    });
 	
-	// --- LINE Share Function ---
+	// --- [UPDATED & FIXED] LINE Share Function ---
     function shareLine(shiftType) {
+        // 1. รับข้อมูล
         const dayData = {{ line_data_day | tojson }};
         const nightData = {{ line_data_night | tojson }};
         
@@ -438,6 +431,7 @@
         const shiftName = (shiftType === 'day') ? 'รอบโหลดกลางวัน' : 'รอบโหลดกลางคืน';
         const shiftEmoji = (shiftType === 'day') ? '☀️' : '🌙';
         
+        // 2. Format วันที่ PO
         const poDateVal = document.getElementById('report_date_filter').value;
         const [py, pm, pd] = poDateVal.split('-');
         const yearThaiShort = (parseInt(py) + 543).toString().slice(2);
@@ -450,8 +444,10 @@
 
         const loadDateShow = dataList[0].load_date; 
 
+        // --- สร้างข้อความ Header ---
         let msg = `📄 LMT PO ${poDateThai} (${shiftEmoji} ${shiftName} วันที่ ${loadDateShow})\n\n`;
 
+        // จัดกลุ่มตามเวลา
         let groupedByRound = {};
         dataList.forEach(item => {
             let r = item.round || "ไม่ระบุเวลา";
@@ -459,6 +455,7 @@
             groupedByRound[r].push(item);
         });
 
+        // Loop ตามเวลา
         for (const [roundTime, cars] of Object.entries(groupedByRound)) {
             msg += `🕒 รอบโหลด ${roundTime} น.\n`;
             
@@ -473,10 +470,24 @@
             });
         }
 
+        // Encode Message
         const encodedMsg = encodeURIComponent(msg);
+        
+        // [FIXED] ใช้ URL Scheme นี้แทน social-plugins
         const lineUrl = `https://line.me/R/msg/text/?${encodedMsg}`;
+        
+        // เปิดหน้าต่างใหม่
         window.open(lineUrl, '_blank');
     }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tabParam = urlParams.get('tab');
+        const savedTab = localStorage.getItem('activeTab') || 'tab-monitor';
+        if(tabParam) switchTab('tab-' + tabParam); else switchTab(savedTab);
+        document.getElementById('report-time').innerText = new Date().toLocaleString('th-TH');
+    });
+
 </script>
 
 {% endblock %}

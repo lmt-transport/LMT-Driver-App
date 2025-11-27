@@ -227,7 +227,6 @@ def delete_job():
 
 @app.route('/export_excel')
 def export_excel():
-    # ... (ส่วนเตรียมข้อมูลจาก DB) ...
     sheet = get_db()
     raw_jobs = sheet.worksheet('Jobs').get_all_records()
     
@@ -247,54 +246,58 @@ def export_excel():
 
     jobs = sorted(jobs, key=sort_key_func)
     
+    # --- 1. เตรียมข้อมูลสำหรับ Main Table ---
     export_data = []
     prev_trip_key = None
     
+    # --- [NEW] ตัวแปรสำหรับคำนวณ Summary (Logic เดียวกับ PDF) ---
+    grouped_jobs = []
+    current_group = []
+    if jobs:
+        prev_key_grp = (str(jobs[0]['PO_Date']), str(jobs[0]['Car_No']), str(jobs[0]['Round']), str(jobs[0]['Driver']))
+        for job in jobs:
+            curr_key_grp = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
+            if curr_key_grp != prev_key_grp:
+                grouped_jobs.append(current_group)
+                current_group = []
+                prev_key_grp = curr_key_grp
+            current_group.append(job)
+        if current_group: grouped_jobs.append(current_group)
+
+    # --- Loop สร้าง Main Data Row ---
     for job in jobs:
         current_trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
         is_same = (current_trip_key == prev_trip_key)
         
-        # --- Logic คำนวณความล่าช้า (ปรับปรุง Midnight Crossover) ---
+        # Logic คำนวณความล่าช้า (Midnight Crossover)
         t2_display = job['T2_StartLoad']
         if not is_same: 
             try:
                 plan_time_str = str(job['Round']).strip()
                 actual_time_str = str(job['T2_StartLoad']).strip()
-                
                 if plan_time_str and actual_time_str:
                     fmt = "%H:%M" if len(plan_time_str) <= 5 else "%H:%M:%S"
                     fmt_act = "%H:%M" if len(actual_time_str) <= 5 else "%H:%M:%S"
-                    
                     t_plan = datetime.strptime(plan_time_str, fmt)
                     t_act = datetime.strptime(actual_time_str, fmt_act)
                     
-                    # === [NEW LOGIC] ตรวจสอบการข้ามวัน (Midnight Crossover) ===
-                    # ถ้าเวลาแผน (t_plan) มากกว่าเวลาจริง (t_act) เกิน 12 ชั่วโมง 
-                    # (เช่น แผน 22:30 - จริง 01:08 = ต่างกันประมาณ 21 ชม.)
-                    # ให้สันนิษฐานว่าเวลาจริงคือ "วันถัดไป"
                     if (t_plan - t_act).total_seconds() > 12 * 3600:
                         t_act = t_act + timedelta(days=1)
-                    # ========================================================
                     
                     if t_act > t_plan:
                         diff = t_act - t_plan
                         total_seconds = diff.total_seconds()
                         hours = int(total_seconds // 3600)
                         minutes = int((total_seconds % 3600) // 60)
-                        
-                        # เพิ่มข้อความล่าช้า
                         delay_msg = f" (ล่าช้า {hours} ชม. {minutes} น.)"
                         t2_display = f"{actual_time_str}{delay_msg}"
-            except (ValueError, TypeError):
-                pass 
-        # ----------------------------------------
+            except: pass 
 
         formatted_date = job['PO_Date']
         try:
             date_obj = datetime.strptime(str(job['PO_Date']).strip(), "%Y-%m-%d")
             formatted_date = date_obj.strftime("%d/%m/%Y")
-        except ValueError:
-            pass
+        except: pass
             
         row = {
             'ลำดับรถ': "" if is_same else job['Car_No'],
@@ -317,9 +320,8 @@ def export_excel():
 
     df = pd.DataFrame(export_data)
     
-    # --- ส่วนการจัดรูปแบบ Excel ---
+    # --- เขียนไฟล์ Excel ---
     output = io.BytesIO()
-    
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Report')
     
@@ -327,28 +329,40 @@ def export_excel():
     wb = load_workbook(output)
     ws = wb.active
     
-    # Styles
+    # --- Styles ---
     font_header = Font(name='Cordia New', size=14, bold=True, color='FFFFFF') 
+    font_body = Font(name='Cordia New', size=14)
+    font_summary_head = Font(name='Cordia New', size=14, bold=True)
+    font_summary_body = Font(name='Cordia New', size=14)
     
     side_thin = Side(border_style="thin", color="000000")
     side_none = Side(border_style=None) 
+    border_all = Border(top=side_thin, bottom=side_thin, left=side_thin, right=side_thin)
     border_header = Border(top=side_thin, bottom=side_thin, left=side_thin, right=side_thin)
     
-    align_center = Alignment(horizontal='center', vertical='top', wrap_text=True)
-    align_left = Alignment(horizontal='left', vertical='top', wrap_text=True)
+    align_center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    align_left = Alignment(horizontal='left', vertical='center', wrap_text=True)
     
     fill_header = PatternFill(start_color='2E4053', end_color='2E4053', fill_type='solid')
     fill_white = PatternFill(start_color='FFFFFF', end_color='FFFFFF', fill_type='solid')
     fill_blue_light = PatternFill(start_color='EBF5FB', end_color='EBF5FB', fill_type='solid')
     fill_green_branch = PatternFill(start_color='D5F5E3', end_color='D5F5E3', fill_type='solid')
     fill_red_end = PatternFill(start_color='FADBD8', end_color='FADBD8', fill_type='solid')
+    fill_sum_head = PatternFill(start_color='D6EAF8', end_color='D6EAF8', fill_type='solid') # ฟ้าอ่อน
+    fill_sum_total = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid') # เหลือง
+
+    # [NEW] Freeze Top Row
+    ws.freeze_panes = 'A2'
 
     current_trip_id = None
     is_zebra_active = False
 
+    # --- Loop Styling Main Table ---
     for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
         
-        # --- ส่วนหัวตาราง ---
+        # [NEW] Set Row Height = 21
+        ws.row_dimensions[row[0].row].height = 21
+
         if row[0].row == 1:
             for cell in row:
                 cell.font = font_header
@@ -357,18 +371,14 @@ def export_excel():
                 cell.border = border_header
             continue
 
-        # --- ส่วนเนื้อหา ---
         job_index = row[0].row - 2
-        
         is_group_end = False
         if 0 <= job_index < len(jobs):
             job_data = jobs[job_index]
-            if job_index == len(jobs) - 1:
-                is_group_end = True
+            if job_index == len(jobs) - 1: is_group_end = True
             else:
                 next_job = jobs[job_index + 1]
-                if (str(job_data['PO_Date']) != str(next_job['PO_Date'])) or \
-                   (str(job_data['Car_No']) != str(next_job['Car_No'])):
+                if (str(job_data['PO_Date']) != str(next_job['PO_Date'])) or (str(job_data['Car_No']) != str(next_job['Car_No'])):
                     is_group_end = True
 
             this_trip_key = (str(job_data['PO_Date']), str(job_data['Car_No']), str(job_data['Round']))
@@ -377,76 +387,142 @@ def export_excel():
                 current_trip_id = this_trip_key
 
         row_fill = fill_blue_light if is_zebra_active else fill_white
-
-        current_border = Border(
-            left=side_thin, 
-            right=side_thin, 
-            top=side_none, 
-            bottom=side_thin if is_group_end else side_none
-        )
+        current_border = Border(left=side_thin, right=side_thin, top=side_none, bottom=side_thin if is_group_end else side_none)
 
         for cell in row:
             col_name = ws.cell(row=1, column=cell.column).value
-            
-            # --- Logic การตกแต่ง Font, Bold, Color ---
             f_bold = False
-            f_color = '000000' # สีดำ (Default)
-
-            # 1. เงื่อนไข Bold: สาขา, จบงาน, และ **เริ่มโหลด**
-            if col_name in ['ถึงสาขา', 'จบงาน', 'เริ่มโหลด']:
-                f_bold = True
-
-            # 2. เงื่อนไขสีตัวอักษรเฉพาะ '2.เริ่มโหลด'
+            f_color = '000000'
+            if col_name in ['ถึงสาขา', 'จบงาน', 'เริ่มโหลด']: f_bold = True
+            
             if col_name == 'เริ่มโหลด':
                 cell_val_str = str(cell.value) if cell.value else ""
-                if "(ล่าช้า" in cell_val_str:
-                    f_color = 'C0392B' # สีแดงเข้ม (ล่าช้า)
-                elif cell_val_str.strip() != "":
-                    f_color = '196F3D' # สีเขียวเข้ม (ตรงเวลา)
+                if "(ล่าช้า" in cell_val_str: f_color = 'C0392B'
+                elif cell_val_str.strip() != "": f_color = '196F3D'
 
-            # สร้าง Font Object ใหม่
             cell.font = Font(name='Cordia New', size=14, bold=f_bold, color=f_color)
-            
             cell.border = current_border 
             cell.fill = row_fill
             
-            # Override สีพื้นหลัง
-            if col_name == 'ถึงสาขา':
-                cell.fill = fill_green_branch
-            elif col_name == 'จบงาน':
-                cell.fill = fill_red_end
+            if col_name == 'ถึงสาขา': cell.fill = fill_green_branch
+            elif col_name == 'จบงาน': cell.fill = fill_red_end
             
-            # Alignment
-            if col_name in ['คนขับ', 'ปลายทาง (สาขา)', 'ทะเบียนรถ']:
-                cell.alignment = align_left
-            else:
-                cell.alignment = align_center
+            if col_name in ['คนขับ', 'ปลายทาง (สาขา)', 'ทะเบียนรถ']: cell.alignment = align_left
+            else: cell.alignment = align_center
 
-    # --- ปรับความกว้างคอลัมน์ ---
+    # --- [NEW] คำนวณ Summary Stats ---
+    def create_counter(): return {'count':0, 't1':0, 't2':0, 't3':0, 't4':0, 't5':0, 't6':0, 't7':0, 't8':0}
+    sum_day = create_counter()
+    sum_night = create_counter()
+    
+    for group in grouped_jobs:
+        if not group: continue
+        first_job = group[0]
+        last_job = group[-1]
+        
+        # Check Shift
+        round_time = str(first_job.get('Round', '')).strip()
+        is_day_shift = True
+        try:
+            hour = int(round_time.split(':')[0])
+            if not (6 <= hour <= 18): is_day_shift = False
+        except: pass
+
+        target = sum_day if is_day_shift else sum_night
+        target['count'] += 1 # จำนวนรถ/เที่ยว
+        if first_job.get('T1_Enter'): target['t1'] += 1
+        if first_job.get('T2_StartLoad'): target['t2'] += 1
+        if first_job.get('T3_EndLoad'): target['t3'] += 1
+        if first_job.get('T4_SubmitDoc'): target['t4'] += 1
+        if first_job.get('T5_RecvDoc'): target['t5'] += 1
+        if first_job.get('T6_Exit'): target['t6'] += 1
+        if first_job.get('T7_ArriveBranch'): target['t7'] += 1 # นับเฉพาะถึงสาขาแรก
+        if last_job.get('T8_EndJob'): target['t8'] += 1       # นับเฉพาะจบงานสุดท้าย
+
+    sum_total = create_counter()
+    for k in sum_total: sum_total[k] = sum_day[k] + sum_night[k]
+
+    # --- [NEW] วาดตารางสรุป (Summary Table) ---
+    # เริ่มต้นที่บรรทัดสุดท้ายของข้อมูลเดิม + 2 (เว้น 1 บรรทัด)
+    start_row = ws.max_row + 2 
+    
+    # Headers
+    # Col mapping: Start at Col C(3) to N(14) based on image approximation
+    # Or align with data columns:
+    # Col: A=ลำดับ, B=PO, C=Round, D=Driver, E=Branch, F=Plate, G=T1, H=T2, I=T3, J=T4, K=T5, L=T6, M=T7, N=T8
+    # Summary Labels at Col C (Round column pos), Values at F (Plate) to N (EndJob)
+    
+    summary_headers = ['รอบโหลด', 'จำนวนรถ', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ยื่นเอกสาร', 'รับเอกสาร', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
+    # Mapping column index for summary (Adjust to match main table columns mostly)
+    # Main Table Cols: A=1 .. N=14
+    # Summary will span: Label(C-E merged), Count(F), T1(G), T2(H), T3(I), T4(J), T5(K), T6(L), T7(M), T8(N)
+    
+    col_map_idx = [3, 6, 7, 8, 9, 10, 11, 12, 13, 14] # C, F, G, H, I, J, K, L, M, N
+    
+    # 1. Write Header Row
+    ws.merge_cells(start_row=start_row, start_column=3, end_row=start_row, end_column=5) # Merge C-E for Label
+    ws.cell(row=start_row, column=3, value="รอบโหลด")
+    
+    header_labels = summary_headers[1:] # Skip 'รอบโหลด'
+    for i, label in enumerate(header_labels):
+        ws.cell(row=start_row, column=col_map_idx[i+1], value=label)
+
+    # 2. Write Data Rows (Day, Night, Total)
+    rows_to_write = [
+        ('กลางวัน', sum_day),
+        ('กลางคืน', sum_night),
+        ('รวม', sum_total)
+    ]
+    
+    for idx, (label, data) in enumerate(rows_to_write):
+        curr_r = start_row + 1 + idx
+        ws.row_dimensions[curr_r].height = 21 # Set Height
+        
+        ws.merge_cells(start_row=curr_r, start_column=3, end_row=curr_r, end_column=5)
+        ws.cell(row=curr_r, column=3, value=label)
+        
+        # Values ordered: Count, T1, T2, T3, T4, T5, T6, T7, T8
+        vals = [data['count'], data['t1'], data['t2'], data['t3'], data['t4'], data['t5'], data['t6'], data['t7'], data['t8']]
+        
+        for i, val in enumerate(vals):
+            ws.cell(row=curr_r, column=col_map_idx[i+1], value=val)
+
+    # 3. Apply Styles to Summary
+    for r in range(start_row, start_row + 4):
+        for c in range(3, 15): # Col C to N
+            cell = ws.cell(row=r, column=c)
+            cell.border = border_all
+            cell.alignment = align_center
+            cell.font = font_summary_body
+            
+            # Header Style
+            if r == start_row:
+                cell.fill = fill_sum_head
+                cell.font = font_summary_head
+            # Total Row Style
+            elif r == start_row + 3:
+                cell.fill = fill_sum_total
+                cell.font = font_summary_head
+
+    # --- Column Width Adjustment ---
     for column_cells in ws.columns:
         col_letter = get_column_letter(column_cells[0].column)
         col_header = column_cells[0].value
-        
-        # เงื่อนไขความกว้าง
-        if col_header == 'เริ่มโหลด':
-            ws.column_dimensions[col_letter].width = 19.00
+        if col_header == 'เริ่มโหลด': ws.column_dimensions[col_letter].width = 22.00 # เพิ่มนิดหน่อยเผื่อข้อความยาว
         else:
-            # Auto fit สำหรับคอลัมน์อื่นๆ
             length = 0
             for cell in column_cells:
-                val = str(cell.value) if cell.value else ""
-                lines = val.split('\n')
-                longest_line = max(len(line) for line in lines) if lines else 0
-                if longest_line > length:
-                    length = longest_line
-            ws.column_dimensions[col_letter].width = min(length + 4, 50)
-
-    ws.auto_filter.ref = ws.dimensions
+                # คำนวณความกว้างโดยไม่นับส่วน Summary (เพราะ Merge Cell อาจทำให้เพี้ยน)
+                if cell.row < start_row: 
+                    val = str(cell.value) if cell.value else ""
+                    lines = val.split('\n')
+                    longest = max(len(line) for line in lines) if lines else 0
+                    if longest > length: length = longest
+            ws.column_dimensions[col_letter].width = min(length + 5, 50)
 
     final_output = io.BytesIO()
     wb.save(final_output)
     final_output.seek(0)
-    
     filename = f"Report_{date_filter if date_filter else 'All'}.xlsx"
     return send_file(final_output, download_name=filename, as_attachment=True)
     

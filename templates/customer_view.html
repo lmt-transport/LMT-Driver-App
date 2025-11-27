@@ -1,55 +1,74 @@
 {% extends "layout.html" %}
 {% block content %}
 
-<div class="max-w-7xl mx-auto pb-12">
+<style>
+    /* Custom Scrollbar for table */
+    .custom-scrollbar::-webkit-scrollbar {
+        height: 8px;
+        width: 8px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+        background: #f1f1f1; 
+        border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #cbd5e1; 
+        border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8; 
+    }
+</style>
+
+<div class="w-full max-w-[98%] mx-auto pb-12 px-2 md:px-4">
     
-    <div class="bg-gradient-to-r from-indigo-900 to-blue-800 text-white p-8 rounded-2xl shadow-xl mb-8 text-center relative overflow-hidden">
+    <div class="bg-gradient-to-r from-indigo-900 to-blue-800 text-white p-6 md:p-8 rounded-2xl shadow-xl mb-8 text-center relative overflow-hidden">
         <div class="absolute top-0 left-0 w-full h-full bg-white opacity-5" style="background-image: radial-gradient(circle, #ffffff 1px, transparent 1px); background-size: 20px 20px;"></div>
         <div class="relative z-10">
-            <h1 class="text-3xl font-bold mb-2 tracking-wide"><i class="fa-solid fa-truck-fast mr-2"></i> ติดตามสถานะการจัดส่งสินค้า</h1>
+            <h1 class="text-2xl md:text-3xl font-bold mb-2 tracking-wide"><i class="fa-solid fa-truck-fast mr-2"></i> ติดตามสถานะการจัดส่งสินค้า</h1>
             <p class="text-blue-200 text-sm font-light">Real-time Logistics Tracking Dashboard</p>
         </div>
     </div>
     
-    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-        <div class="relative overflow-hidden bg-white rounded-2xl p-5 shadow-sm border border-gray-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-8">
+        <div class="relative overflow-hidden bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-gray-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
             <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 rounded-full bg-gradient-to-br from-blue-50 to-blue-100 opacity-50 blur-2xl group-hover:opacity-80 transition"></div>
             <div class="relative z-10 flex flex-col items-center">
-                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-xl shadow-blue-200 shadow-lg mb-3 transform group-hover:scale-110 transition duration-300"><i class="fa-solid fa-route"></i></div>
-                <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">เที่ยววิ่งทั้งหมด</div>
-                <div class="text-3xl font-extrabold text-gray-800">{{ total_trips }}</div>
+                <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-lg md:text-xl shadow-blue-200 shadow-lg mb-3 transform group-hover:scale-110 transition duration-300"><i class="fa-solid fa-route"></i></div>
+                <div class="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">เที่ยววิ่งทั้งหมด</div>
+                <div class="text-2xl md:text-3xl font-extrabold text-gray-800">{{ total_trips }}</div>
             </div>
         </div>
-        <div class="relative overflow-hidden bg-white rounded-2xl p-5 shadow-sm border border-gray-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+        <div class="relative overflow-hidden bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-gray-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
             <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 rounded-full bg-gradient-to-br from-green-50 to-green-100 opacity-50 blur-2xl group-hover:opacity-80 transition"></div>
             <div class="relative z-10 flex flex-col items-center">
-                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center text-xl shadow-emerald-200 shadow-lg mb-3 transform group-hover:scale-110 transition duration-300"><i class="fa-solid fa-flag-checkered"></i></div>
-                <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">เที่ยวจบแล้ว</div>
-                <div class="text-3xl font-extrabold text-emerald-600">{{ completed_trips }}</div>
+                <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center text-lg md:text-xl shadow-emerald-200 shadow-lg mb-3 transform group-hover:scale-110 transition duration-300"><i class="fa-solid fa-flag-checkered"></i></div>
+                <div class="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">เที่ยวจบแล้ว</div>
+                <div class="text-2xl md:text-3xl font-extrabold text-emerald-600">{{ completed_trips }}</div>
             </div>
         </div>
-        <div class="relative overflow-hidden bg-white rounded-2xl p-5 shadow-sm border border-gray-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+        <div class="relative overflow-hidden bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-gray-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
             <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 rounded-full bg-gradient-to-br from-gray-50 to-gray-200 opacity-50 blur-2xl group-hover:opacity-80 transition"></div>
             <div class="relative z-10 flex flex-col items-center">
-                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-gray-600 to-gray-800 text-white flex items-center justify-center text-xl shadow-gray-300 shadow-lg mb-3 transform group-hover:scale-110 transition duration-300"><i class="fa-solid fa-store"></i></div>
-                <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">สาขาทั้งหมด</div>
-                <div class="text-3xl font-extrabold text-gray-700">{{ total_branches }}</div>
+                <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-gray-600 to-gray-800 text-white flex items-center justify-center text-lg md:text-xl shadow-gray-300 shadow-lg mb-3 transform group-hover:scale-110 transition duration-300"><i class="fa-solid fa-store"></i></div>
+                <div class="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">สาขาทั้งหมด</div>
+                <div class="text-2xl md:text-3xl font-extrabold text-gray-700">{{ total_branches }}</div>
             </div>
         </div>
-        <div class="relative overflow-hidden bg-white rounded-2xl p-5 shadow-sm border border-gray-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+        <div class="relative overflow-hidden bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-gray-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
             <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 rounded-full bg-gradient-to-br from-green-50 to-green-100 opacity-50 blur-2xl group-hover:opacity-80 transition"></div>
             <div class="relative z-10 flex flex-col items-center">
-                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-green-600 text-white flex items-center justify-center text-xl shadow-green-200 shadow-lg mb-3 transform group-hover:scale-110 transition duration-300"><i class="fa-solid fa-clipboard-check"></i></div>
-                <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">สาขาจบแล้ว</div>
-                <div class="text-3xl font-extrabold text-green-600">{{ total_done_jobs }}</div>
+                <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-green-500 to-green-600 text-white flex items-center justify-center text-lg md:text-xl shadow-green-200 shadow-lg mb-3 transform group-hover:scale-110 transition duration-300"><i class="fa-solid fa-clipboard-check"></i></div>
+                <div class="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">สาขาจบแล้ว</div>
+                <div class="text-2xl md:text-3xl font-extrabold text-green-600">{{ total_done_jobs }}</div>
             </div>
         </div>
-        <div class="relative overflow-hidden bg-white rounded-2xl p-5 shadow-sm border border-gray-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+        <div class="relative overflow-hidden bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-gray-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
             <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 rounded-full bg-gradient-to-br from-yellow-50 to-orange-100 opacity-50 blur-2xl group-hover:opacity-80 transition"></div>
             <div class="relative z-10 flex flex-col items-center">
-                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center text-xl shadow-orange-200 shadow-lg mb-3 transform group-hover:scale-110 transition duration-300 animate-pulse"><i class="fa-solid fa-truck-fast"></i></div>
-                <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">กำลังวิ่ง</div>
-                <div class="text-3xl font-extrabold text-orange-500">{{ total_running_jobs }}</div>
+                <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center text-lg md:text-xl shadow-orange-200 shadow-lg mb-3 transform group-hover:scale-110 transition duration-300 animate-pulse"><i class="fa-solid fa-truck-fast"></i></div>
+                <div class="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">กำลังวิ่ง</div>
+                <div class="text-2xl md:text-3xl font-extrabold text-orange-500">{{ total_running_jobs }}</div>
             </div>
         </div>
     </div>
@@ -80,7 +99,7 @@
             </a>
         </form>
 
-        <div class="flex gap-2 w-full lg:w-auto justify-center">            
+        <div class="flex flex-wrap gap-2 w-full lg:w-auto justify-center">            
             <a href="#" onclick="triggerCustomerPDF()" class="bg-red-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-red-700 transition shadow-md flex items-center gap-2 transform active:scale-95">
                 <i class="fa-solid fa-file-pdf"></i> <span class="hidden sm:inline">PDF Export</span>
             </a>
@@ -103,27 +122,30 @@
             </div>
         </div>
         
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto custom-scrollbar">
             <table class="w-full text-xs text-center whitespace-nowrap">
                 <thead>
                     <tr class="text-white uppercase tracking-wider text-[10px]">
-                        <th class="p-3 bg-indigo-900 sticky left-0 z-10 font-bold">คันที่</th>
-                        <th class="p-3 bg-indigo-800 font-bold">ทะเบียนรถ</th>
-                        <th class="p-3 bg-indigo-800 font-bold">คนขับ</th>
-                        <th class="p-3 bg-indigo-800 font-bold">เวลาโหลด</th>
-                        <th class="p-3 bg-indigo-800 min-w-[160px] text-left pl-4 font-bold">สาขาปลายทาง</th>
+                        <th class="p-2 bg-indigo-900 sticky left-0 z-10 font-bold">คันที่</th>
+                        <th class="p-2 bg-indigo-800 font-bold">ทะเบียนรถ</th>
+                        <th class="p-2 bg-indigo-800 font-bold">คนขับ</th>
+                        <th class="p-2 bg-indigo-800 font-bold">เวลาโหลด</th>
+                        <th class="p-2 bg-indigo-800 min-w-[160px] text-left pl-4 font-bold">สาขาปลายทาง</th>
                         
-                        <th class="p-3 bg-gray-600 font-bold">เข้าโรงงาน</th>
-                        <th class="p-3 bg-gray-600 font-bold">เริ่มโหลด</th>
-                        <th class="p-3 bg-gray-600 font-bold">โหลดเสร็จ</th>
-                        <th class="p-3 bg-gray-600 font-bold">ออกโรงงาน</th>
-                        <th class="p-3 bg-emerald-600 font-bold">ถึงสาขา</th>
-                        <th class="p-3 bg-rose-600 font-bold">จบงาน</th>
+                        <th class="p-2 bg-gray-600 font-bold">เข้าโรงงาน</th>
+                        <th class="p-2 bg-gray-600 font-bold">เริ่มโหลด</th>
+                        <th class="p-2 bg-gray-600 font-bold">โหลดเสร็จ</th>
+                        <th class="p-2 bg-gray-600 font-bold">ยื่นเอกสาร</th>
+                        <th class="p-2 bg-gray-600 font-bold">รับเอกสาร</th>
+                        
+                        <th class="p-2 bg-gray-600 font-bold">ออกโรงงาน</th>
+                        <th class="p-2 bg-emerald-600 font-bold">ถึงสาขา</th>
+                        <th class="p-2 bg-rose-600 font-bold">จบงาน</th>
                     </tr>
                 </thead>
                 <tbody class="text-gray-600 bg-white">
                     {% if jobs|length == 0 %}
-                    <tr><td colspan="11" class="p-12 text-center text-gray-400 bg-gray-50">
+                    <tr><td colspan="13" class="p-12 text-center text-gray-400 bg-gray-50">
                         <i class="fa-regular fa-folder-open text-4xl mb-2 opacity-50"></i><br>ไม่พบข้อมูลการขนส่งในวันที่เลือก
                     </td></tr>
                     {% endif %}
@@ -135,20 +157,20 @@
                         {% endif %}
 
                         <tr class="border-b border-gray-100 hover:bg-blue-50/30 transition duration-150">
-                            <td class="p-3 border-r border-gray-100 bg-gray-50/80 sticky left-0 font-bold text-indigo-900">
+                            <td class="p-2 border-r border-gray-100 bg-gray-50/80 sticky left-0 font-bold text-indigo-900">
                                 {% if not is_same %} <span class="bg-white border border-gray-200 px-2 py-1 rounded shadow-sm">#{{ job.Car_No }}</span> {% endif %}
                             </td>
-                            <td class="p-3 border-r border-gray-100">
+                            <td class="p-2 border-r border-gray-100">
                                 {% if not is_same %} {{ job.Plate }} {% endif %}
                             </td>
-                            <td class="p-3 border-r border-gray-100 font-medium text-gray-800"> 
+                            <td class="p-2 border-r border-gray-100 font-medium text-gray-800"> 
                                 {% if not is_same %} {{ job.Driver }} {% endif %}
                             </td>
-                            <td class="p-3 border-r border-gray-100 font-bold text-indigo-700">
+                            <td class="p-2 border-r border-gray-100 font-bold text-indigo-700">
                                 {% if not is_same %} {{ job.Round }} {% endif %}
                             </td>
                             
-                            <td class="p-3 border-r border-gray-100 text-left pl-4 font-bold text-indigo-700">
+                            <td class="p-2 border-r border-gray-100 text-left pl-4 font-bold text-indigo-700">
                                 {{ job.Branch_Name }}
                             </td>
 
@@ -168,10 +190,10 @@
                             {% endmacro %}
 
                             {% if is_same %}
-                                <td class="p-3 border-r border-gray-100 bg-gray-50/30" colspan="4"></td>
+                                <td class="p-2 border-r border-gray-100 bg-gray-50/30" colspan="6"></td>
                             {% else %}
-                                <td class="p-3 border-r border-gray-100">{{ time_display(job.T1_Enter, job.L1_Loc) }}</td>
-                                <td class="p-3 border-r border-gray-100">
+                                <td class="p-2 border-r border-gray-100">{{ time_display(job.T1_Enter, job.L1_Loc) }}</td>
+                                <td class="p-2 border-r border-gray-100">
                                     {% if job.T2_StartLoad %}
                                     {% set text_color = 'text-red-600' if job.is_late else 'text-green-600' %}
                                     {% set bg_color = 'bg-red-50' if job.is_late else 'bg-green-50' %}
@@ -193,14 +215,16 @@
                                     <span class="text-gray-300">-</span>
                                     {% endif %}
                                 </td>
-                                <td class="p-3 border-r border-gray-100">{{ time_display(job.T3_EndLoad, job.L3_Loc) }}</td>
-                                <td class="p-3 border-r border-gray-100">{{ time_display(job.T6_Exit, job.L6_Loc) }}</td>
+                                <td class="p-2 border-r border-gray-100">{{ time_display(job.T3_EndLoad, job.L3_Loc) }}</td>
+                                <td class="p-2 border-r border-gray-100">{{ time_display(job.T4_SubmitDoc, job.L4_Loc) }}</td>
+                                <td class="p-2 border-r border-gray-100">{{ time_display(job.T5_RecvDoc, job.L5_Loc) }}</td>
+                                <td class="p-2 border-r border-gray-100">{{ time_display(job.T6_Exit, job.L6_Loc) }}</td>
                             {% endif %}
 
-                            <td class="p-3 border-r border-gray-100 bg-emerald-50/30 font-medium text-emerald-700">
+                            <td class="p-2 border-r border-gray-100 bg-emerald-50/30 font-medium text-emerald-700">
                                 {{ time_display(job.T7_ArriveBranch, job.L7_Loc) }}
                             </td>
-                            <td class="p-3 font-bold text-rose-600 bg-rose-50/30">
+                            <td class="p-2 font-bold text-rose-600 bg-rose-50/30">
                                 {{ time_display(job.T8_EndJob, job.L8_Loc) }}
                             </td>
                         </tr>
@@ -229,7 +253,6 @@
         window.location.href = url;
     }
 
-    // เพิ่มฟังก์ชันสำหรับปุ่ม PDF Export
     function triggerCustomerPDF() {
         const selectedDate = document.getElementById('customer_date_filter').value;
         let url = '/export_pdf'; 
@@ -239,7 +262,6 @@
         window.location.href = url;
     }
     
-    // [FIXED] เปลี่ยน ID เป็น customer_date_filter ให้ถูกต้องตามที่มีในหน้านี้
     function triggerCompactPDF() {
         const selectedDate = document.getElementById('customer_date_filter').value;
         let url = '/export_pdf_summary'; 

@@ -250,7 +250,7 @@ def export_excel():
     export_data = []
     prev_trip_key = None
     
-    # --- [NEW] ตัวแปรสำหรับคำนวณ Summary (Logic เดียวกับ PDF) ---
+    # ตัวแปรสำหรับคำนวณ Summary
     grouped_jobs = []
     current_group = []
     if jobs:
@@ -264,12 +264,12 @@ def export_excel():
             current_group.append(job)
         if current_group: grouped_jobs.append(current_group)
 
-    # --- Loop สร้าง Main Data Row ---
+    # Loop สร้าง Main Data Row
     for job in jobs:
         current_trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
         is_same = (current_trip_key == prev_trip_key)
         
-        # Logic คำนวณความล่าช้า (Midnight Crossover)
+        # Midnight Crossover Logic
         t2_display = job['T2_StartLoad']
         if not is_same: 
             try:
@@ -320,7 +320,6 @@ def export_excel():
 
     df = pd.DataFrame(export_data)
     
-    # --- เขียนไฟล์ Excel ---
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Report')
@@ -329,7 +328,7 @@ def export_excel():
     wb = load_workbook(output)
     ws = wb.active
     
-    # --- Styles ---
+    # Styles
     font_header = Font(name='Cordia New', size=14, bold=True, color='FFFFFF') 
     font_body = Font(name='Cordia New', size=14)
     font_summary_head = Font(name='Cordia New', size=14, bold=True)
@@ -348,19 +347,16 @@ def export_excel():
     fill_blue_light = PatternFill(start_color='EBF5FB', end_color='EBF5FB', fill_type='solid')
     fill_green_branch = PatternFill(start_color='D5F5E3', end_color='D5F5E3', fill_type='solid')
     fill_red_end = PatternFill(start_color='FADBD8', end_color='FADBD8', fill_type='solid')
-    fill_sum_head = PatternFill(start_color='D6EAF8', end_color='D6EAF8', fill_type='solid') # ฟ้าอ่อน
-    fill_sum_total = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid') # เหลือง
+    fill_sum_head = PatternFill(start_color='D6EAF8', end_color='D6EAF8', fill_type='solid') 
+    fill_sum_total = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid') 
 
-    # [NEW] Freeze Top Row
     ws.freeze_panes = 'A2'
 
     current_trip_id = None
     is_zebra_active = False
 
-    # --- Loop Styling Main Table ---
+    # Loop Styling Main Table
     for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
-        
-        # [NEW] Set Row Height = 21
         ws.row_dimensions[row[0].row].height = 21
 
         if row[0].row == 1:
@@ -420,7 +416,6 @@ def export_excel():
         first_job = group[0]
         last_job = group[-1]
         
-        # Check Shift
         round_time = str(first_job.get('Round', '')).strip()
         is_day_shift = True
         try:
@@ -429,45 +424,38 @@ def export_excel():
         except: pass
 
         target = sum_day if is_day_shift else sum_night
-        target['count'] += 1 # จำนวนรถ/เที่ยว
+        target['count'] += 1 
         if first_job.get('T1_Enter'): target['t1'] += 1
         if first_job.get('T2_StartLoad'): target['t2'] += 1
         if first_job.get('T3_EndLoad'): target['t3'] += 1
         if first_job.get('T4_SubmitDoc'): target['t4'] += 1
         if first_job.get('T5_RecvDoc'): target['t5'] += 1
         if first_job.get('T6_Exit'): target['t6'] += 1
-        if first_job.get('T7_ArriveBranch'): target['t7'] += 1 # นับเฉพาะถึงสาขาแรก
-        if last_job.get('T8_EndJob'): target['t8'] += 1       # นับเฉพาะจบงานสุดท้าย
+        if first_job.get('T7_ArriveBranch'): target['t7'] += 1 
+        if last_job.get('T8_EndJob'): target['t8'] += 1       
 
     sum_total = create_counter()
     for k in sum_total: sum_total[k] = sum_day[k] + sum_night[k]
 
-    # --- [NEW] วาดตารางสรุป (Summary Table) ---
-    # เริ่มต้นที่บรรทัดสุดท้ายของข้อมูลเดิม + 2 (เว้น 1 บรรทัด)
+    # --- [NEW] วาดตารางสรุป (Summary Table) แบบไม่ Merge ---
     start_row = ws.max_row + 2 
     
-    # Headers
-    # Col mapping: Start at Col C(3) to N(14) based on image approximation
-    # Or align with data columns:
-    # Col: A=ลำดับ, B=PO, C=Round, D=Driver, E=Branch, F=Plate, G=T1, H=T2, I=T3, J=T4, K=T5, L=T6, M=T7, N=T8
-    # Summary Labels at Col C (Round column pos), Values at F (Plate) to N (EndJob)
-    
     summary_headers = ['รอบโหลด', 'จำนวนรถ', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ยื่นเอกสาร', 'รับเอกสาร', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
-    # Mapping column index for summary (Adjust to match main table columns mostly)
-    # Main Table Cols: A=1 .. N=14
-    # Summary will span: Label(C-E merged), Count(F), T1(G), T2(H), T3(I), T4(J), T5(K), T6(L), T7(M), T8(N)
     
-    col_map_idx = [3, 6, 7, 8, 9, 10, 11, 12, 13, 14] # C, F, G, H, I, J, K, L, M, N
+    # [FIX] Col Mapping: Label อยู่ Col E (5), ข้อมูลเริ่ม Col F (6) ถึง N (14)
+    # Col 5 = ปลายทาง, Col 6 = ทะเบียน ... Col 14 = จบงาน
+    col_map_idx = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14] 
     
     # 1. Write Header Row
-    ws.merge_cells(start_row=start_row, start_column=3, end_row=start_row, end_column=5) # Merge C-E for Label
-    ws.cell(row=start_row, column=3, value="รอบโหลด")
+    # เขียน "รอบโหลด" ลงคอลัมน์ E (5)
+    ws.cell(row=start_row, column=5, value="รอบโหลด")
     
-    header_labels = summary_headers[1:] # Skip 'รอบโหลด'
+    # เขียนหัวข้ออื่นๆ ลงคอลัมน์ F-N
+    header_labels = summary_headers[1:] 
     for i, label in enumerate(header_labels):
         ws.cell(row=start_row, column=col_map_idx[i+1], value=label)
 
-    # 2. Write Data Rows (Day, Night, Total)
+    # 2. Write Data Rows
     rows_to_write = [
         ('กลางวัน', sum_day),
         ('กลางคืน', sum_night),
@@ -476,43 +464,41 @@ def export_excel():
     
     for idx, (label, data) in enumerate(rows_to_write):
         curr_r = start_row + 1 + idx
-        ws.row_dimensions[curr_r].height = 21 # Set Height
+        ws.row_dimensions[curr_r].height = 21
         
-        ws.merge_cells(start_row=curr_r, start_column=3, end_row=curr_r, end_column=5)
-        ws.cell(row=curr_r, column=3, value=label)
+        # เขียน Label ลงคอลัมน์ E (5)
+        ws.cell(row=curr_r, column=5, value=label)
         
-        # Values ordered: Count, T1, T2, T3, T4, T5, T6, T7, T8
         vals = [data['count'], data['t1'], data['t2'], data['t3'], data['t4'], data['t5'], data['t6'], data['t7'], data['t8']]
         
+        # เขียนข้อมูลลงคอลัมน์ F-N
         for i, val in enumerate(vals):
             ws.cell(row=curr_r, column=col_map_idx[i+1], value=val)
 
     # 3. Apply Styles to Summary
+    # Loop ตั้งแต่ Col E (5) ถึง N (14)
     for r in range(start_row, start_row + 4):
-        for c in range(3, 15): # Col C to N
+        for c in range(5, 15): 
             cell = ws.cell(row=r, column=c)
             cell.border = border_all
             cell.alignment = align_center
             cell.font = font_summary_body
             
-            # Header Style
             if r == start_row:
                 cell.fill = fill_sum_head
                 cell.font = font_summary_head
-            # Total Row Style
             elif r == start_row + 3:
                 cell.fill = fill_sum_total
                 cell.font = font_summary_head
 
-    # --- Column Width Adjustment ---
+    # Column Width Adjustment
     for column_cells in ws.columns:
         col_letter = get_column_letter(column_cells[0].column)
         col_header = column_cells[0].value
-        if col_header == 'เริ่มโหลด': ws.column_dimensions[col_letter].width = 22.00 # เพิ่มนิดหน่อยเผื่อข้อความยาว
+        if col_header == 'เริ่มโหลด': ws.column_dimensions[col_letter].width = 22.00 
         else:
             length = 0
             for cell in column_cells:
-                # คำนวณความกว้างโดยไม่นับส่วน Summary (เพราะ Merge Cell อาจทำให้เพี้ยน)
                 if cell.row < start_row: 
                     val = str(cell.value) if cell.value else ""
                     lines = val.split('\n')

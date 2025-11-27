@@ -27,25 +27,25 @@
     <div class="px-4 mt-2 space-y-3" id="driverList">
         {% for driver_name in drivers | sort %}
         
-        {% set job_count = driver_counts.get(driver_name, 0) %}
-        {% set today_data = driver_today_info.get(driver_name, {}) %}
-        {% set has_today_job = today_data.get('has_today', False) %}
-        {% set first_time = today_data.get('first_time', '') %}
+        {% set info = driver_info.get(driver_name, {}) %}
+        {% set pending = info.get('pending_count', 0) %}
+        {% set msg = info.get('urgent_msg', '') %}
+        {% set color = info.get('urgent_color', '') %}
+        {% set time = info.get('urgent_time', '') %}
 
         <a href="/driver/tasks?name={{ driver_name }}" 
            class="driver-card group relative bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md active:scale-[0.98] transition-all duration-200 cursor-pointer">
             
-            <div class="flex items-center gap-4 w-full"> <div class="relative flex-shrink-0">
+            <div class="flex items-center gap-4 w-full">
+                <div class="relative flex-shrink-0">
                     <div class="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-lg font-bold shadow-sm group-hover:scale-110 transition-transform">
                         {{ driver_name[0] }}
                     </div>
 
-                    {% if job_count > 0 or has_today_job %}
+                    {% if pending > 0 or (msg and 'ตอนนี้' in msg) %}
                     <span class="absolute -top-1 -right-1 flex h-5 w-5">
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-5 w-5 bg-red-500 text-white text-[10px] font-bold items-center justify-center border-2 border-white shadow-sm">
-                            !
-                        </span>
+                        <span class="relative inline-flex rounded-full h-5 w-5 bg-red-500 text-white text-[10px] font-bold items-center justify-center border-2 border-white shadow-sm">!</span>
                     </span>
                     {% endif %}
                 </div>
@@ -54,21 +54,22 @@
                     <span class="font-bold text-gray-800 text-base group-hover:text-indigo-700 transition-colors mb-0.5">{{ driver_name }}</span>
                     
                     <div class="flex flex-col gap-1 items-start">
-                        {% if has_today_job %}
-                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600 text-[11px] font-bold border border-emerald-100">
-                                <i class="fa-solid fa-calendar-check"></i> งานวันนี้ เริ่ม {{ first_time }} น.
+                        
+                        {% if msg %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold border shadow-sm {{ color }}">
+                                {{ msg }} {{ time }}
                             </span>
                         {% endif %}
 
-                        {% if job_count > 0 %}
-                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-red-50 text-red-500 text-[11px] font-bold border border-red-100">
-                                <i class="fa-solid fa-circle-exclamation animate-pulse"></i> งานค้าง {{ job_count }} เที่ยว
+                        {% if pending > 0 %}
+                            <span class="inline-flex items-center gap-1 text-[10px] text-gray-400 font-medium">
+                                <i class="fa-solid fa-box-open"></i> ค้างส่ง {{ pending }} เที่ยว
                             </span>
                         {% endif %}
 
-                        {% if not has_today_job and job_count == 0 %}
-                            <span class="text-[11px] text-gray-400 font-light flex items-center gap-1">
-                                <i class="fa-regular fa-circle-check"></i> ว่าง / ไม่มีงาน
+                        {% if not msg and pending == 0 %}
+                            <span class="text-[11px] text-gray-300 font-light flex items-center gap-1">
+                                <i class="fa-regular fa-circle-check"></i> ว่าง / ไม่มีงานเร็วๆนี้
                             </span>
                         {% endif %}
                     </div>
@@ -87,7 +88,7 @@
             <i class="fa-solid fa-user-slash text-2xl text-gray-500"></i>
         </div>
         <p class="text-gray-500 font-medium">ไม่พบรายชื่อนี้</p>
-        <p class="text-xs text-gray-400">กรุณาตรวจสอบตัวสะกดอีกครั้ง</p>
+        <p class="text-xs text-gray-400 mt-1">กรุณาตรวจสอบตัวสะกด</p>
     </div>
 </div>
 
@@ -102,7 +103,6 @@
         for (var i = 0; i < cards.length; i++) {
             var nameSpan = cards[i].querySelector("span.font-bold"); 
             var txtValue = nameSpan.textContent || nameSpan.innerText;
-            
             if (txtValue.toUpperCase().indexOf(filter) > -1) {
                 cards[i].style.display = "";
                 hasResult = true;
@@ -110,7 +110,6 @@
                 cards[i].style.display = "none";
             }
         }
-        
         document.getElementById("noResult").style.display = hasResult ? "none" : "flex";
     }
 </script>

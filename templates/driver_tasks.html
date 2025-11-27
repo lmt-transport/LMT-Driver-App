@@ -42,7 +42,7 @@
     {% endfor %}
     
     {% if waiting_trip_keys|length > 0 %}
-        <div class="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-6 flex items-center justify-between shadow-sm animate-pulse">
+        <div class="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-4 flex items-center justify-between shadow-sm animate-pulse">
             <div class="flex items-center gap-3">
                 <div class="bg-blue-100 text-blue-600 w-8 h-8 rounded-lg flex items-center justify-center">
                     <i class="fa-solid fa-layer-group"></i>
@@ -56,36 +56,24 @@
         </div>
     {% endif %}
 
-    <div class="flex flex-col gap-2 mb-4">
-        <div class="flex items-center gap-3">
-            <div class="flex-1 h-px bg-gray-200"></div>
-            <div class="flex items-center gap-2 bg-gray-50 px-3 py-1 rounded-full border border-gray-200 shadow-sm">
-                <i class="fa-regular fa-calendar-days text-gray-400"></i>
-                
-                <span class="text-sm font-bold text-gray-800">
-                    PO: {% if current_job.PO_Date | thai_date %}{{ current_job.PO_Date | thai_date }}{% else %}{{ current_job.PO_Date }}{% endif %}
-                </span>
-                
-                {% if current_job.PO_Date == today_date %}
-                    <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full ml-1">งานวันนี้</span>
-                {% elif current_job.PO_Date < today_date %}
-                    <span class="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded-full ml-1">งานตกค้าง</span>
-                {% else %}
-                    <span class="bg-orange-100 text-orange-700 text-[10px] font-bold px-2 py-0.5 rounded-full ml-1 flex items-center gap-1">
-                        <i class="fa-solid fa-bolt"></i> โหลดสินค้าวันนี้
-                    </span>
-                {% endif %}
+    <div class="mb-6 rounded-2xl border p-4 shadow-sm {{ current_job.ui_class.bg }}">
+        <div class="flex items-start gap-4">
+            <div class="bg-white p-3 rounded-2xl shadow-sm text-2xl {{ current_job.ui_class.text }} flex items-center justify-center w-14 h-14 border border-gray-100">
+                <i class="fa-solid {{ current_job.ui_class.icon }}"></i>
             </div>
-            <div class="flex-1 h-px bg-gray-200"></div>
+            
+            <div class="flex-1">
+                <h3 class="text-xl font-bold text-gray-800 leading-tight">
+                    {{ current_job.smart_title }}
+                </h3>
+                <div class="text-sm text-gray-600 font-medium mt-1">
+                    {{ current_job.smart_detail }}
+                </div>
+                <div class="text-xs text-gray-400 font-light mt-0.5">
+                    {{ current_job.po_label }}
+                </div>
+            </div>
         </div>
-
-        {% if current_job.PO_Date > today_date %}
-        <div class="text-center animate-pulse">
-            <span class="text-[11px] text-orange-600 bg-orange-50 px-3 py-1 rounded-lg border border-orange-100 inline-block">
-                <i class="fa-solid fa-circle-info"></i> เป็น PO ล่วงหน้า แต่ต้องเริ่มงานวันนี้ตามเวลาโหลดครับ
-            </span>
-        </div>
-        {% endif %}
     </div>
 
     <div class="bg-white rounded-2xl shadow-lg border border-indigo-100 overflow-hidden mb-8 relative ring-2 ring-indigo-50">

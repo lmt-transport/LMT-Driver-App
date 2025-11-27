@@ -1270,48 +1270,104 @@ def driver_select():
     drivers = sheet.worksheet('Drivers').col_values(1)[1:]
     all_jobs = sheet.worksheet('Jobs').get_all_records()
     
-    # วันที่ปัจจุบัน (สำหรับการแสดงผลงานวันนี้)
+    # เวลาปัจจุบัน
     now_thai = datetime.now() + timedelta(hours=7)
-    today_date = now_thai.strftime("%Y-%m-%d")
-
-    driver_pending_trips = {name: set() for name in drivers}
     
-    # สร้าง Dictionary เก็บข้อมูลงานวันนี้ของแต่ละคน
-    # Format: { 'Name': {'has_today': False, 'first_time': '99:99'} }
-    driver_today_info = {name: {'has_today': False, 'first_time': None} for name in drivers}
+    # Init ข้อมูลคนขับ
+    driver_info = {} 
+    for name in drivers:
+        driver_info[name] = {
+            'pending_count': 0,
+            'urgent_msg': '',    
+            'urgent_color': '',  
+            'urgent_time': '',   
+            'sort_weight': 999   # ค่าความสำคัญ (ยิ่งน้อยยิ่งด่วน)
+        }
 
     for job in all_jobs:
         d_name = job['Driver']
+        if d_name not in driver_info: continue
         
-        # 1. Logic เดิม: นับงานค้าง (Status != Done)
-        if job['Status'] != 'Done' and d_name in driver_pending_trips:
-            trip_key = (str(job['PO_Date']), str(job['Round']), str(job['Car_No']))
-            driver_pending_trips[d_name].add(trip_key)
+        # นับงานค้าง (Status != Done)
+        if job['Status'] != 'Done':
+            driver_info[d_name]['pending_count'] += 1
             
-        # 2. Logic ใหม่: เช็คงานวันนี้
-        if str(job['PO_Date']).strip() == today_date and d_name in driver_today_info:
-            driver_today_info[d_name]['has_today'] = True
-            
-            # เช็คเวลาเริ่มงานที่เร็วที่สุด
-            job_time = str(job['Round']).strip()
-            current_min = driver_today_info[d_name]['first_time']
-            
-            # ถ้ายังไม่มีเวลา หรือ เวลาปัจจุบันน้อยกว่าเวลาที่เก็บไว้ ให้ update
-            if not current_min:
-                driver_today_info[d_name]['first_time'] = job_time
-            else:
+            # --- START: MIDNIGHT CROSSOVER LOGIC (เหมือน Driver Tasks) ---
+            try:
+                # 1. เตรียมข้อมูล
+                po_dt = datetime.strptime(job['PO_Date'], "%Y-%m-%d")
+                round_str = str(job['Round']).strip()
+                
                 try:
-                    # แปลงเปรียบเทียบเวลา (แบบง่าย String compare ก็พอใช้ได้ถ้ารูปแบบเหมือนกัน แต่แปลง Date ชัวร์กว่า)
-                    if job_time < current_min:
-                         driver_today_info[d_name]['first_time'] = job_time
-                except: pass
+                    parts = round_str.split(':')
+                    h = int(parts[0])
+                    m = int(parts[1])
+                except: h, m = 0, 0
 
-    driver_counts = {name: len(trips) for name, trips in driver_pending_trips.items()}
-    
-    return render_template('driver_select.html', 
-                           drivers=drivers, 
-                           driver_counts=driver_counts,
-                           driver_today_info=driver_today_info) # ส่งตัวแปรใหม่ไป
+                # 2. คำนวณ "วันที่โหลดจริง"
+                # 06:00 - 23:59 -> PO - 1 วัน
+                # 00:00 - 05:59 -> PO วันเดิม
+                if 6 <= h <= 23:
+                    load_dt = po_dt - timedelta(days=1)
+                else:
+                    load_dt = po_dt
+                
+                # รวมเป็น DateTime ของงานจริง
+                job_dt = load_dt.replace(hour=h, minute=m, second=0)
+
+                # 3. คำนวณระยะห่าง (ชั่วโมง)
+                diff = job_dt - now_thai
+                hours_diff = diff.total_seconds() / 3600
+                
+                # 4. กำหนด Badge การแจ้งเตือนหน้าแรก
+                msg = ""
+                color = ""
+                weight = 999
+                
+                # กรณี A: ถึงเวลาแล้ว / ล่าช้า
+                if hours_diff <= 0:
+                    if hours_diff > -12: # ถ้าเพิ่งเลยมาไม่เกิน 12 ชม. ให้เตือนด่วน
+                        msg = "❗ เข้าโหลดงานตอนนี้"
+                        color = "bg-red-500 text-white border-red-600 animate-pulse shadow-red-200"
+                        weight = 1
+                
+                # กรณี B: งานในช่วง 16 ชม. (เช้านี้ / บ่ายนี้ / คืนนี้)
+                elif 0 < hours_diff <= 16:
+                    # ใช้ h (ชั่วโมงงาน) เพื่อบอกช่วงเวลา
+                    if 6 <= h <= 12:
+                         msg = "☀️ โหลดเช้านี้"
+                         color = "bg-yellow-100 text-yellow-700 border-yellow-200"
+                    elif 13 <= h <= 18:
+                         msg = "⛅ โหลดบ่ายนี้"
+                         color = "bg-orange-100 text-orange-700 border-orange-200"
+                    else:
+                         msg = "🌙 โหลดคืนนี้"
+                         color = "bg-indigo-100 text-indigo-700 border-indigo-200"
+                    weight = 2
+                
+                # กรณี C: งานวันพรุ่งนี้ (หรือคืนพรุ่งนี้) 16-40 ชม.
+                elif 16 < hours_diff <= 40:
+                    period_next = "วันพรุ่งนี้"
+                    if h >= 19 or h <= 5: period_next = "คืนพรุ่งนี้"
+                    
+                    # แสดงเฉพาะถ้ายังไม่มีงานที่ด่วนกว่า
+                    if driver_info[d_name]['sort_weight'] > 3:
+                        msg = f"⏩ เตรียมโหลด{period_next}"
+                        color = "bg-gray-100 text-gray-500 border-gray-200"
+                        weight = 3
+
+                # Update ข้อมูลถ้างานนี้ด่วนกว่า (Weight น้อยกว่า) งานเก่าที่เคยเช็ค
+                if weight < driver_info[d_name]['sort_weight']:
+                    driver_info[d_name]['urgent_msg'] = msg
+                    driver_info[d_name]['urgent_color'] = color
+                    driver_info[d_name]['urgent_time'] = f"{h:02}:{m:02} น."
+                    driver_info[d_name]['sort_weight'] = weight
+
+            except Exception as e:
+                pass
+            # --- END LOGIC ---
+
+    return render_template('driver_select.html', drivers=drivers, driver_info=driver_info)
 
 @app.route('/driver/tasks', methods=['GET'])
 def driver_tasks():
@@ -1327,24 +1383,134 @@ def driver_tasks():
             job['row_id'] = i + 2
             my_jobs.append(job)
             
-    # --- แก้ไข Logic การเรียงลำดับตรงนี้ ---
+    # Sort
     def sort_key_func(job):
         po_date = str(job['PO_Date'])
-        car_no_str = str(job['Car_No']).strip()
-        round_val = str(job['Round'])
-        
-        try: car_no_int = int(car_no_str)
-        except ValueError: car_no_int = 99999 
-        
-        return (po_date, car_no_int, round_val) 
-            
+        try: car_no = int(str(job['Car_No']).strip())
+        except: car_no = 99999
+        return (po_date, car_no)
     my_jobs = sorted(my_jobs, key=sort_key_func)
-    # -------------------------------------
     
+    # เวลาปัจจุบัน
     now_thai = datetime.now() + timedelta(hours=7)
-    today_date = now_thai.strftime("%Y-%m-%d")
-    
-    return render_template('driver_tasks.html', name=driver_name, jobs=my_jobs, today_date=today_date)
+    today_date_str = now_thai.strftime("%Y-%m-%d")
+
+    # --- MIDNIGHT CROSSOVER LOGIC ---
+    for job in my_jobs:
+        try:
+            # 1. เตรียมข้อมูล
+            po_dt = datetime.strptime(job['PO_Date'], "%Y-%m-%d")
+            round_str = str(job['Round']).strip()
+            
+            # แยกชั่วโมง/นาที
+            try:
+                time_parts = round_str.split(':')
+                h = int(time_parts[0])
+                m = int(time_parts[1])
+            except:
+                h, m = 0, 0 # Fallback
+
+            # 2. คำนวณ "วันที่โหลดจริง" (Actual Load Date)
+            # กฎ: ถ้าเวลา 06:00 - 23:59 ให้ถือเป็นวันก่อนหน้า (PO-1)
+            #     ถ้าเวลา 00:00 - 05:59 ให้ถือเป็นวันเดียวกับ PO (PO)
+            if 6 <= h <= 23:
+                load_dt = po_dt - timedelta(days=1)
+            else:
+                load_dt = po_dt
+            
+            # รวมวันที่จริง + เวลาจริง เป็น DateTime เดียว
+            job_dt = load_dt.replace(hour=h, minute=m, second=0)
+
+            # 3. คำนวณระยะห่าง (ชั่วโมง) จากเวลาปัจจุบัน
+            diff = job_dt - now_thai
+            hours_diff = diff.total_seconds() / 3600
+            
+            # เตรียมแสดงผลวันที่ไทย
+            th_year = job_dt.year + 543
+            real_date_str = f"{job_dt.day}/{job_dt.month}/{str(th_year)[2:]}" # เช่น 28/11/68
+
+            # 4. สร้าง Smart Title/Detail ตามระยะห่าง
+            if hours_diff <= 0:
+                # ถึงเวลาแล้ว / เลยเวลามาแล้ว
+                # (แต่ถ้าผ่านไปนานเกิน 12 ชม. อาจเป็นงานค้างเก่ามาก ไม่ต้องเตือนแดง)
+                if hours_diff > -12:
+                    job['smart_title'] = f"❗ เข้าโหลดงานตอนนี้"
+                    job['ui_class'] = {
+                        'bg': 'bg-red-50 border-red-100 ring-2 ring-red-200 animate-pulse', 
+                        'text': 'text-red-600', 
+                        'icon': 'fa-truck-ramp-box'
+                    }
+                else:
+                    job['smart_title'] = f"🔥 งานค้างส่ง"
+                    job['ui_class'] = {'bg': 'bg-red-50 border-red-100', 'text': 'text-red-500', 'icon': 'fa-triangle-exclamation'}
+                
+                job['smart_detail'] = f"กำหนด: {round_str} น. ({real_date_str})"
+
+            elif 0 < hours_diff <= 16: 
+                # อยู่ในช่วง 16 ชม. ข้างหน้า (คืนนี้ / เช้านี้ / บ่ายนี้)
+                # ใช้ h (ชั่วโมงของงาน) เพื่อระบุช่วงเวลาตามโจทย์
+                time_period = ""
+                icon = ""
+                theme = ""
+                
+                if 6 <= h <= 12:
+                    time_period = "เช้านี้"
+                    icon = "fa-sun"
+                    theme = "yellow"
+                elif 13 <= h <= 18:
+                    time_period = "บ่ายนี้"
+                    icon = "fa-cloud-sun"
+                    theme = "orange"
+                else:
+                    # 19:00 - 05:59
+                    time_period = "คืนนี้"
+                    icon = "fa-moon"
+                    theme = "indigo"
+
+                job['smart_title'] = f"โหลดสินค้า{time_period}"
+                job['smart_detail'] = f"เวลา {round_str} น. ของวันที่ {real_date_str}"
+                job['ui_class'] = {
+                    'bg': f'bg-{theme}-50 border-{theme}-100 ring-1 ring-{theme}-50', 
+                    'text': f'text-{theme}-600', 
+                    'icon': icon
+                }
+
+            elif 16 < hours_diff <= 40:
+                # งานวันพรุ่งนี้ (หรือคืนพรุ่งนี้)
+                # ถ้าห่างไป 20 ชม. แต่เป็นงาน 00:00 -> "โหลดสินค้าคืนพรุ่งนี้"
+                period_next = "วันพรุ่งนี้"
+                if h >= 19 or h <= 5: period_next = "คืนพรุ่งนี้"
+                
+                job['smart_title'] = f"⏩ เตรียมโหลด{period_next}"
+                job['smart_detail'] = f"เวลา {round_str} น. ของวันที่ {real_date_str}"
+                job['ui_class'] = {
+                    'bg': 'bg-blue-50 border-blue-100', 
+                    'text': 'text-blue-600', 
+                    'icon': 'fa-calendar-day'
+                }
+            
+            else:
+                # งานล่วงหน้านานๆ
+                job['smart_title'] = f"📅 งานล่วงหน้า"
+                job['smart_detail'] = f"วันที่ {real_date_str} เวลา {round_str} น."
+                job['ui_class'] = {
+                    'bg': 'bg-gray-50 border-gray-100', 
+                    'text': 'text-gray-500', 
+                    'icon': 'fa-calendar-days'
+                }
+            
+            # เพิ่ม Label PO ให้ชัดเจน
+            po_th_year = str(po_dt.year + 543)[2:]
+            job['po_label'] = f"(เอกสาร PO วันที่ {po_dt.day}/{po_dt.month}/{po_th_year})"
+
+        except Exception as e:
+            print(f"Error processing job: {e}")
+            job['smart_title'] = f"เวลา {job['Round']}"
+            job['smart_detail'] = job['PO_Date']
+            job['ui_class'] = {'bg': 'bg-gray-50', 'text': 'text-gray-500', 'icon': 'fa-clock'}
+            job['po_label'] = ""
+
+    return render_template('driver_tasks.html', name=driver_name, jobs=my_jobs, today_date=today_date_str)
 
 @app.route('/update_status', methods=['POST'])
 def update_status():

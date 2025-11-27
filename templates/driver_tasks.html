@@ -31,12 +31,17 @@
 {% else %}
 
     {% set current_job = jobs[0] %}
-    {% set active_trip_key = current_job.PO_Date ~ '-' ~ current_job.Round ~ '-' ~ current_job.Car_No %}
+    
+    {% set current_load_date = current_job.Load_Date if current_job.Load_Date else current_job.PO_Date %}
+    {% set active_trip_key = current_load_date ~ '-' ~ current_job.Round ~ '-' ~ current_job.Car_No %}
     
     {% set waiting_trip_keys = [] %}
     {% for j in jobs %}
-        {% set k = j.PO_Date ~ '|' ~ j.Round ~ '|' ~ j.Car_No %}
-        {% if (j.PO_Date ~ '-' ~ j.Round ~ '-' ~ j.Car_No) != active_trip_key and k not in waiting_trip_keys %}
+        {% set j_load_date = j.Load_Date if j.Load_Date else j.PO_Date %}
+        {% set k = j_load_date ~ '|' ~ j.Round ~ '|' ~ j.Car_No %}
+        
+        {% set this_key_check = j_load_date ~ '-' ~ j.Round ~ '-' ~ j.Car_No %}
+        {% if this_key_check != active_trip_key and k not in waiting_trip_keys %}
              {% set _ = waiting_trip_keys.append(k) %}
         {% endif %}
     {% endfor %}
@@ -57,20 +62,20 @@
     {% endif %}
 
     <div class="mb-6 rounded-2xl border p-4 shadow-sm {{ current_job.ui_class.bg }}">
-        <div class="flex items-start gap-4">
-            <div class="bg-white p-3 rounded-2xl shadow-sm text-2xl {{ current_job.ui_class.text }} flex items-center justify-center w-14 h-14 border border-gray-100">
+        <div class="flex items-center gap-4">
+            <div class="bg-white p-3 rounded-2xl shadow-sm text-2xl {{ current_job.ui_class.text }} flex items-center justify-center w-14 h-14 border border-gray-100 flex-shrink-0">
                 <i class="fa-solid {{ current_job.ui_class.icon }}"></i>
             </div>
             
-            <div class="flex-1">
-                <h3 class="text-xl font-bold text-gray-800 leading-tight">
+            <div class="flex-1 min-w-0">
+                <h3 class="text-lg font-bold text-gray-800 leading-tight truncate">
                     {{ current_job.smart_title }}
                 </h3>
-                <div class="text-sm text-gray-600 font-medium mt-1">
+                <div class="text-sm text-gray-600 font-medium mt-1 truncate">
                     {{ current_job.smart_detail }}
                 </div>
-                <div class="text-xs text-gray-400 font-light mt-0.5">
-                    {{ current_job.po_label }}
+                <div class="text-[11px] text-gray-400 font-light mt-0.5 truncate">
+                    <i class="fa-solid fa-file-invoice"></i> {{ current_job.po_label }}
                 </div>
             </div>
         </div>
@@ -152,7 +157,8 @@
             <div class="space-y-3">
                 {% set active_rows = [] %}
                 {% for job in jobs %}
-                    {% if job.PO_Date == current_job.PO_Date and job.Round == current_job.Round and job.Car_No == current_job.Car_No %}
+                    {% set job_load_date = job.Load_Date if job.Load_Date else job.PO_Date %}
+                    {% if job_load_date == current_load_date and job.Round == current_job.Round and job.Car_No == current_job.Car_No %}
                         {% set _ = active_rows.append(job) %}
                     {% endif %}
                 {% endfor %}

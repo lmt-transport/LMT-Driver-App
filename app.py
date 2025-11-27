@@ -69,10 +69,11 @@ def manager_dashboard():
     if 'user' not in session: return redirect(url_for('manager_login'))
     
     sheet = get_db()
+    # ดึงข้อมูลทั้งหมด (Header แถวแรกต้องมี Load_Date แล้ว)
     raw_jobs = sheet.worksheet('Jobs').get_all_records()
     drivers = sheet.worksheet('Drivers').get_all_records()
 
-    # 1. Determine Date Filter
+    # 1. Date Filter
     date_filter = request.args.get('date_filter')
     now_thai = datetime.now() + timedelta(hours=7)
     today_date = now_thai.strftime("%Y-%m-%d")
@@ -80,10 +81,10 @@ def manager_dashboard():
     if not date_filter:
         date_filter = today_date
 
-    # 2. Filter Jobs by Date
+    # 2. Filter Jobs
     filtered_jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
 
-    # 3. Calculate Stats
+    # 3. Stats
     jobs_by_trip_key = {}
     total_done_jobs = 0
     total_branches = len(filtered_jobs)
@@ -101,8 +102,7 @@ def manager_dashboard():
 
     completed_trips = 0
     for trip_key, job_list in jobs_by_trip_key.items():
-        is_trip_done = all(job['Status'] == 'Done' for job in job_list)
-        if is_trip_done:
+        if all(job['Status'] == 'Done' for job in job_list):
             completed_trips += 1
             last_end_time = max([j['T8_EndJob'] for j in job_list if j['T8_EndJob']], default="")
             trip_last_end_time[trip_key] = last_end_time
@@ -123,11 +123,10 @@ def manager_dashboard():
 
     filtered_jobs = sorted(filtered_jobs, key=sort_key_func)
     
-    # --- [UPDATED] Prepare Data for LINE Share (Fix Day/Night Logic) ---
+    # --- Prepare Data for LINE Share (ใช้ Load_Date โดยตรง) ---
     line_data_day = []
     line_data_night = []
     
-    # Group jobs Logic
     grouped_jobs = []
     if filtered_jobs:
         current_group = []
@@ -144,40 +143,22 @@ def manager_dashboard():
     for group in grouped_jobs:
         first = group[0]
         round_str = str(first['Round']).strip()
+        load_date_raw = str(first.get('Load_Date', first['PO_Date'])).strip() # ใช้ Load_Date
         
-        # --- Logic ใหม่ที่แม่นยำขึ้น ---
-        is_day = True # Default
-        show_date_str = ""
-        
+        # จัดรูปแบบวันที่โหลดให้สวยงาม (DD/MM/YY)
+        show_date_str = load_date_raw
         try:
-            po_dt = datetime.strptime(first['PO_Date'], "%Y-%m-%d")
-            
-            # พยายามแปลงเวลาไม่ว่าจะเป็น "9:00", "09:00", "0:30"
-            try:
-                round_dt = datetime.strptime(round_str, "%H:%M")
-                hour = round_dt.hour
-                
-                # Check Shift: กลางวัน = 06:00 - 18:59
-                # กลางคืน = 19:00 - 05:59
-                if hour < 6 or hour >= 19:
-                    is_day = False
-                
-                # Check Date: ถ้า 00:00-05:59 ให้ถือเป็นวันที่โหลดจริง (PO+1)
-                load_date = po_dt
-                if hour < 6:
-                    load_date = po_dt + timedelta(days=1)
-                
-                # Format Date
-                thai_year = load_date.year + 543
-                show_date_str = load_date.strftime(f"%d/%m/{str(thai_year)[2:]}")
-                
-            except ValueError:
-                # กรณีเวลาผิดรูปแบบ ให้ใช้วันที่ PO เดิม
-                thai_year = po_dt.year + 543
-                show_date_str = po_dt.strftime(f"%d/%m/{str(thai_year)[2:]}")
+            ld_obj = datetime.strptime(load_date_raw, "%Y-%m-%d")
+            thai_year = ld_obj.year + 543
+            show_date_str = ld_obj.strftime(f"%d/%m/{str(thai_year)[2:]}")
+        except: pass
 
-        except:
-            show_date_str = first['PO_Date']
+        # แยกกะ เช้า/ค่ำ
+        is_day = True
+        try:
+            h = int(round_str.split(':')[0])
+            if h < 6 or h >= 19: is_day = False
+        except: pass
 
         trip_data = {
             'round': round_str,
@@ -188,52 +169,41 @@ def manager_dashboard():
             'load_date': show_date_str
         }
         
-        if is_day:
-            line_data_day.append(trip_data)
-        else:
-            line_data_night.append(trip_data)
+        if is_day: line_data_day.append(trip_data)
+        else: line_data_night.append(trip_data)
 
-    # Sort Logic
     line_data_day.sort(key=lambda x: x['round'])
-    
-    # Sort Night: 19:00 -> 23:59 -> 00:00 -> 05:00
     def night_sort(item):
         try:
             h, m = map(int, item['round'].split(':'))
             return (h + 24 if h < 6 else h) * 60 + m
         except: return 99999
-        
     line_data_night.sort(key=night_sort)
     # -----------------------------------------------------------------
 
-    # Pre-calculate Late Status
+    # Pre-calculate Late Status (Time compare only, date is handled by logic)
     for job in filtered_jobs:
         job['is_start_late'] = False
         t_plan_str = str(job.get('Round', '')).strip()
         t_act_str = str(job.get('T2_StartLoad', '')).strip()
-        
         if t_plan_str and t_act_str:
             try:
                 fmt_plan = "%H:%M" if len(t_plan_str) <= 5 else "%H:%M:%S"
                 fmt_act = "%H:%M" if len(t_act_str) <= 5 else "%H:%M:%S"
                 t_plan = datetime.strptime(t_plan_str, fmt_plan)
                 t_act = datetime.strptime(t_act_str, fmt_act)
-                
-                if (t_plan - t_act).total_seconds() > 12 * 3600:
-                    t_act = t_act + timedelta(days=1)
-                
-                if t_act > t_plan:
-                    job['is_start_late'] = True
+                # Simple logic: ถ้าเวลาจริง > เวลาแผน เกิน 12 ชม ถือว่าข้ามวัน (หรือใช้ Load_Date เทียบก็ได้)
+                if (t_plan - t_act).total_seconds() > 12 * 3600: t_act += timedelta(days=1)
+                if t_act > t_plan: job['is_start_late'] = True
             except: pass
 
-    # 5. Pagination
+    # Pagination
     try:
         current_date_obj = datetime.strptime(date_filter, "%Y-%m-%d")
         prev_date = (current_date_obj - timedelta(days=1)).strftime("%Y-%m-%d")
         next_date = (current_date_obj + timedelta(days=1)).strftime("%Y-%m-%d")
     except ValueError:
-        prev_date = date_filter
-        next_date = date_filter
+        prev_date, next_date = date_filter, date_filter
     
     all_dates = sorted(list(set([str(j['PO_Date']).strip() for j in raw_jobs])), reverse=True)
 
@@ -262,7 +232,9 @@ def create_job():
     sheet = get_db()
     ws = sheet.worksheet('Jobs')
     
+    # รับค่า Load Date เพิ่มเข้ามา
     po_date = request.form['po_date']
+    load_date = request.form['load_date'] # NEW
     round_time = request.form['round_time']
     car_no = request.form['car_no']
     driver_name = request.form['driver_name']
@@ -279,7 +251,8 @@ def create_job():
     new_rows = []
     for branch in branches:
         if branch.strip(): 
-            row = [po_date, round_time, car_no, driver_name, plate, branch, "", "", "", "", "", "", "", "", "New", "", "", "", "", "", "", "", ""]
+            # Insert Load_Date at index 1 (Column B)
+            row = [po_date, load_date, round_time, car_no, driver_name, plate, branch, "", "", "", "", "", "", "", "", "New", "", "", "", "", "", "", "", "", ""]
             new_rows.append(row)
     
     if new_rows: ws.append_rows(new_rows)
@@ -298,7 +271,8 @@ def delete_job():
         rows_to_delete = []
         for i, row in enumerate(all_values):
             if i > 0:
-                if (row[0] == po_date and str(row[1]) == str(round_time) and str(row[2]) == str(car_no)):
+                # ปรับ Index: 0=PO, 1=Load, 2=Round, 3=Car
+                if (row[0] == po_date and str(row[2]) == str(round_time) and str(row[3]) == str(car_no)):
                     rows_to_delete.append(i + 1)
         for row_idx in sorted(rows_to_delete, reverse=True):
             ws.delete_rows(row_idx)
@@ -1270,103 +1244,75 @@ def driver_select():
     drivers = sheet.worksheet('Drivers').col_values(1)[1:]
     all_jobs = sheet.worksheet('Jobs').get_all_records()
     
-    # เวลาปัจจุบัน
     now_thai = datetime.now() + timedelta(hours=7)
     
-    # Init ข้อมูลคนขับ
     driver_info = {} 
     for name in drivers:
         driver_info[name] = {
-            'pending_set': set(), # [NEW] ใช้ Set เพื่อเก็บ Key ของเที่ยววิ่ง (ไม่ซ้ำ)
-            'pending_count': 0,   # ตัวเลขที่จะแสดงผล
-            'urgent_msg': '',    
-            'urgent_color': '',  
-            'urgent_time': '',   
-            'sort_weight': 999
+            'pending_set': set(), 
+            'pending_count': 0, 
+            'urgent_msg': '', 'urgent_color': '', 'urgent_time': '', 'sort_weight': 999
         }
 
     for job in all_jobs:
         d_name = job['Driver']
         if d_name not in driver_info: continue
         
-        # นับงานค้าง (Status != Done)
         if job['Status'] != 'Done':
-            # [NEW] สร้าง Key ของเที่ยววิ่ง (PO + เวลา + ทะเบียน)
-            # ถ้าเป็นเที่ยวเดียวกัน key จะเหมือนกัน ระบบ Set จะนับแค่ 1
+            # นับงานค้าง (PO+Round+Car)
             trip_key = f"{job['PO_Date']}_{job['Round']}_{job['Car_No']}"
             driver_info[d_name]['pending_set'].add(trip_key)
             
-            # --- LOGIC การแจ้งเตือน (Midnight Crossover) คงเดิม ---
+            # --- NEW LOGIC: ใช้ Load_Date โดยตรง ---
             try:
-                # 1. เตรียมข้อมูล
-                po_dt = datetime.strptime(job['PO_Date'], "%Y-%m-%d")
+                load_date_str = job.get('Load_Date', job['PO_Date']) # fallback PO
                 round_str = str(job['Round']).strip()
                 
+                # สร้าง DateTime เต็มรูปแบบ (YYYY-MM-DD HH:MM)
+                job_dt_str = f"{load_date_str} {round_str}"
                 try:
-                    parts = round_str.split(':')
-                    h = int(parts[0])
-                    m = int(parts[1])
-                except: h, m = 0, 0
+                    job_dt = datetime.strptime(job_dt_str, "%Y-%m-%d %H:%M")
+                except ValueError: # Fallback ถ้า format ผิด
+                    job_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
 
-                # 2. คำนวณ "วันที่โหลดจริง"
-                if 6 <= h <= 23:
-                    load_dt = po_dt - timedelta(days=1)
-                else:
-                    load_dt = po_dt
-                
-                # รวมเป็น DateTime ของงานจริง
-                job_dt = load_dt.replace(hour=h, minute=m, second=0)
-
-                # 3. คำนวณระยะห่าง (ชั่วโมง)
+                # คำนวณ Countdown
                 diff = job_dt - now_thai
                 hours_diff = diff.total_seconds() / 3600
+                h = job_dt.hour
+                m = job_dt.minute
                 
-                # 4. กำหนด Badge
                 msg = ""
                 color = ""
                 weight = 999
                 
-                # A: ถึงเวลาแล้ว / ล่าช้า
+                # A: ถึงเวลา/เลยเวลา
                 if hours_diff <= 0:
                     if hours_diff > -12: 
                         msg = "❗ โหลดตอนนี้"
                         color = "bg-red-500 text-white border-red-600 animate-pulse shadow-red-200"
                         weight = 1
                 
-                # B: งานในช่วง 16 ชม.
+                # B: ภายใน 16 ชม.
                 elif 0 < hours_diff <= 16:
-                    if 6 <= h <= 12:
-                         msg = "☀️ โหลดเช้านี้"
-                         color = "bg-yellow-100 text-yellow-700 border-yellow-200"
-                    elif 13 <= h <= 18:
-                         msg = "⛅ โหลดบ่ายนี้"
-                         color = "bg-orange-100 text-orange-700 border-orange-200"
-                    else:
-                         msg = "🌙 โหลดคืนนี้"
-                         color = "bg-indigo-100 text-indigo-700 border-indigo-200"
+                    if 6 <= h <= 12:   msg, color = "☀️ โหลดเช้านี้", "bg-yellow-100 text-yellow-700 border-yellow-200"
+                    elif 13 <= h <= 18: msg, color = "⛅ โหลดบ่ายนี้", "bg-orange-100 text-orange-700 border-orange-200"
+                    else:               msg, color = "🌙 โหลดคืนนี้", "bg-indigo-100 text-indigo-700 border-indigo-200"
                     weight = 2
                 
-                # C: งานวันพรุ่งนี้
+                # C: พรุ่งนี้
                 elif 16 < hours_diff <= 40:
-                    period_next = "วันพรุ่งนี้"
-                    if h >= 19 or h <= 5: period_next = "คืนพรุ่งนี้"
-                    
+                    period = "คืนพรุ่งนี้" if (h >= 19 or h <= 5) else "วันพรุ่งนี้"
                     if driver_info[d_name]['sort_weight'] > 3:
-                        msg = f"⏩ เตรียมโหลด{period_next}"
-                        color = "bg-gray-100 text-gray-500 border-gray-200"
-                        weight = 3
+                        msg, color, weight = f"⏩ เตรียมโหลด{period}", "bg-gray-100 text-gray-500 border-gray-200", 3
 
-                # Update ถ้าเจองานที่ด่วนกว่า
                 if weight < driver_info[d_name]['sort_weight']:
                     driver_info[d_name]['urgent_msg'] = msg
                     driver_info[d_name]['urgent_color'] = color
                     driver_info[d_name]['urgent_time'] = f"{h:02}:{m:02} น."
                     driver_info[d_name]['sort_weight'] = weight
 
-            except Exception as e:
-                pass
+            except Exception as e: pass
     
-    # [NEW] คำนวณจำนวนงานค้างจากขนาดของ Set
     for name in drivers:
         driver_info[name]['pending_count'] = len(driver_info[name]['pending_set'])
 
@@ -1386,128 +1332,63 @@ def driver_tasks():
             job['row_id'] = i + 2
             my_jobs.append(job)
             
-    # Sort
     def sort_key_func(job):
-        po_date = str(job['PO_Date'])
-        try: car_no = int(str(job['Car_No']).strip())
-        except: car_no = 99999
-        return (po_date, car_no)
+        return (str(job['PO_Date']), str(job.get('Load_Date', '')), str(job['Round']))
     my_jobs = sorted(my_jobs, key=sort_key_func)
     
-    # เวลาปัจจุบัน
     now_thai = datetime.now() + timedelta(hours=7)
     today_date_str = now_thai.strftime("%Y-%m-%d")
 
-    # --- MIDNIGHT CROSSOVER LOGIC ---
+    # --- NEW LOGIC (Driver Tasks) ---
     for job in my_jobs:
         try:
-            # 1. เตรียมข้อมูล
-            po_dt = datetime.strptime(job['PO_Date'], "%Y-%m-%d")
+            load_date_str = job.get('Load_Date', job['PO_Date'])
             round_str = str(job['Round']).strip()
+            job_dt_str = f"{load_date_str} {round_str}"
             
-            # แยกชั่วโมง/นาที
-            try:
-                time_parts = round_str.split(':')
-                h = int(time_parts[0])
-                m = int(time_parts[1])
-            except:
-                h, m = 0, 0 # Fallback
+            try: job_dt = datetime.strptime(job_dt_str, "%Y-%m-%d %H:%M")
+            except: job_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
 
-            # 2. คำนวณ "วันที่โหลดจริง" (Actual Load Date)
-            # กฎ: ถ้าเวลา 06:00 - 23:59 ให้ถือเป็นวันก่อนหน้า (PO-1)
-            #     ถ้าเวลา 00:00 - 05:59 ให้ถือเป็นวันเดียวกับ PO (PO)
-            if 6 <= h <= 23:
-                load_dt = po_dt - timedelta(days=1)
-            else:
-                load_dt = po_dt
-            
-            # รวมวันที่จริง + เวลาจริง เป็น DateTime เดียว
-            job_dt = load_dt.replace(hour=h, minute=m, second=0)
-
-            # 3. คำนวณระยะห่าง (ชั่วโมง) จากเวลาปัจจุบัน
             diff = job_dt - now_thai
             hours_diff = diff.total_seconds() / 3600
             
-            # เตรียมแสดงผลวันที่ไทย
             th_year = job_dt.year + 543
-            real_date_str = f"{job_dt.day}/{job_dt.month}/{str(th_year)[2:]}" # เช่น 28/11/68
+            real_date_str = f"{job_dt.day}/{job_dt.month}/{str(th_year)[2:]}"
+            h = job_dt.hour
 
-            # 4. สร้าง Smart Title/Detail ตามระยะห่าง
             if hours_diff <= 0:
-                # ถึงเวลาแล้ว / เลยเวลามาแล้ว
-                # (แต่ถ้าผ่านไปนานเกิน 12 ชม. อาจเป็นงานค้างเก่ามาก ไม่ต้องเตือนแดง)
                 if hours_diff > -12:
                     job['smart_title'] = f"❗ เข้าโหลดงานตอนนี้"
-                    job['ui_class'] = {
-                        'bg': 'bg-red-50 border-red-100 ring-2 ring-red-200 animate-pulse', 
-                        'text': 'text-red-600', 
-                        'icon': 'fa-truck-ramp-box'
-                    }
+                    job['ui_class'] = {'bg': 'bg-red-50 border-red-100 ring-2 ring-red-200 animate-pulse', 'text': 'text-red-600', 'icon': 'fa-truck-ramp-box'}
                 else:
                     job['smart_title'] = f"🔥 งานค้างส่ง"
                     job['ui_class'] = {'bg': 'bg-red-50 border-red-100', 'text': 'text-red-500', 'icon': 'fa-triangle-exclamation'}
-                
                 job['smart_detail'] = f"กำหนด: {round_str} น. ({real_date_str})"
 
-            elif 0 < hours_diff <= 16: 
-                # อยู่ในช่วง 16 ชม. ข้างหน้า (คืนนี้ / เช้านี้ / บ่ายนี้)
-                # ใช้ h (ชั่วโมงของงาน) เพื่อระบุช่วงเวลาตามโจทย์
-                time_period = ""
-                icon = ""
-                theme = ""
-                
-                if 6 <= h <= 12:
-                    time_period = "เช้านี้"
-                    icon = "fa-sun"
-                    theme = "yellow"
-                elif 13 <= h <= 18:
-                    time_period = "บ่ายนี้"
-                    icon = "fa-cloud-sun"
-                    theme = "orange"
-                else:
-                    # 19:00 - 05:59
-                    time_period = "คืนนี้"
-                    icon = "fa-moon"
-                    theme = "indigo"
+            elif 0 < hours_diff <= 16:
+                if 6 <= h <= 12:   p, i, t = "เช้านี้", "fa-sun", "yellow"
+                elif 13 <= h <= 18: p, i, t = "บ่ายนี้", "fa-cloud-sun", "orange"
+                else:               p, i, t = "คืนนี้", "fa-moon", "indigo"
 
-                job['smart_title'] = f"โหลดสินค้า{time_period}"
+                job['smart_title'] = f"โหลดสินค้า{p}"
                 job['smart_detail'] = f"เวลา {round_str} น. ของวันที่ {real_date_str}"
-                job['ui_class'] = {
-                    'bg': f'bg-{theme}-50 border-{theme}-100 ring-1 ring-{theme}-50', 
-                    'text': f'text-{theme}-600', 
-                    'icon': icon
-                }
+                job['ui_class'] = {'bg': f'bg-{t}-50 border-{t}-100 ring-1 ring-{t}-50', 'text': f'text-{t}-600', 'icon': i}
 
             elif 16 < hours_diff <= 40:
-                # งานวันพรุ่งนี้ (หรือคืนพรุ่งนี้)
-                # ถ้าห่างไป 20 ชม. แต่เป็นงาน 00:00 -> "โหลดสินค้าคืนพรุ่งนี้"
-                period_next = "วันพรุ่งนี้"
-                if h >= 19 or h <= 5: period_next = "คืนพรุ่งนี้"
-                
-                job['smart_title'] = f"⏩ เตรียมโหลด{period_next}"
+                period = "คืนพรุ่งนี้" if (h >= 19 or h <= 5) else "วันพรุ่งนี้"
+                job['smart_title'] = f"⏩ เตรียมโหลด{period}"
                 job['smart_detail'] = f"เวลา {round_str} น. ของวันที่ {real_date_str}"
-                job['ui_class'] = {
-                    'bg': 'bg-blue-50 border-blue-100', 
-                    'text': 'text-blue-600', 
-                    'icon': 'fa-calendar-day'
-                }
-            
+                job['ui_class'] = {'bg': 'bg-blue-50 border-blue-100', 'text': 'text-blue-600', 'icon': 'fa-calendar-day'}
             else:
-                # งานล่วงหน้านานๆ
                 job['smart_title'] = f"📅 งานล่วงหน้า"
                 job['smart_detail'] = f"วันที่ {real_date_str} เวลา {round_str} น."
-                job['ui_class'] = {
-                    'bg': 'bg-gray-50 border-gray-100', 
-                    'text': 'text-gray-500', 
-                    'icon': 'fa-calendar-days'
-                }
+                job['ui_class'] = {'bg': 'bg-gray-50 border-gray-100', 'text': 'text-gray-500', 'icon': 'fa-calendar-days'}
             
-            # เพิ่ม Label PO ให้ชัดเจน
-            po_th_year = str(po_dt.year + 543)[2:]
-            job['po_label'] = f"(เอกสาร PO วันที่ {po_dt.day}/{po_dt.month}/{po_th_year})"
+            po_d = datetime.strptime(job['PO_Date'], "%Y-%m-%d")
+            po_th = f"{po_d.day}/{po_d.month}/{str(po_d.year+543)[2:]}"
+            job['po_label'] = f"(เอกสาร PO วันที่ {po_th})"
 
         except Exception as e:
-            print(f"Error processing job: {e}")
             job['smart_title'] = f"เวลา {job['Round']}"
             job['smart_detail'] = job['PO_Date']
             job['ui_class'] = {'bg': 'bg-gray-50', 'text': 'text-gray-500', 'icon': 'fa-clock'}
@@ -1527,22 +1408,30 @@ def update_status():
     
     sheet = get_db()
     ws = sheet.worksheet('Jobs')
-    time_col_map = {'1': 7, '2': 8, '3': 9, '4': 10, '5': 11, '6': 12, '7': 13, '8': 14}
-    loc_col_map = {'1': 16, '2': 17, '3': 18, '4': 19, '5': 20, '6': 21, '7': 22, '8': 23}
+    
+    # [IMPORTANT] Updated Column Indices (+1 from old due to Load_Date)
+    # T1=8(H), T2=9(I), T3=10(J), T4=11(K), T5=12(L), T6=13(M), T7=14(N), T8=15(O)
+    time_col_map = {'1': 8, '2': 9, '3': 10, '4': 11, '5': 12, '6': 13, '7': 14, '8': 15}
+    # L1=17(Q)...
+    loc_col_map = {'1': 17, '2': 18, '3': 19, '4': 20, '5': 21, '6': 22, '7': 23, '8': 24}
+    
     time_col = time_col_map.get(step)
     loc_col = loc_col_map.get(step)
     updates = []
 
     if step in ['1', '2', '3', '4', '5', '6']:
         target_row_data = ws.row_values(row_id_target)
-        if len(target_row_data) < 3: return redirect(url_for('driver_tasks', name=driver_name))
+        # Indices: 0=PO, 1=Load, 2=Round, 3=Car
+        if len(target_row_data) < 4: return redirect(url_for('driver_tasks', name=driver_name))
         target_po = target_row_data[0] 
-        target_round = target_row_data[1] 
-        target_car = target_row_data[2] 
+        target_round = target_row_data[2] # Round is now index 2
+        target_car = target_row_data[3]   # Car is now index 3
+        
         all_values = ws.get_all_values()
         for i, row in enumerate(all_values[1:]): 
             current_row_id = i + 2 
-            if (len(row) > 2 and row[0] == target_po and row[1] == target_round and row[2] == target_car):
+            # Check row[0], row[2], row[3]
+            if (len(row) > 3 and row[0] == target_po and row[2] == target_round and row[3] == target_car):
                 cell_coord_time = gspread.utils.rowcol_to_a1(current_row_id, time_col)
                 updates.append({'range': cell_coord_time, 'values': [[current_time]]})
                 if location_str:
@@ -1557,7 +1446,8 @@ def update_status():
             updates.append({'range': cell_coord_loc, 'values': [[location_str]]})
         if updates: ws.batch_update(updates)
 
-    if step == '8': ws.update_cell(row_id_target, 15, "Done")
+    # Status Column is now 16 (P)
+    if step == '8': ws.update_cell(row_id_target, 16, "Done")
     return redirect(url_for('driver_tasks', name=driver_name))
 
 @app.route('/')

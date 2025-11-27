@@ -854,7 +854,7 @@ def export_pdf_summary():
 
     jobs = sorted(jobs, key=sort_key_func)
 
-    # Midnight Logic & Data Prep
+    # Midnight Logic
     for job in jobs:
         job['is_late'] = False
         t_plan_str = str(job['Round']).strip()
@@ -869,10 +869,10 @@ def export_pdf_summary():
                 if t_act > t_plan: job['is_late'] = True
             except: pass
 
-    # --- Grouping & Summary Calculation ---
+    # Grouping Data
     grouped_jobs = []
     
-    # ตัวแปรสำหรับนับยอดสรุป
+    # Counters
     def create_counter(): return {'count':0, 't1':0, 't2':0, 't3':0, 't4':0, 't5':0, 't6':0, 't7':0, 't8':0}
     sum_day = create_counter()
     sum_night = create_counter()
@@ -889,13 +889,12 @@ def export_pdf_summary():
             current_group.append(job)
         if current_group: grouped_jobs.append(current_group)
 
-    # คำนวณยอดสรุปจากกลุ่มที่จัดแล้ว
+    # Calculate Summary
     for group in grouped_jobs:
         if not group: continue
         first_job = group[0]
         last_job = group[-1]
         
-        # Check Shift (Day/Night)
         round_time = str(first_job.get('Round', '')).strip()
         is_day_shift = True
         try:
@@ -925,8 +924,10 @@ def export_pdf_summary():
     po_date_thai = thai_date_filter(date_filter) if date_filter else "ทั้งหมด"
     print_date = (datetime.now() + timedelta(hours=7)).strftime("%d/%m/%Y %H:%M")
 
-    # กำหนดความกว้างคอลัมน์ (รวม 196mm)
-    COLS = [10, 20, 22, 13, 53, 13, 13, 13, 13, 13, 13]
+    # [CONFIG] Main Table Columns (Total 196mm)
+    # ปรับ: ลดทะเบียน(20->18), เพิ่มคนขับ(22->27 +20%), ลดปลายทาง(53->50)
+    # รวม: 10 + 18 + 27 + 13 + 50 + 13 + 13 + 13 + 13 + 13 + 13 = 196 mm (OK)
+    COLS = [10, 18, 27, 13, 50, 13, 13, 13, 13, 13, 13]
     HEADERS = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
 
     class PDFSummary(FPDF):
@@ -945,8 +946,10 @@ def export_pdf_summary():
             # Table Header
             self.set_fill_color(44, 62, 80)
             self.set_text_color(255, 255, 255)
-            self.set_draw_color(100, 100, 100) # เส้นขอบสีเทาเข้ม
-            self.set_font('Sarabun', '', 8)
+            self.set_draw_color(100, 100, 100)
+            
+            # [ADJUST 1] Font Header 7pt
+            self.set_font('Sarabun', '', 7) 
             
             for i, h in enumerate(HEADERS):
                 self.cell(COLS[i], 8, h, border=1, align='C', fill=True)
@@ -956,7 +959,7 @@ def export_pdf_summary():
 
         def footer(self):
             self.set_y(-10)
-            self.set_font('Sarabun', '', 7)
+            self.set_font('Sarabun', '', 6)
             self.set_text_color(150)
             self.cell(0, 10, f'หน้า {self.page_no()}/{{nb}} | พิมพ์เมื่อ: {print_date}', align='R')
 
@@ -969,12 +972,9 @@ def export_pdf_summary():
     group_count = 0
     
     for group in grouped_jobs:
-        # Zebra Grouping Colors
-        if group_count % 2 == 0:
-            pdf.set_fill_color(255, 255, 255) 
-        else:
-            pdf.set_fill_color(245, 247, 249) 
-            
+        # Zebra Grouping
+        if group_count % 2 == 0: pdf.set_fill_color(255, 255, 255) 
+        else: pdf.set_fill_color(245, 247, 249) 
         group_count += 1
         
         for idx, job in enumerate(group):
@@ -999,32 +999,31 @@ def export_pdf_summary():
             t7 = str(job['T7_ArriveBranch'])
             t8 = str(job['T8_EndJob'])
 
-            # *** ปรับความสูงแถวเป็น 8mm *** (แก้ปัญหาสระหายและเส้นไม่ชัด)
-            row_height = 8 
+            # [ADJUST] Row Height 7.5mm (เหมาะสมกับ Font 7pt)
+            row_height = 7.5 
 
-            # Page Break
             if pdf.get_y() + row_height > pdf.page_break_trigger:
                 pdf.add_page()
                 if (group_count - 1) % 2 == 0: pdf.set_fill_color(255, 255, 255)
                 else: pdf.set_fill_color(245, 247, 249)
 
-            pdf.set_font('Sarabun', '', 8)
-            
-            # ใช้ border=1 เพื่อตีเส้นทุกช่องให้ชัดเจน
-            pdf.set_draw_color(180, 180, 180) # เส้นปกติสีเทากลาง
+            # [ADJUST 1] Font Body 7pt
+            pdf.set_font('Sarabun', '', 7)
+            pdf.set_draw_color(180, 180, 180) 
             
             pdf.cell(COLS[0], row_height, c_no, border=1, align='C', fill=True)
             pdf.cell(COLS[1], row_height, plate, border=1, align='C', fill=True)
             
-            # คนขับตัดคำ
+            # Driver (Width 27mm)
             if pdf.get_string_width(driver) > COLS[2] - 2:
                  while pdf.get_string_width(driver + "..") > COLS[2] - 2 and len(driver) > 0:
                      driver = driver[:-1]
                  driver += ".."
             pdf.cell(COLS[2], row_height, driver, border=1, align='L', fill=True)
+            
             pdf.cell(COLS[3], row_height, round_t, border=1, align='C', fill=True)
             
-            # ปลายทางตัดคำ
+            # Branch (Width 50mm)
             if pdf.get_string_width(branch) > COLS[4] - 2:
                  while pdf.get_string_width(branch + "..") > COLS[4] - 2 and len(branch) > 0:
                      branch = branch[:-1]
@@ -1033,7 +1032,6 @@ def export_pdf_summary():
             
             pdf.cell(COLS[5], row_height, t1, border=1, align='C', fill=True)
 
-            # T2 Color
             if is_late_row: pdf.set_text_color(192, 57, 43) 
             elif t2: pdf.set_text_color(39, 174, 96)
             pdf.cell(COLS[6], row_height, t2, border=1, align='C', fill=True)
@@ -1042,86 +1040,105 @@ def export_pdf_summary():
             pdf.cell(COLS[7], row_height, t3, border=1, align='C', fill=True)
             pdf.cell(COLS[8], row_height, t6, border=1, align='C', fill=True)
             
-            # Save Base Fill
+            # Status Colors
             base_r, base_g, base_b = (255, 255, 255) if (group_count - 1) % 2 == 0 else (245, 247, 249)
-
-            # Status Fills
             pdf.set_fill_color(240, 253, 244)
             pdf.cell(COLS[9], row_height, t7, border=1, align='C', fill=True)
             pdf.set_fill_color(254, 242, 242)
             pdf.cell(COLS[10], row_height, t8, border=1, align='C', fill=True)
             
-            # Restore Fill
             pdf.set_fill_color(base_r, base_g, base_b)
             pdf.ln()
             
-            # --- วาดเส้นจบกลุ่มทับเส้นเดิม (ให้หนาขึ้น) ---
             if is_last_in_group:
                 y_curr = pdf.get_y()
-                pdf.set_draw_color(0, 0, 0) # สีดำ
-                pdf.set_line_width(0.3)     # หนาขึ้น
-                # วาดทับเส้นล่างของแถวที่เพิ่งพิมพ์
+                pdf.set_draw_color(0, 0, 0)
+                pdf.set_line_width(0.3)
                 pdf.line(7, y_curr, 203, y_curr) 
-                
-                # Reset
                 pdf.set_line_width(0.2)
                 pdf.set_draw_color(180, 180, 180)
 
-    # --- Draw Summary Table at the end ---
+    # --- Draw Summary Table ---
     pdf.ln(5)
-    
-    # Check space
-    if pdf.get_y() + 40 > pdf.page_break_trigger:
+    if pdf.get_y() + 30 > pdf.page_break_trigger:
         pdf.add_page()
     
-    pdf.set_font('Sarabun', '', 10)
-    pdf.cell(0, 8, 'สรุปจำนวนเที่ยวรถและเวลาปฏิบัติงาน', align='L')
-    pdf.ln(6)
+    # [ADJUST 3] Summary Headers (Full Name)
+    # รวมกว้าง 196mm
+    # รอบ=20, จำนวน=16, เวลา(8 col)=20mm each -> 20+16+160 = 196 mm
+    SUM_HEADERS = ['รอบงาน', 'จำนวน', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ยื่นเอกสาร', 'รับเอกสาร', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
+    SUM_COLS = [20, 16, 20, 20, 20, 20, 20, 20, 20, 20]
     
-    # Summary Config
-    # Headers: รอบ, จำนวน, เข้า, เริ่ม, เสร็จ, ยื่น, รับ, ออก, ถึง, จบ (10 cols)
-    # Total width 196. Allocation:
-    # รอบ=36, จำนวน=16, Times(8 cols)=18 each -> 36+16+144 = 196 OK.
-    SUM_COLS = [36, 16, 18, 18, 18, 18, 18, 18, 18, 18]
-    SUM_HEADERS = ['รอบงาน', 'จำนวน', 'เข้าฯ', 'เริ่มฯ', 'เสร็จ', 'ยื่นฯ', 'รับฯ', 'ออกฯ', 'ถึงฯ', 'จบฯ']
-    
-    # Header Row
     pdf.set_fill_color(44, 62, 80)
     pdf.set_text_color(255, 255, 255)
-    pdf.set_font('Sarabun', '', 8)
+    
+    # [ADJUST 3] Summary Header Font 6pt
+    pdf.set_font('Sarabun', '', 6)
+    
     for i, h in enumerate(SUM_HEADERS):
         pdf.cell(SUM_COLS[i], 8, h, border=1, align='C', fill=True)
     pdf.ln()
     
-    # Data Rows Helper
     def draw_sum_row(label, data, is_total=False):
-        if is_total:
-            pdf.set_fill_color(255, 255, 0) # Yellow for Total
-            pdf.set_font('Sarabun', '', 8) # Simulate bold with larger size or same
-        else:
-            pdf.set_fill_color(255, 255, 255)
-            pdf.set_font('Sarabun', '', 8)
+        if is_total: pdf.set_fill_color(255, 255, 0)
+        else: pdf.set_fill_color(255, 255, 255)
             
         pdf.set_text_color(0, 0, 0)
+        pdf.set_font('Sarabun', '', 7) # เนื้อหาตารางสรุป 7pt
         
         pdf.cell(SUM_COLS[0], 8, label, border=1, align='C', fill=True)
         
-        vals = [
-            data['count'], data['t1'], data['t2'], data['t3'], 
-            data['t4'], data['t5'], data['t6'], data['t7'], data['t8']
-        ]
-        
+        vals = [data['count'], data['t1'], data['t2'], data['t3'], data['t4'], data['t5'], data['t6'], data['t7'], data['t8']]
         for i, v in enumerate(vals):
             pdf.cell(SUM_COLS[i+1], 8, str(v), border=1, align='C', fill=True)
         pdf.ln()
 
-    draw_sum_row('กลางวัน (06:00-18:00)', sum_day)
-    draw_sum_row('กลางคืน (19:00-05:00)', sum_night)
-    draw_sum_row('รวมทั้งหมด', sum_total, is_total=True)
+    # [ADJUST 4] Short Labels
+    draw_sum_row('กลางวัน', sum_day)
+    draw_sum_row('กลางคืน', sum_night)
+    draw_sum_row('รวม', sum_total, is_total=True)
 
     pdf_bytes = pdf.output()
     filename = f"Summary_{date_filter if date_filter else 'All'}.pdf"
     return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
+    
+@app.route('/print_report')
+def print_report():
+    # อนุญาตให้เข้าถึงได้ทั่วไป (เหมือน export_excel)
+    
+    sheet = get_db()
+    raw_jobs = sheet.worksheet('Jobs').get_all_records()
+    
+    date_filter = request.args.get('date_filter')
+    if date_filter:
+        # กรองข้อมูลตามวันที่ที่ส่งมา
+        jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
+    else:
+        jobs = raw_jobs
+        
+    # เรียงลำดับข้อมูล (เหมือนหน้าอื่นๆ)
+    def sort_key_func(job):
+        po_date = str(job['PO_Date'])
+        car_no_str = str(job['Car_No']).strip()
+        round_val = str(job['Round'])
+        try: car_no_int = int(car_no_str)
+        except ValueError: car_no_int = 99999 
+        return (po_date, car_no_int, round_val)
+
+    jobs = sorted(jobs, key=sort_key_func)
+    
+    # เตรียมวันที่สำหรับแสดงหัวกระดาษ
+    print_date = datetime.now().strftime("%d/%m/%Y %H:%M")
+    
+    # แปลงวันที่ PO เป็นไทย
+    po_date_thai = ""
+    if date_filter:
+        po_date_thai = thai_date_filter(date_filter)
+
+    return render_template('print_report.html', 
+                           jobs=jobs, 
+                           po_date=po_date_thai,
+                           print_date=print_date)
 
 @app.route('/tracking')
 def customer_view():

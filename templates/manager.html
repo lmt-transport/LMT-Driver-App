@@ -213,13 +213,19 @@
                         
                         <a href="/manager?tab=report&date_filter={{ next_date }}" class="px-2 text-gray-500 hover:text-indigo-600 border-l border-gray-200"><i class="fa-solid fa-chevron-right"></i></a>
                     </div>
-                    <a href="#" onclick="triggerPrint()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 text-sm font-bold shadow transition flex items-center gap-2">
-					<i class="fa-solid fa-print"></i> Print / PDF
-					</a>
-					<a href="#" onclick="triggerCustomerPDF()" class="bg-red-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-red-700 transition shadow-md flex items-center gap-2 transform active:scale-95">
-					<i class="fa-solid fa-file-pdf"></i> <span class="hidden sm:inline">PDF Export</span>
-					</a>
+			<a href="#" onclick="triggerCustomerPDF()" class="bg-red-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-red-700 transition shadow-md flex items-center gap-2 transform active:scale-95">
+				<i class="fa-solid fa-file-pdf"></i> <span class="hidden sm:inline">PDF Export</span>
+			</a>
+			<a href="#" onclick="triggerCompactPDF()" class="bg-orange-500 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-orange-600 transition shadow-md flex items-center gap-2 transform active:scale-95">
+				<i class="fa-solid fa-file-contract"></i> <span class="hidden sm:inline">PDF Summary</span>
+			</a>
                     <a href="#" onclick="triggerExport()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-bold shadow transition flex items-center gap-2"><i class="fa-solid fa-file-excel"></i> Export Excel</a>
+					<button onclick="shareLine('day')" class="bg-[#06C755] text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#05b34c] transition shadow-md flex items-center gap-1 transform active:scale-95" title="แชร์รอบกลางวัน">
+        <i class="fa-brands fa-line text-lg"></i> <i class="fa-solid fa-sun text-yellow-300"></i>
+    </button>
+    <button onclick="shareLine('night')" class="bg-[#06C755] text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#05b34c] transition shadow-md flex items-center gap-1 transform active:scale-95" title="แชร์รอบกลางคืน">
+        <i class="fa-brands fa-line text-lg"></i> <i class="fa-solid fa-moon text-indigo-100"></i>
+    </button>
                     <a href="/manager?tab=report" class="bg-white text-gray-500 border border-gray-300 px-3 py-2 rounded-lg hover:bg-gray-100 text-sm shadow-sm"><i class="fa-solid fa-rotate-right"></i></a>
                 </form>
             </div>
@@ -400,21 +406,73 @@
         window.location.href = url;
     }
 	
-	function triggerPrint() {
+	function triggerCompactPDF() {
     const selectedDate = document.getElementById('report_date_filter').value;
-    let url = '/print_report';
-
+    let url = '/export_pdf_summary'; 
     if (selectedDate) {
         url += `?date_filter=${selectedDate}`;
-    } else {
-        alert("กรุณาเลือกวันที่ PO ก่อนพิมพ์");
-        return;
     }
-    
-    // เปิดหน้า Print ใน Tab ใหม่
-    window.open(url, '_blank');
+    window.location.href = url;
 	}
+	
+	// --- [UPDATED] LINE Share Function (Exact Match to Image) ---
+    function shareLine(shiftType) {
+        // 1. รับข้อมูล
+        const dayData = {{ line_data_day | tojson }};
+        const nightData = {{ line_data_night | tojson }};
+        
+        const dataList = (shiftType === 'day') ? dayData : nightData;
+        const shiftName = (shiftType === 'day') ? 'รอบโหลดกลางวัน' : 'รอบโหลดกลางคืน';
+        const shiftEmoji = (shiftType === 'day') ? '☀️' : '🌙';
+        
+        // 2. Format วันที่ PO
+        const poDateVal = document.getElementById('customer_date_filter').value;
+        const [py, pm, pd] = poDateVal.split('-');
+        const yearThaiShort = (parseInt(py) + 543).toString().slice(2);
+        const poDateThai = `${pd}.${pm}.${yearThaiShort}`; 
+        
+        if (dataList.length === 0) {
+            alert(`⚠️ ไม่พบข้อมูลงานสำหรับ ${shiftName}`);
+            return;
+        }
 
+        const loadDateShow = dataList[0].load_date; 
+
+        // --- สร้างข้อความ Header ---
+        let msg = `📄 LMT PO ${poDateThai} (${shiftEmoji} ${shiftName} วันที่ ${loadDateShow})\n\n`;
+
+        // จัดกลุ่มตามเวลา
+        let groupedByRound = {};
+        dataList.forEach(item => {
+            let r = item.round || "ไม่ระบุเวลา";
+            if (!groupedByRound[r]) groupedByRound[r] = [];
+            groupedByRound[r].push(item);
+        });
+
+        // Loop ตามเวลา
+        for (const [roundTime, cars] of Object.entries(groupedByRound)) {
+            // หัวข้อเวลา
+            msg += `🕒 รอบโหลด ${roundTime} น.\n`;
+            
+            cars.forEach(car => {
+                // ข้อมูลรถ (Truck Icon, No Person Icon)
+                msg += `🚛 คันที่ ${car.car_no} ${car.plate} ${car.driver}\n`;
+                
+                // รายชื่อสาขา (มีหมุด 📍 นำหน้าทุกบรรทัด)
+                car.branches.forEach(branch => {
+                    msg += `📍 ${branch}\n`;
+                });
+                
+                msg += `\n`; // เว้นบรรทัดจบคัน (ให้มีช่องว่างสวยงาม)
+            });
+        }
+
+        // Encode และส่ง
+        const encodedMsg = encodeURIComponent(msg);
+        const lineUrl = `https://line.me/R/msg/text/?${encodedMsg}`;
+        window.open(lineUrl, '_blank');
+    }
+	
     document.addEventListener("DOMContentLoaded", function() {
         const urlParams = new URLSearchParams(window.location.search);
         const tabParam = urlParams.get('tab');

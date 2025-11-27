@@ -254,7 +254,7 @@ def export_excel():
         current_trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
         is_same = (current_trip_key == prev_trip_key)
         
-        # --- Logic คำนวณความล่าช้า (คงเดิม) ---
+        # --- Logic คำนวณความล่าช้า (ปรับปรุง Midnight Crossover) ---
         t2_display = job['T2_StartLoad']
         if not is_same: 
             try:
@@ -267,6 +267,14 @@ def export_excel():
                     
                     t_plan = datetime.strptime(plan_time_str, fmt)
                     t_act = datetime.strptime(actual_time_str, fmt_act)
+                    
+                    # === [NEW LOGIC] ตรวจสอบการข้ามวัน (Midnight Crossover) ===
+                    # ถ้าเวลาแผน (t_plan) มากกว่าเวลาจริง (t_act) เกิน 12 ชั่วโมง 
+                    # (เช่น แผน 22:30 - จริง 01:08 = ต่างกันประมาณ 21 ชม.)
+                    # ให้สันนิษฐานว่าเวลาจริงคือ "วันถัดไป"
+                    if (t_plan - t_act).total_seconds() > 12 * 3600:
+                        t_act = t_act + timedelta(days=1)
+                    # ========================================================
                     
                     if t_act > t_plan:
                         diff = t_act - t_plan
@@ -295,14 +303,14 @@ def export_excel():
             'คนขับ': "" if is_same else job['Driver'],
             'ปลายทาง (สาขา)': job['Branch_Name'],
             'ทะเบียนรถ': "" if is_same else job['Plate'],
-            '1.เข้าโรงงาน': "" if is_same else job['T1_Enter'],
-            '2.เริ่มโหลด': "" if is_same else t2_display, 
-            '3.โหลดเสร็จ': "" if is_same else job['T3_EndLoad'],
-            '4.ยื่นเอกสาร': "" if is_same else job['T4_SubmitDoc'],
-            '5.รับเอกสาร': "" if is_same else job['T5_RecvDoc'],
-            '6.ออกโรงงาน': "" if is_same else job['T6_Exit'],
-            '7.ถึงสาขา': job['T7_ArriveBranch'],
-            '8.จบงาน': job['T8_EndJob']
+            'เข้าโรงงาน': "" if is_same else job['T1_Enter'],
+            'เริ่มโหลด': "" if is_same else t2_display, 
+            'โหลดเสร็จ': "" if is_same else job['T3_EndLoad'],
+            'ยื่นเอกสาร': "" if is_same else job['T4_SubmitDoc'],
+            'รับเอกสาร': "" if is_same else job['T5_RecvDoc'],
+            'ออกโรงงาน': "" if is_same else job['T6_Exit'],
+            'ถึงสาขา': job['T7_ArriveBranch'],
+            'จบงาน': job['T8_EndJob']
         }
         export_data.append(row)
         prev_trip_key = current_trip_key
@@ -385,11 +393,11 @@ def export_excel():
             f_color = '000000' # สีดำ (Default)
 
             # 1. เงื่อนไข Bold: สาขา, จบงาน, และ **เริ่มโหลด**
-            if col_name in ['7.ถึงสาขา', '8.จบงาน', '2.เริ่มโหลด']:
+            if col_name in ['ถึงสาขา', 'จบงาน', 'เริ่มโหลด']:
                 f_bold = True
 
             # 2. เงื่อนไขสีตัวอักษรเฉพาะ '2.เริ่มโหลด'
-            if col_name == '2.เริ่มโหลด':
+            if col_name == 'เริ่มโหลด':
                 cell_val_str = str(cell.value) if cell.value else ""
                 if "(ล่าช้า" in cell_val_str:
                     f_color = 'C0392B' # สีแดงเข้ม (ล่าช้า)
@@ -403,9 +411,9 @@ def export_excel():
             cell.fill = row_fill
             
             # Override สีพื้นหลัง
-            if col_name == '7.ถึงสาขา':
+            if col_name == 'ถึงสาขา':
                 cell.fill = fill_green_branch
-            elif col_name == '8.จบงาน':
+            elif col_name == 'จบงาน':
                 cell.fill = fill_red_end
             
             # Alignment
@@ -420,7 +428,7 @@ def export_excel():
         col_header = column_cells[0].value
         
         # เงื่อนไขความกว้าง
-        if col_header == '2.เริ่มโหลด':
+        if col_header == 'เริ่มโหลด':
             ws.column_dimensions[col_letter].width = 19.00
         else:
             # Auto fit สำหรับคอลัมน์อื่นๆ

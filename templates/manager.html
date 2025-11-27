@@ -357,7 +357,6 @@
         const savedTab = localStorage.getItem('activeTab') || 'tab-monitor';
         if(tabParam) switchTab('tab-' + tabParam); else switchTab(savedTab);
         
-        // Update Time if element exists
         const timeEl = document.getElementById('report-time');
         if (timeEl) timeEl.innerText = new Date().toLocaleString('th-TH');
     });
@@ -383,7 +382,8 @@
         const select = document.getElementById('driver_select');
         const selectedOption = select.options[select.selectedIndex];
         const plate = selectedOption.getAttribute('data-plate');
-        document.getElementById('plate_input').value = plate || "";
+        const plateInput = document.getElementById('plate_input');
+        if (plateInput) plateInput.value = plate || "";
     }
 
     function addBranchField() {
@@ -400,16 +400,20 @@
         copyToClipboard(url, "ลิงค์สำหรับลูกค้า");
     }
 
-    // --- Export Functions ---
-    // Helper to get date safely
+    // --- Helper to get date safely ---
     function getFilterDate() {
-        // ลองหาจากหลายๆ ID ที่อาจจะเป็นไปได้ในหน้า Manager
-        let el = document.getElementById('report_date_filter'); // ใน Tab Report
-        if (!el) el = document.querySelector('input[name="date_filter"]'); // ทั่วไป
-        return el ? el.value : null;
+        // หา Input วันที่จาก Tab Report ก่อน ถ้าไม่มีให้หาจาก Tab Monitor
+        let el = document.getElementById('report_date_filter');
+        if (!el) el = document.querySelector('input[name="date_filter"]');
+        
+        // ถ้าหาไม่เจอเลย (กรณีผิดพลาด) ให้คืนค่าว่าง
+        return el ? el.value : '';
     }
 
-    function triggerCustomerExport() {
+    // --- Export Functions (แก้ไขชื่อให้ตรงกับ HTML onclick) ---
+    
+    // [FIXED] เปลี่ยนชื่อจาก triggerCustomerExport เป็น triggerExport
+    function triggerExport() {
         const selectedDate = getFilterDate();
         let url = '/export_excel'; 
         if (selectedDate) url += `?date_filter=${selectedDate}`;
@@ -430,16 +434,21 @@
         window.location.href = url;
     }
     
+    // [FIXED] เปลี่ยนชื่อจาก triggerCustomerPrint เป็น triggerPrint
+    function triggerPrint() {
+        const selectedDate = getFilterDate();
+        let url = '/print_report';
+        if (selectedDate) {
+            url += `?date_filter=${selectedDate}`;
+            window.open(url, '_blank');
+        } else {
+            alert("กรุณาเลือกวันที่ PO ก่อนพิมพ์");
+        }
+    }
+
     // --- [CORE] Copy Function ---
     async function copyToClipboard(text, successMessage) {
-        if (navigator.clipboard && window.isSecureContext) {
-            try {
-                await navigator.clipboard.writeText(text);
-                alert("✅ คัดลอก" + successMessage + "เรียบร้อยแล้ว!");
-                return;
-            } catch (err) { console.error('Async Copy failed', err); }
-        }
-        
+        // Fallback for HTTP or older browsers
         const textArea = document.createElement("textarea");
         textArea.value = text;
         textArea.style.position = "fixed";
@@ -447,17 +456,32 @@
         document.body.appendChild(textArea);
         textArea.focus();
         textArea.select();
+        
         try {
             document.execCommand('copy');
+            document.body.removeChild(textArea);
             alert("✅ คัดลอก" + successMessage + "เรียบร้อยแล้ว!");
+            return;
         } catch (err) {
-            alert("❌ ไม่สามารถคัดลอกได้");
+            console.error('Fallback copy failed', err);
+            document.body.removeChild(textArea);
         }
-        document.body.removeChild(textArea);
+
+        // Modern Method (HTTPS only)
+        if (navigator.clipboard && window.isSecureContext) {
+            try {
+                await navigator.clipboard.writeText(text);
+                alert("✅ คัดลอก" + successMessage + "เรียบร้อยแล้ว!");
+            } catch (err) {
+                console.error('Async Copy failed', err);
+                alert("❌ ไม่สามารถคัดลอกได้");
+            }
+        }
     }
 
     // --- LINE Share Logic ---
     function shareLine(shiftType) {
+        // รับข้อมูลจาก Python
         const dayData = {{ line_data_day | tojson | safe }};
         const nightData = {{ line_data_night | tojson | safe }};
         
@@ -465,11 +489,10 @@
         const shiftName = (shiftType === 'day') ? 'รอบโหลดกลางวัน' : 'รอบโหลดกลางคืน';
         const shiftEmoji = (shiftType === 'day') ? '☀️' : '🌙';
         
-        // [FIXED] ใช้ฟังก์ชัน getFilterDate() เพื่อหาค่าวันที่อย่างปลอดภัย
         const poDateVal = getFilterDate();
         
         if (!poDateVal) {
-            alert("⚠️ ไม่พบข้อมูลวันที่");
+            alert("กรุณาเลือกวันที่ก่อนแชร์");
             return;
         }
 
@@ -484,6 +507,7 @@
 
         const loadDateShow = dataList[0].load_date; 
 
+        // สร้างข้อความ
         let msg = `📄 LMT PO ${poDateThai} (${shiftEmoji} ${shiftName} วันที่ ${loadDateShow})\n\n`;
 
         let groupedByRound = {};

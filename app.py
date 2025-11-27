@@ -112,7 +112,7 @@ def manager_dashboard():
     total_trips = len(jobs_by_trip_key)
     total_running_jobs = total_branches - total_done_jobs
 
-    # 4. Sorting
+    # 4. Sorting (Basic Sort for Table)
     def sort_key_func(job):
         po_date = str(job['PO_Date'])
         car_no_str = str(job['Car_No']).strip()
@@ -127,7 +127,7 @@ def manager_dashboard():
     line_data_day = []
     line_data_night = []
     
-    # Group jobs Logic for LINE
+    # Group jobs Logic
     grouped_jobs = []
     if filtered_jobs:
         current_group = []
@@ -151,31 +151,24 @@ def manager_dashboard():
         
         try:
             po_dt = datetime.strptime(first['PO_Date'], "%Y-%m-%d")
-            
             if len(round_str) >= 5:
-                # Parse Hour for Shift Check
-                try:
-                    hour = int(round_str.split(':')[0])
-                except:
-                    hour = 0
+                try: hour = int(round_str.split(':')[0])
+                except: hour = 0
                 
-                # Check Shift (06:00 - 18:59 = Day)
+                # Check Shift
                 if not (6 <= hour <= 18):
                     is_day = False
                 
-                # Check Date (Midnight Crossover)
-                # ถ้าเวลาเป็น 00:00 - 05:59 ให้ถือเป็นวันถัดไปของ PO
+                # Check Date
                 load_date = po_dt
                 if 0 <= hour <= 5:
                     load_date = po_dt + timedelta(days=1)
                 
-                # Format Date: 27/11/68
                 thai_year = load_date.year + 543
                 show_date_str = load_date.strftime(f"%d/%m/{str(thai_year)[2:]}")
             else:
                 thai_year = po_dt.year + 543
                 show_date_str = po_dt.strftime(f"%d/%m/{str(thai_year)[2:]}")
-
         except:
             show_date_str = first['PO_Date']
 
@@ -193,12 +186,31 @@ def manager_dashboard():
         else:
             line_data_night.append(trip_data)
 
-    # Sort by Round Time
+    # --- [UPDATED] Sorting Logic for LINE Data ---
+    
+    # รอบกลางวัน: เรียงตามเวลาปกติ (06:00 -> 18:00)
     line_data_day.sort(key=lambda x: x['round'])
-    line_data_night.sort(key=lambda x: x['round'])
-    # -------------------------------------------------------------
+    
+    # รอบกลางคืน: เรียงแบบพิเศษ (19:00 -> 23:59 -> 00:00 -> 05:00)
+    def night_sort_key(item):
+        try:
+            t_str = item['round']
+            if not t_str or ':' not in t_str: return 99999
+            h, m = map(int, t_str.split(':')[:2])
+            
+            # ถ้าเป็นเวลาหลังเที่ยงคืน (00:00 - 11:59) ให้บวก 24 ชม.
+            # เพื่อให้ค่ามากกว่าเวลาหัวค่ำ (เช่น 01:00 -> 25:00 ซึ่งมากกว่า 20:00)
+            if 0 <= h < 12:
+                h += 24
+            
+            return h * 60 + m
+        except:
+            return 99999
 
-    # [NEW] Pre-calculate Late Status for Display Table (Midnight Crossover)
+    line_data_night.sort(key=night_sort_key)
+    # ---------------------------------------------
+
+    # [NEW] Pre-calculate Late Status
     for job in filtered_jobs:
         job['is_start_late'] = False
         t_plan_str = str(job.get('Round', '')).strip()
@@ -244,7 +256,6 @@ def manager_dashboard():
                            prev_date=prev_date,
                            next_date=next_date,
                            trip_last_end_time=trip_last_end_time,
-                           # ส่งข้อมูลที่คำนวณแล้วกลับไปที่ HTML
                            line_data_day=line_data_day,
                            line_data_night=line_data_night
                            )

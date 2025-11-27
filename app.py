@@ -869,6 +869,20 @@ def export_pdf_summary():
                 if t_act > t_plan: job['is_late'] = True
             except: pass
 
+    # --- Grouping Data ---
+    grouped_jobs = []
+    if jobs:
+        current_group = []
+        prev_key = (str(jobs[0]['PO_Date']), str(jobs[0]['Car_No']), str(jobs[0]['Round']), str(jobs[0]['Driver']))
+        for job in jobs:
+            curr_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
+            if curr_key != prev_key:
+                grouped_jobs.append(current_group)
+                current_group = []
+                prev_key = curr_key
+            current_group.append(job)
+        if current_group: grouped_jobs.append(current_group)
+
     # --- 2. Setup PDF Class (Compact & Beautiful) ---
     basedir = os.path.abspath(os.path.dirname(__file__))
     font_path = os.path.join(basedir, 'static', 'fonts', 'Sarabun-Regular.ttf')
@@ -876,10 +890,10 @@ def export_pdf_summary():
     po_date_thai = thai_date_filter(date_filter) if date_filter else "ทั้งหมด"
     print_date = (datetime.now() + timedelta(hours=7)).strftime("%d/%m/%Y %H:%M")
 
-    # กำหนดความกว้างคอลัมน์ใหม่ให้เต็มหน้า A4 (297mm - 14mm margin = 283mm)
-    # รวม: 12+28+45+15+75+16+16+16+16+22+22 = 283 mm
-    COLS = [12, 28, 45, 15, 75, 16, 16, 16, 16, 22, 22]
-    HEADERS = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
+    # กำหนดความกว้างคอลัมน์ใหม่ (Font 6pt เล็กลง พื้นที่เหลือเยอะขึ้น)
+    # รวม: 10+20+35+12+80+14+14+14+14+20+20 = 253 mm (เหลือที่ว่างขวานิดหน่อย สบายตา)
+    COLS = [10, 20, 35, 12, 80, 14, 14, 14, 14, 20, 20]
+    HEADERS = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลา', 'ปลายทาง', 'เข้า', 'เริ่ม', 'เสร็จ', 'ออก', 'ถึงสาขา', 'จบงาน']
 
     class PDFSummary(FPDF):
         def header(self):
@@ -887,28 +901,28 @@ def export_pdf_summary():
             
             # Logo & Title
             if os.path.exists(logo_path):
-                self.image(logo_path, x=3.5, y=3, w=7.5)
+                self.image(logo_path, x=7, y=6, w=10) # ลดขนาดโลโก้
             
-            self.set_font('Sarabun', '', 12) 
+            self.set_font('Sarabun', '', 14) 
             self.set_y(8)
-            self.set_x(25) 
+            self.set_x(20) 
             self.cell(0, 8, f'สรุปรายงานการจัดส่งสินค้า (Compact View) - วันที่: {po_date_thai}', align='L', new_x="LMARGIN", new_y="NEXT")
             
-            self.ln(4)
+            self.ln(3)
             
             # Table Header
             self.set_fill_color(44, 62, 80) # Midnight Blue
             self.set_text_color(255, 255, 255) # White
-            self.set_draw_color(44, 62, 80) # Border matches header
-            self.set_font('Sarabun', '', 6) 
+            self.set_draw_color(44, 62, 80) 
+            self.set_font('Sarabun', '', 7) # หัวตาราง 7pt
             
             for i, h in enumerate(HEADERS):
-                self.cell(COLS[i], 8, h, border=1, align='C', fill=True)
+                self.cell(COLS[i], 6, h, border=1, align='C', fill=True)
             self.ln()
             
-            # Reset colors for body
+            # Reset colors
             self.set_text_color(0, 0, 0)
-            self.set_draw_color(200, 200, 200) # Light Gray Lines
+            self.set_draw_color(200, 200, 200)
 
         def footer(self):
             self.set_y(-10)
@@ -919,146 +933,129 @@ def export_pdf_summary():
     # --- Generate PDF ---
     pdf = PDFSummary(orientation='L', unit='mm', format='A4')
     pdf.alias_nb_pages()
-    pdf.set_margins(7, 7, 7) # ขอบซ้าย-ขวา 7mm
+    pdf.set_margins(7, 7, 7)
     pdf.add_page()
     
-    prev_trip_key = None
-    row_count = 0
+    group_count = 0
     
-    for job in jobs:
-        current_trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
-        is_same = (current_trip_key == prev_trip_key)
-        
-        # Prepare Data
-        c_no = str(job['Car_No']) if not is_same else ""
-        plate = str(job['Plate']) if not is_same else ""
-        driver = str(job['Driver']) if not is_same else ""
-        round_t = str(job['Round']) if not is_same else ""
-        branch = str(job['Branch_Name'])
-        t1 = str(job['T1_Enter']) if not is_same else ""
-        
-        t2 = ""
-        is_late_row = False
-        if not is_same:
-            t2 = str(job['T2_StartLoad'])
-            if job['is_late']: is_late_row = True
-
-        t3 = str(job['T3_EndLoad']) if not is_same else ""
-        t6 = str(job['T6_Exit']) if not is_same else ""
-        t7 = str(job['T7_ArriveBranch'])
-        t8 = str(job['T8_EndJob'])
-
-        # Row Height
-        row_height = 8 # เพิ่มเป็น 7mm เพื่อความโปร่ง
-
-        # Page Break Check
-        if pdf.get_y() + row_height > pdf.page_break_trigger:
-            pdf.add_page()
-            row_count = 0 # Reset row count for striping on new page
-
-        # Zebra Striping (Alternating Colors)
-        # ถ้าเป็นคันใหม่ ให้สลับสีตามกลุ่ม หรือจะสลับทุกบรรทัดก็ได้
-        # เพื่อความอ่านง่าย สลับทุกบรรทัด (Even/Odd) ดูดีสุดใน Compact View
-        if row_count % 2 == 0:
+    # วนลูปตามกลุ่ม (Group) เพื่อสลับสีทั้งกลุ่ม
+    for group in grouped_jobs:
+        # กำหนดสีพื้นหลังของกลุ่ม (Zebra Grouping)
+        if group_count % 2 == 0:
             pdf.set_fill_color(255, 255, 255) # White
         else:
-            pdf.set_fill_color(245, 245, 245) # Very Light Gray
+            pdf.set_fill_color(245, 247, 249) # Very Light Blue-Gray
+            
+        group_count += 1
         
-        pdf.set_font('Sarabun', '', 6)
-        
-        # วาด Cells
-        # ใช้ border=1 (เส้นบางสีเทา) เพื่อความเป็นระเบียบ
-        pdf.cell(COLS[0], row_height, c_no, border=1, align='C', fill=True)
-        pdf.cell(COLS[1], row_height, plate, border=1, align='C', fill=True)
-        
-        # ชื่อคนขับ (ชิดซ้าย)
-        pdf.cell(COLS[2], row_height, driver, border=1, align='L', fill=True)
-        
-        pdf.cell(COLS[3], row_height, round_t, border=1, align='C', fill=True)
-        
-        # ชื่อสาขา (ชิดซ้าย + ตัดคำน้อยลงเพราะขยายช่องแล้ว)
-        # ถ้ายังยาวเกิน ตัดทิ้งท้ายนิดหน่อยเพื่อไม่ให้ดันบรรทัด
-        if pdf.get_string_width(branch) > COLS[4] - 2:
-             # Logic ตัดคำแบบหยาบๆ ถ้า string width เกิน
-             while pdf.get_string_width(branch + "...") > COLS[4] - 2 and len(branch) > 0:
-                 branch = branch[:-1]
-             branch += "..."
-        pdf.cell(COLS[4], row_height, branch, border=1, align='L', fill=True)
-        
-        pdf.cell(COLS[5], row_height, t1, border=1, align='C', fill=True)
+        # วาดข้อมูลในกลุ่ม
+        for idx, job in enumerate(group):
+            is_first_row = (idx == 0)
+            is_last_in_group = (idx == len(group) - 1)
+            
+            # เตรียมข้อมูล (แสดงเฉพาะบรรทัดแรกของกลุ่มในบางช่อง)
+            c_no = str(job['Car_No']) if is_first_row else ""
+            plate = str(job['Plate']) if is_first_row else ""
+            driver = str(job['Driver']) if is_first_row else ""
+            round_t = str(job['Round']) if is_first_row else ""
+            
+            branch = str(job['Branch_Name'])
+            
+            t1 = str(job['T1_Enter']) if is_first_row else ""
+            
+            t2 = ""
+            is_late_row = False
+            # T2 logic: แสดงเฉพาะบรรทัดแรก
+            if is_first_row:
+                t2 = str(job['T2_StartLoad'])
+                if job['is_late']: is_late_row = True
 
-        # T2 Color Logic
-        if is_late_row:
-            pdf.set_text_color(192, 57, 43) # Red
-            pdf.set_font('Sarabun', '', 6) 
-        elif t2:
-            pdf.set_text_color(39, 174, 96) # Green
-        
-        pdf.cell(COLS[6], row_height, t2, border=1, align='C', fill=True)
-        
-        # Reset text color & font
-        pdf.set_text_color(0, 0, 0) 
-        pdf.set_font('Sarabun', '', 6)
+            t3 = str(job['T3_EndLoad']) if is_first_row else ""
+            t6 = str(job['T6_Exit']) if is_first_row else ""
+            t7 = str(job['T7_ArriveBranch'])
+            t8 = str(job['T8_EndJob'])
 
-        pdf.cell(COLS[7], row_height, t3, border=1, align='C', fill=True)
-        pdf.cell(COLS[8], row_height, t6, border=1, align='C', fill=True)
-        
-        # Status Columns (Colored Background)
-        # T7 Green tint
-        if row_count % 2 == 0: pdf.set_fill_color(235, 250, 240)
-        else: pdf.set_fill_color(225, 245, 235)
-        pdf.cell(COLS[9], row_height, t7, border=1, align='C', fill=True)
-        
-        # T8 Red tint
-        if row_count % 2 == 0: pdf.set_fill_color(253, 237, 236)
-        else: pdf.set_fill_color(250, 225, 225)
-        pdf.cell(COLS[10], row_height, t8, border=1, align='C', fill=True)
+            # *** Row Height ***
+            # 4.5mm เหมาะมากสำหรับ Font 6pt (เหลือที่บนล่างนิดหน่อย)
+            row_height = 4.5 
 
-        pdf.ln()
-        prev_trip_key = current_trip_key
-        row_count += 1
+            # Page Break Check
+            if pdf.get_y() + row_height > pdf.page_break_trigger:
+                pdf.add_page()
+                # เมื่อขึ้นหน้าใหม่ ต้อง set fill color ใหม่ตาม group ปัจจุบัน
+                if (group_count - 1) % 2 == 0: pdf.set_fill_color(255, 255, 255)
+                else: pdf.set_fill_color(245, 247, 249)
+
+            # Set Font 6pt
+            pdf.set_font('Sarabun', '', 6)
+            
+            # Draw Cells with Background Fill
+            # border='LR' เพื่อวาดเส้นข้างอย่างเดียว เส้นล่างจะวาดเอง
+            pdf.cell(COLS[0], row_height, c_no, border='LR', align='C', fill=True)
+            pdf.cell(COLS[1], row_height, plate, border='LR', align='C', fill=True)
+            pdf.cell(COLS[2], row_height, driver, border='LR', align='L', fill=True)
+            pdf.cell(COLS[3], row_height, round_t, border='LR', align='C', fill=True)
+            
+            # ปลายทาง
+            # Logic ตัดคำง่ายๆ ถ้ายาวเกิน
+            if pdf.get_string_width(branch) > COLS[4] - 2:
+                 while pdf.get_string_width(branch + "...") > COLS[4] - 2 and len(branch) > 0:
+                     branch = branch[:-1]
+                 branch += "..."
+            pdf.cell(COLS[4], row_height, branch, border='LR', align='L', fill=True)
+            
+            pdf.cell(COLS[5], row_height, t1, border='LR', align='C', fill=True)
+
+            # T2 Color
+            if is_late_row:
+                pdf.set_text_color(192, 57, 43) # Red
+                # pdf.set_font('Sarabun', '', 6) # bold not available without loading ttf
+            elif t2:
+                pdf.set_text_color(39, 174, 96) # Green
+            
+            pdf.cell(COLS[6], row_height, t2, border='LR', align='C', fill=True)
+            pdf.set_text_color(0, 0, 0) # Reset
+
+            pdf.cell(COLS[7], row_height, t3, border='LR', align='C', fill=True)
+            pdf.cell(COLS[8], row_height, t6, border='LR', align='C', fill=True)
+            
+            # Save current fill color before changing for status columns
+            # (FPDF doesn't have get_fill_color easily accessible, so we assume logic)
+            base_fill_r, base_fill_g, base_fill_b = (255, 255, 255) if (group_count - 1) % 2 == 0 else (245, 247, 249)
+
+            # T7 Status Fill
+            # ให้สี status อ่อนๆ ลงไปอีกเพื่อให้ตัวหนังสือ 6pt อ่านง่าย
+            pdf.set_fill_color(240, 253, 244) # Very Light Green
+            pdf.cell(COLS[9], row_height, t7, border='LR', align='C', fill=True)
+            
+            # T8 Status Fill
+            pdf.set_fill_color(254, 242, 242) # Very Light Red
+            pdf.cell(COLS[10], row_height, t8, border='LR', align='C', fill=True)
+            
+            # Restore base fill color for next cells/lines
+            pdf.set_fill_color(base_fill_r, base_fill_g, base_fill_b)
+
+            pdf.ln()
+            
+            # --- Draw Custom Bottom Line ---
+            y_curr = pdf.get_y()
+            
+            if is_last_in_group:
+                # เส้นจบกลุ่ม (ขึ้นคันใหม่): สีเทาเข้ม ชัดเจน
+                pdf.set_draw_color(100, 100, 100)
+                pdf.line(7, y_curr, 290, y_curr) # 290 = A4(297) - MarginRight(7)
+            else:
+                # เส้นระหว่างสาขาในคันเดิม: ไม่ตีเส้น (หรือตีเส้นขาวทับถ้าพื้นหลังไม่ใช่ขาว)
+                # แต่เนื่องจากเราใช้ border='LR' มันจะไม่มีเส้นล่างอยู่แล้ว 
+                # ดังนั้นไม่ต้องทำอะไร = ดูเหมือนเป็นเนื้อเดียวกัน
+                pass
+            
+            # Reset draw color
+            pdf.set_draw_color(200, 200, 200)
 
     pdf_bytes = pdf.output()
     filename = f"Summary_{date_filter if date_filter else 'All'}.pdf"
     return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
-    
-@app.route('/print_report')
-def print_report():
-    # อนุญาตให้เข้าถึงได้ทั่วไป (เหมือน export_excel)
-    
-    sheet = get_db()
-    raw_jobs = sheet.worksheet('Jobs').get_all_records()
-    
-    date_filter = request.args.get('date_filter')
-    if date_filter:
-        # กรองข้อมูลตามวันที่ที่ส่งมา
-        jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
-    else:
-        jobs = raw_jobs
-        
-    # เรียงลำดับข้อมูล (เหมือนหน้าอื่นๆ)
-    def sort_key_func(job):
-        po_date = str(job['PO_Date'])
-        car_no_str = str(job['Car_No']).strip()
-        round_val = str(job['Round'])
-        try: car_no_int = int(car_no_str)
-        except ValueError: car_no_int = 99999 
-        return (po_date, car_no_int, round_val)
-
-    jobs = sorted(jobs, key=sort_key_func)
-    
-    # เตรียมวันที่สำหรับแสดงหัวกระดาษ
-    print_date = datetime.now().strftime("%d/%m/%Y %H:%M")
-    
-    # แปลงวันที่ PO เป็นไทย
-    po_date_thai = ""
-    if date_filter:
-        po_date_thai = thai_date_filter(date_filter)
-
-    return render_template('print_report.html', 
-                           jobs=jobs, 
-                           po_date=po_date_thai,
-                           print_date=print_date)
 
 @app.route('/tracking')
 def customer_view():

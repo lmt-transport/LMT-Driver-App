@@ -123,10 +123,84 @@ def manager_dashboard():
 
     filtered_jobs = sorted(filtered_jobs, key=sort_key_func)
     
-    # --- [NEW LOGIC] Pre-calculate Late Status (Midnight Crossover) ---
-    for job in filtered_jobs:
-        job['is_start_late'] = False # Default
+    # --- [NEW] Prepare Data for LINE Share (Split Day/Night) ---
+    line_data_day = []
+    line_data_night = []
+    
+    # Group jobs Logic for LINE
+    grouped_jobs = []
+    if filtered_jobs:
+        current_group = []
+        prev_key = (str(filtered_jobs[0]['PO_Date']), str(filtered_jobs[0]['Car_No']), str(filtered_jobs[0]['Round']), str(filtered_jobs[0]['Driver']))
+        for job in filtered_jobs:
+            curr_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
+            if curr_key != prev_key:
+                grouped_jobs.append(current_group)
+                current_group = []
+                prev_key = curr_key
+            current_group.append(job)
+        if current_group: grouped_jobs.append(current_group)
+    
+    for group in grouped_jobs:
+        first = group[0]
+        round_str = str(first['Round']).strip()
         
+        # Calculate Logic
+        is_day = True
+        show_date_str = ""
+        
+        try:
+            po_dt = datetime.strptime(first['PO_Date'], "%Y-%m-%d")
+            
+            if len(round_str) >= 5:
+                # Parse Hour for Shift Check
+                try:
+                    hour = int(round_str.split(':')[0])
+                except:
+                    hour = 0
+                
+                # Check Shift (06:00 - 18:59 = Day)
+                if not (6 <= hour <= 18):
+                    is_day = False
+                
+                # Check Date (Midnight Crossover)
+                # ถ้าเวลาเป็น 00:00 - 05:59 ให้ถือเป็นวันถัดไปของ PO
+                load_date = po_dt
+                if 0 <= hour <= 5:
+                    load_date = po_dt + timedelta(days=1)
+                
+                # Format Date: 27/11/68
+                thai_year = load_date.year + 543
+                show_date_str = load_date.strftime(f"%d/%m/{str(thai_year)[2:]}")
+            else:
+                thai_year = po_dt.year + 543
+                show_date_str = po_dt.strftime(f"%d/%m/{str(thai_year)[2:]}")
+
+        except:
+            show_date_str = first['PO_Date']
+
+        trip_data = {
+            'round': round_str,
+            'car_no': first['Car_No'],
+            'plate': first['Plate'],
+            'driver': first['Driver'],
+            'branches': [j['Branch_Name'] for j in group],
+            'load_date': show_date_str
+        }
+        
+        if is_day:
+            line_data_day.append(trip_data)
+        else:
+            line_data_night.append(trip_data)
+
+    # Sort by Round Time
+    line_data_day.sort(key=lambda x: x['round'])
+    line_data_night.sort(key=lambda x: x['round'])
+    # -------------------------------------------------------------
+
+    # [NEW] Pre-calculate Late Status for Display Table (Midnight Crossover)
+    for job in filtered_jobs:
+        job['is_start_late'] = False
         t_plan_str = str(job.get('Round', '')).strip()
         t_act_str = str(job.get('T2_StartLoad', '')).strip()
         
@@ -134,20 +208,16 @@ def manager_dashboard():
             try:
                 fmt_plan = "%H:%M" if len(t_plan_str) <= 5 else "%H:%M:%S"
                 fmt_act = "%H:%M" if len(t_act_str) <= 5 else "%H:%M:%S"
-                
                 t_plan = datetime.strptime(t_plan_str, fmt_plan)
                 t_act = datetime.strptime(t_act_str, fmt_act)
                 
-                # Logic ข้ามวัน: ถ้าเวลาแผน - เวลาจริง > 12 ชม. แปลว่าเวลาจริงคือวันถัดไป
                 if (t_plan - t_act).total_seconds() > 12 * 3600:
                     t_act = t_act + timedelta(days=1)
                 
                 if t_act > t_plan:
                     job['is_start_late'] = True
-            except:
-                pass
-    # ------------------------------------------------------------------
-    
+            except: pass
+
     # 5. Pagination Dates
     try:
         current_date_obj = datetime.strptime(date_filter, "%Y-%m-%d")
@@ -173,100 +243,8 @@ def manager_dashboard():
                            current_filter_date=date_filter,
                            prev_date=prev_date,
                            next_date=next_date,
-                           trip_last_end_time=trip_last_end_time
-                           )
-                           
-    # --- [UPDATED] Prepare Data for LINE Share (Split Day/Night) ---
-    line_data_day = []
-    line_data_night = []
-    
-    # 1. Group Jobs by Trip (เหมือนเดิม)
-    grouped_jobs = []
-    if filtered_jobs:
-        current_group = []
-        prev_key = (str(filtered_jobs[0]['PO_Date']), str(filtered_jobs[0]['Car_No']), str(filtered_jobs[0]['Round']), str(filtered_jobs[0]['Driver']))
-        for job in filtered_jobs:
-            curr_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
-            if curr_key != prev_key:
-                grouped_jobs.append(current_group)
-                current_group = []
-                prev_key = curr_key
-            current_group.append(job)
-        if current_group: grouped_jobs.append(current_group)
-    
-    # 2. Process & Split
-    for group in grouped_jobs:
-        first = group[0]
-        round_str = str(first['Round']).strip() # "11:30"
-        
-        # Calculate Logic (Day/Night & Date)
-        is_day = True
-        show_date_str = ""
-        
-        try:
-            # Parse Date & Time
-            po_dt = datetime.strptime(first['PO_Date'], "%Y-%m-%d")
-            # ถ้า round_str ว่าง หรือ format ผิด อาจ error ได้
-            if len(round_str) >= 5:
-                round_dt = datetime.strptime(round_str[:5], "%H:%M")
-                hour = round_dt.hour
-                
-                # Check Shift
-                if not (6 <= hour <= 18):
-                    is_day = False
-                
-                # Check Date (Midnight Crossover)
-                # ถ้าเป็นช่วง 00:00 - 05:59 ให้ถือเป็นวันที่ PO+1 (หรือตาม logic งานจริง)
-                # ในที่นี้ให้แสดงวันที่โหลดจริง
-                load_date = po_dt
-                if 0 <= hour <= 5:
-                    load_date = po_dt + timedelta(days=1)
-                
-                # Format Date: 27/11/68
-                thai_year = load_date.year + 543
-                show_date_str = load_date.strftime(f"%d/%m/{str(thai_year)[2:]}")
-            else:
-                # กรณีเวลาไม่ชัดเจน ให้ใช้วันที่ PO
-                thai_year = po_dt.year + 543
-                show_date_str = po_dt.strftime(f"%d/%m/{str(thai_year)[2:]}")
-
-        except:
-            show_date_str = first['PO_Date']
-
-        trip_data = {
-            'round': round_str,
-            'car_no': first['Car_No'],
-            'plate': first['Plate'],
-            'driver': first['Driver'],
-            'branches': [j['Branch_Name'] for j in group],
-            'load_date': show_date_str
-        }
-        
-        if is_day:
-            line_data_day.append(trip_data)
-        else:
-            line_data_night.append(trip_data)
-
-    # 3. Sort by Round Time (เพื่อให้ข้อความเรียงตามเวลาสวยงาม)
-    line_data_day.sort(key=lambda x: x['round'])
-    line_data_night.sort(key=lambda x: x['round'])
-
-    return render_template('manager.html', 
-                           jobs=filtered_jobs, 
-                           drivers=drivers, 
-                           all_dates=all_dates, 
-                           total_trips=total_trips, 
-                           completed_trips=completed_trips,
-                           total_branches=total_branches,
-                           total_done_jobs=total_done_jobs,
-                           total_running_jobs=total_running_jobs,
-                           now_time=now_thai.strftime("%H:%M"),
-                           today_date=today_date,
-                           current_filter_date=date_filter,
-                           prev_date=prev_date,
-                           next_date=next_date,
                            trip_last_end_time=trip_last_end_time,
-                           # ส่งข้อมูลแยก 2 ก้อน
+                           # ส่งข้อมูลที่คำนวณแล้วกลับไปที่ HTML
                            line_data_day=line_data_day,
                            line_data_night=line_data_night
                            )

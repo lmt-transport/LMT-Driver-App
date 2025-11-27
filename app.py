@@ -1100,45 +1100,7 @@ def export_pdf_summary():
 
     pdf_bytes = pdf.output()
     filename = f"Summary_{date_filter if date_filter else 'All'}.pdf"
-    return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
-    
-@app.route('/print_report')
-def print_report():
-    # อนุญาตให้เข้าถึงได้ทั่วไป (เหมือน export_excel)
-    
-    sheet = get_db()
-    raw_jobs = sheet.worksheet('Jobs').get_all_records()
-    
-    date_filter = request.args.get('date_filter')
-    if date_filter:
-        # กรองข้อมูลตามวันที่ที่ส่งมา
-        jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
-    else:
-        jobs = raw_jobs
-        
-    # เรียงลำดับข้อมูล (เหมือนหน้าอื่นๆ)
-    def sort_key_func(job):
-        po_date = str(job['PO_Date'])
-        car_no_str = str(job['Car_No']).strip()
-        round_val = str(job['Round'])
-        try: car_no_int = int(car_no_str)
-        except ValueError: car_no_int = 99999 
-        return (po_date, car_no_int, round_val)
-
-    jobs = sorted(jobs, key=sort_key_func)
-    
-    # เตรียมวันที่สำหรับแสดงหัวกระดาษ
-    print_date = datetime.now().strftime("%d/%m/%Y %H:%M")
-    
-    # แปลงวันที่ PO เป็นไทย
-    po_date_thai = ""
-    if date_filter:
-        po_date_thai = thai_date_filter(date_filter)
-
-    return render_template('print_report.html', 
-                           jobs=jobs, 
-                           po_date=po_date_thai,
-                           print_date=print_date)
+    return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)   
 
 @app.route('/tracking')
 def customer_view():

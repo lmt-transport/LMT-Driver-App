@@ -321,7 +321,6 @@ def manager_dashboard():
                            late_arrivals_by_po=late_arrivals_by_po,
                            total_late_cars=total_late_cars
                            )
-                           )
 
 @app.route('/create_job', methods=['POST'])
 def create_job():

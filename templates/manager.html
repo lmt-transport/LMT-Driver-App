@@ -415,22 +415,11 @@
         let url = '/export_pdf_summary'; 
         if (selectedDate) url += `?date_filter=${selectedDate}`;
         window.location.href = url;
-    }   
+    }
 
     // --- [CORE] ฟังก์ชัน Copy ที่รองรับทุกอุปกรณ์ ---
     async function copyToClipboard(text, successMessage) {
-        // วิธีที่ 1: ใช้ Clipboard API (Modern)
-        if (navigator.clipboard && window.isSecureContext) {
-            try {
-                await navigator.clipboard.writeText(text);
-                alert("✅ คัดลอก" + successMessage + "เรียบร้อยแล้ว!");
-                return;
-            } catch (err) {
-                console.error('Async: Could not copy text: ', err);
-            }
-        }
-
-        // วิธีที่ 2: ใช้ textarea (Fallback สำหรับมือถือรุ่นเก่าหรือ HTTP)
+        // Fallback วิธีที่ 1: ใช้ textarea (เสถียรสุดบน Mobile บางรุ่น และ HTTP)
         const textArea = document.createElement("textarea");
         textArea.value = text;
         
@@ -445,43 +434,53 @@
         
         try {
             const successful = document.execCommand('copy');
+            document.body.removeChild(textArea);
             if (successful) {
                 alert("✅ คัดลอก" + successMessage + "เรียบร้อยแล้ว!");
-            } else {
-                alert("❌ ไม่สามารถคัดลอกได้ กรุณาลองใหม่");
+                return;
             }
         } catch (err) {
-            console.error('Fallback: Oops, unable to copy', err);
-            alert("❌ Browser นี้ไม่รองรับการคัดลอกอัตโนมัติ");
+            console.error('Fallback copy failed.', err);
+            document.body.removeChild(textArea);
         }
-        
-        document.body.removeChild(textArea);
+
+        // Fallback วิธีที่ 2: ใช้ Clipboard API (Modern HTTPS)
+        if (navigator.clipboard && window.isSecureContext) {
+            try {
+                await navigator.clipboard.writeText(text);
+                alert("✅ คัดลอก" + successMessage + "เรียบร้อยแล้ว!");
+            } catch (err) {
+                console.error('Async Copy failed.', err);
+                alert("❌ ไม่สามารถคัดลอกได้ กรุณาลองใหม่");
+            }
+        }
     }
 
-    // --- LINE Share Logic (สร้างข้อความแล้วส่งไป Copy) ---
+    // --- LINE Share Logic ---
     function shareLine(shiftType) {
-        // 1. รับข้อมูล
-        const dayData = {{ line_data_day | tojson }};
-        const nightData = {{ line_data_night | tojson }};
+        // ดึงข้อมูลจาก Python (Jinja2)
+        // ใช้ tojson|safe เพื่อให้แน่ใจว่าได้ string JSON ที่ถูกต้อง
+        const dayData = {{ line_data_day | tojson | safe }};
+        const nightData = {{ line_data_night | tojson | safe }};
         
         const dataList = (shiftType === 'day') ? dayData : nightData;
         const shiftName = (shiftType === 'day') ? 'รอบโหลดกลางวัน' : 'รอบโหลดกลางคืน';
         const shiftEmoji = (shiftType === 'day') ? '☀️' : '🌙';
         
-        // 2. Format วันที่ PO
+        // Format วันที่ PO
         const poDateVal = document.getElementById('customer_date_filter').value;
         const [py, pm, pd] = poDateVal.split('-');
         const yearThaiShort = (parseInt(py) + 543).toString().slice(2);
         const poDateThai = `${pd}.${pm}.${yearThaiShort}`; 
         
-        if (dataList.length === 0) {
+        if (!dataList || dataList.length === 0) {
             alert(`⚠️ ไม่พบข้อมูลงานสำหรับ ${shiftName}`);
             return;
         }
 
         const loadDateShow = dataList[0].load_date; 
 
-        // 3. สร้างข้อความ (Format ใหม่ที่ขอมา)
+        // สร้างข้อความ
         let msg = `📄 LMT PO ${poDateThai} (${shiftEmoji} ${shiftName} วันที่ ${loadDateShow})\n\n`;
 
         let groupedByRound = {};
@@ -505,7 +504,8 @@
             });
         }
 
-        // 4. ส่งไป Copy (ไม่ต้อง window.open แล้ว)
+        // ส่งไป Copy
+        // console.log("Text to copy:", msg); // Uncomment เพื่อ Debug ดูข้อความใน Console
         copyToClipboard(msg, "ตารางงาน");
     }
 </script>

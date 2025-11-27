@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {% extends "layout.html" %}
 {% block content %}
 
@@ -482,4 +483,490 @@
     });
 </script>
 
+=======
+{% extends "layout.html" %}
+{% block content %}
+
+<style>
+    body, h1, h2, h3, h4, h5, h6, p, span, div, table, input, select, button {
+        font-family: 'Kanit', sans-serif !important;
+    }
+    .table-data { font-size: 0.85rem; } 
+    .table-header { font-size: 0.75rem; }
+</style>
+
+<div class="max-w-7xl mx-auto pb-10">
+    
+    <div class="grid grid-cols-6 gap-3 mb-6">
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500">
+            <div class="text-gray-500 text-xs font-bold uppercase">เที่ยววิ่งทั้งหมด</div>
+            <div class="text-2xl font-bold text-gray-800">{{ total_trips }}</div>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-700">
+            <div class="text-gray-500 text-xs font-bold uppercase">เที่ยววิ่งที่จบแล้ว</div>
+            <div class="text-2xl font-bold text-green-700">{{ completed_trips }}</div>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-gray-400">
+            <div class="text-gray-500 text-xs font-bold uppercase">สาขาทั้งหมด</div>
+            <div class="text-2xl font-bold text-gray-800">{{ total_branches }}</div>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-500">
+            <div class="text-gray-500 text-xs font-bold uppercase">สาขาที่จบแล้ว</div>
+            <div class="text-2xl font-bold text-green-600">{{ total_done_jobs }}</div>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-yellow-500">
+            <div class="text-gray-500 text-xs font-bold uppercase">สาขาที่กำลังวิ่ง</div>
+            <div class="text-2xl font-bold text-yellow-600">{{ total_running_jobs }}</div>
+        </div>
+        <div class="bg-indigo-600 p-4 rounded-xl shadow-sm text-white flex flex-col justify-center items-center cursor-pointer hover:bg-indigo-700 active:scale-95 transition group" onclick="copyCustomerLink()">
+            <div class="text-xs opacity-80 group-hover:opacity-100"><i class="fa-solid fa-share-nodes"></i> ลิงค์สำหรับลูกค้า</div>
+            <div class="font-bold text-sm mt-1 flex items-center gap-2">คลิกคัดลอก <i class="fa-regular fa-copy"></i></div>
+        </div>
+    </div>
+
+    <div class="flex space-x-2 mb-6 overflow-x-auto no-scrollbar pb-1">
+        <button onclick="switchTab('tab-monitor')" id="btn-monitor" class="tab-btn flex-1 py-3 px-4 bg-indigo-600 text-white rounded-lg shadow font-medium transition hover:bg-indigo-700 whitespace-nowrap text-sm"><i class="fa-solid fa-satellite-dish mr-2"></i> ติดตามงาน (Monitor)</button>
+        <button onclick="switchTab('tab-create')" id="btn-create" class="tab-btn flex-1 py-3 px-4 bg-white text-gray-600 rounded-lg shadow font-medium transition hover:bg-gray-100 whitespace-nowrap text-sm"><i class="fa-solid fa-plus-circle mr-2"></i> สร้างงานใหม่</button>
+        <button onclick="switchTab('tab-report')" id="btn-report" class="tab-btn flex-1 py-3 px-4 bg-white text-gray-600 rounded-lg shadow font-medium transition hover:bg-gray-100 whitespace-nowrap text-sm"><i class="fa-solid fa-table mr-2"></i> รายงาน (Excel Report)</button>
+    </div>
+
+    <div id="tab-monitor" class="tab-content">
+        <div class="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
+            
+            <div class="p-4 border-b flex flex-wrap justify-between items-center bg-gray-50 gap-3">
+                <h3 class="font-bold text-gray-700 flex items-center gap-2 text-lg">
+                    <i class="fa-solid fa-list-check text-indigo-600"></i> สถานะงาน
+                </h3>
+                
+                <form method="GET" action="/manager" class="flex items-center gap-2 bg-white p-1.5 rounded-lg border border-gray-300 shadow-sm">
+                    <input type="hidden" name="tab" value="monitor">
+                    
+                    <a href="/manager?tab=monitor&date_filter={{ prev_date }}" class="px-2 text-gray-500 hover:text-indigo-600 border-r border-gray-200" title="วันก่อนหน้า">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </a>
+
+                    <span class="text-xs font-bold text-gray-500 pl-1">PO:</span>
+                    <input type="date" name="date_filter" value="{{ current_filter_date }}" onchange="this.form.submit()" class="text-sm border-none focus:ring-0 cursor-pointer font-medium text-gray-700 h-8 bg-transparent">
+                    
+                    <a href="/manager?tab=monitor&date_filter={{ next_date }}" class="px-2 text-gray-500 hover:text-indigo-600 border-l border-gray-200" title="วันถัดไป">
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </a>
+                    
+                    <a href="/manager?tab=monitor" class="text-gray-400 hover:text-indigo-600 px-2 border-l border-gray-200" title="วันนี้"><i class="fa-solid fa-rotate-right"></i></a>
+                </form>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-gray-600 table-data">
+                    <thead class="text-gray-700 uppercase bg-gray-100 border-b table-header">
+                        <tr>
+                            <th class="px-4 py-3 text-center">สถานะ</th>
+                            <th class="px-4 py-3">เที่ยววิ่ง (PO / คันที่)</th>
+                            <th class="px-4 py-3">คนขับ / ทะเบียน</th>
+                            <th class="px-4 py-3 text-center">เวลาโหลด</th>
+                            <th class="px-4 py-3 text-center">เข้าโรงงาน</th>
+                            <th class="px-4 py-3 text-center">ออกโรงงาน</th>
+                            <th class="px-4 py-3 text-center">จบงาน (ล่าสุด)</th>
+                            <th class="px-4 py-3 text-center">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% if jobs|length == 0 %}
+                            <tr><td colspan="8" class="p-10 text-center text-gray-400">ไม่พบข้อมูลงานในวันที่เลือก</td></tr>
+                        {% endif %}
+
+                        {% for job in jobs %}
+                            {% if loop.first or (loop.previtem.Car_No != job.Car_No or loop.previtem.PO_Date != job.PO_Date or loop.previtem.Round != job.Round) %}
+                                
+                                {% set current_time_str = now_time %}
+                                {% set is_late = (job.Round < current_time_str and job.PO_Date <= today_date) %}
+                                
+                                {% set trip_key = job.PO_Date ~ "', '" ~ job.Car_No ~ "', '" ~ job.Round %}
+                                {% set trip_key_tuple = (job.PO_Date|string, job.Car_No|string, job.Round|string) %}
+                                {% set last_end_time = trip_last_end_time.get(trip_key_tuple, "") %}
+
+                                {% if last_end_time %}
+                                    {% set status_badge = '<span class="inline-flex items-center gap-1 bg-green-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm"><i class="fa-solid fa-flag-checkered"></i> จบงาน</span>' %}
+                                {% elif job.T6_Exit %}
+                                    {% set status_badge = '<span class="inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full border border-blue-200"><i class="fa-solid fa-truck-fast"></i> กำลังออกส่ง</span>' %}
+                                {% elif job.T1_Enter %}
+                                    {% set status_badge = '<span class="inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-1 rounded-full border border-indigo-200"><i class="fa-solid fa-warehouse"></i> ถึงคลังแล้ว</span>' %}
+                                {% else %}
+                                    {% if is_late %}
+                                        {% set status_badge = '<span class="inline-flex items-center gap-1 bg-red-100 text-red-700 text-xs font-bold px-3 py-1 rounded-full border border-red-200 animate-pulse"><i class="fa-solid fa-circle-exclamation"></i> ยังไม่เข้า (ล่าช้า)</span>' %}
+                                    {% elif job.PO_Date > today_date %}
+                                        {% set status_badge = '<span class="inline-flex items-center gap-1 bg-gray-100 text-gray-500 text-xs font-bold px-3 py-1 rounded-full border border-gray-200"><i class="fa-regular fa-clock"></i> ยังไม่ถึงวัน</span>' %}
+                                    {% else %}
+                                        {% set status_badge = '<span class="inline-flex items-center gap-1 bg-gray-200 text-gray-700 text-xs font-bold px-3 py-1 rounded-full border border-gray-300">ยังไม่เข้าคลัง</span>' %}
+                                    {% endif %}
+                                {% endif %}
+
+                                <tr class="hover:bg-indigo-50/30 transition">
+                                    <td class="px-4 py-3 text-center">{{ status_badge | safe }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap">
+                                        <div class="font-bold text-gray-800">{{ job.PO_Date | thai_date }}</div>
+                                        <div class="text-xs text-gray-500">คันที่ #{{ job.Car_No }}</div>
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        <div class="font-medium text-gray-900">{{ job.Driver }}</div>
+                                        <div class="text-xs text-gray-500 bg-gray-100 inline-block px-1.5 py-0.5 rounded mt-1">{{ job.Plate }}</div>
+                                    </td>
+                                    <td class="px-4 py-3 text-center font-bold text-indigo-700 text-base">{{ job.Round }}</td>
+                                    <td class="px-4 py-3 text-center">
+                                        {% if job.T1_Enter %}<span class="text-indigo-600 font-bold">{{ job.T1_Enter }}</span>{% else %}<span class="text-gray-300">-</span>{% endif %}
+                                    </td>
+                                    <td class="px-4 py-3 text-center">
+                                        {% if job.T6_Exit %}<span class="text-blue-600 font-bold">{{ job.T6_Exit }}</span>{% else %}<span class="text-gray-300">-</span>{% endif %}
+                                    </td>
+                                    <td class="px-4 py-3 text-center">
+                                        {% if last_end_time %}
+                                            <span class="text-green-600 font-bold">{{ last_end_time }}</span>
+                                        {% else %}
+                                            <span class="text-gray-300">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-4 py-3 text-center flex justify-center gap-2">
+                                        {% if job.L1_Loc %}
+                                            <a href="https://www.google.com/maps/search/?api=1&query={{ job.L1_Loc }}" target="_blank" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800 transition shadow-sm" title="ดูพิกัด"><i class="fa-solid fa-location-dot"></i></a>
+                                        {% endif %}
+                                        <form action="/delete_job" method="POST" onsubmit="return confirm('⚠️ ยืนยันการลบเที่ยววิ่งนี้?');">
+                                            <input type="hidden" name="po_date" value="{{ job.PO_Date }}">
+                                            <input type="hidden" name="round_time" value="{{ job.Round }}">
+                                            <input type="hidden" name="car_no" value="{{ job.Car_No }}">
+                                            <button type="submit" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition shadow-sm" title="ลบงาน"><i class="fa-solid fa-trash-can"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="tab-create" class="tab-content hidden">
+        <div class="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-8 border border-gray-100">
+            <h3 class="text-xl font-bold text-gray-800 mb-6 border-b pb-2 flex items-center gap-2"><i class="fa-solid fa-pen-to-square text-indigo-600"></i> สร้างใบงานใหม่</h3>
+            <form action="/create_job" method="POST" class="space-y-5">
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">วันที่ (PO Date)</label><input type="date" name="po_date" required class="w-full rounded-lg border-gray-300 shadow-sm p-2.5 border bg-gray-50"></div>
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">รอบโหลด</label><input type="time" name="round_time" required class="w-full rounded-lg border-gray-300 shadow-sm p-2.5 border bg-gray-50"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">คันที่</label><input type="number" name="car_no" placeholder="1" required class="w-full rounded-lg border-gray-300 p-2.5 border bg-gray-50"></div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">คนขับ</label>
+                        <select id="driver_select" name="driver_name" onchange="updatePlate()" required class="w-full rounded-lg border-gray-300 p-2.5 border">
+                            <option value="">-- เลือก --</option>
+                            {% for driver in drivers %}
+                            <option value="{{ driver.Name }}" data-plate="{{ driver.Plate_License }}">{{ driver.Name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="bg-gray-100 p-3 rounded-lg flex items-center gap-2 text-sm text-gray-600 border border-gray-200"><i class="fa-solid fa-car-side"></i> ทะเบียนรถ: <input type="text" id="plate_input" name="plate_license" readonly class="bg-transparent font-bold text-gray-800 w-full focus:outline-none"></div>
+                <hr class="border-gray-100">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">สาขาปลายทาง</label>
+                    <div id="branch-container" class="space-y-3">
+                        <div class="flex gap-2">
+                            <span class="bg-indigo-100 text-indigo-600 px-3 py-2 rounded-lg font-bold text-sm flex items-center shadow-sm">1</span>
+                            <input type="text" name="branches" placeholder="สาขาที่ 1" required class="flex-1 rounded-lg border-gray-300 p-2.5 border">
+                        </div>
+                    </div>
+                    <button type="button" onclick="addBranchField()" class="mt-3 text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition"><i class="fa-solid fa-circle-plus text-lg"></i> เพิ่มสาขา</button>
+                </div>
+                <div class="pt-4"><button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition shadow-lg">บันทึกงานทั้งหมด</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div id="tab-report" class="tab-content">
+        <div class="bg-white rounded-xl shadow-lg p-4 border border-gray-100">
+            
+            <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <h3 class="font-bold text-gray-800 flex items-center gap-2 text-lg"><div class="bg-green-100 p-2 rounded text-green-700"><i class="fa-solid fa-file-csv"></i></div> สรุปรายงานประจำวัน</h3>
+                
+                <form method="GET" action="/manager" class="flex flex-wrap gap-2 w-full md:w-auto items-center justify-end">
+                    <input type="hidden" name="tab" value="report">
+                    
+                    <div class="flex items-center gap-2 bg-white p-1.5 rounded-lg border border-gray-300 shadow-sm">
+                        <a href="/manager?tab=report&date_filter={{ prev_date }}" class="px-2 text-gray-500 hover:text-indigo-600 border-r border-gray-200"><i class="fa-solid fa-chevron-left"></i></a>
+                        
+                        <span class="text-xs font-bold text-gray-500 pl-1">PO:</span>
+                        <input type="date" name="date_filter" id="report_date_filter" value="{{ current_filter_date }}" onchange="this.form.submit()" class="text-sm border-none focus:ring-0 cursor-pointer font-medium text-gray-700 h-8 bg-transparent">
+                        
+                        <a href="/manager?tab=report&date_filter={{ next_date }}" class="px-2 text-gray-500 hover:text-indigo-600 border-l border-gray-200"><i class="fa-solid fa-chevron-right"></i></a>
+                    </div>
+			<a href="#" onclick="triggerCustomerPDF()" class="bg-red-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-red-700 transition shadow-md flex items-center gap-2 transform active:scale-95">
+				<i class="fa-solid fa-file-pdf"></i> <span class="hidden sm:inline">PDF Export</span>
+			</a>
+			<a href="#" onclick="triggerCompactPDF()" class="bg-orange-500 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-orange-600 transition shadow-md flex items-center gap-2 transform active:scale-95">
+				<i class="fa-solid fa-file-contract"></i> <span class="hidden sm:inline">PDF Summary</span>
+			</a>
+                    <a href="#" onclick="triggerExport()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-bold shadow transition flex items-center gap-2"><i class="fa-solid fa-file-excel"></i> Export Excel</a>
+					<button onclick="shareLine('day')" class="bg-[#06C755] text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#05b34c] transition shadow-md flex items-center gap-1 transform active:scale-95" title="แชร์รอบกลางวัน">
+        <i class="fa-brands fa-line text-lg"></i> <i class="fa-solid fa-sun text-yellow-300"></i>
+    </button>
+    <button onclick="shareLine('night')" class="bg-[#06C755] text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#05b34c] transition shadow-md flex items-center gap-1 transform active:scale-95" title="แชร์รอบกลางคืน">
+        <i class="fa-brands fa-line text-lg"></i> <i class="fa-solid fa-moon text-indigo-100"></i>
+    </button>
+                    <a href="/manager?tab=report" class="bg-white text-gray-500 border border-gray-300 px-3 py-2 rounded-lg hover:bg-gray-100 text-sm shadow-sm"><i class="fa-solid fa-rotate-right"></i></a>
+                </form>
+            </div>
+
+            <div class="border rounded-lg overflow-hidden overflow-x-auto shadow-inner bg-gray-500">
+                <table class="w-full text-center border-collapse whitespace-nowrap table-data">
+                    <thead>
+                        <tr class="text-white table-header font-bold tracking-wide">
+                            <th class="p-3 bg-green-700 border-r border-green-600 sticky left-0 z-10 shadow-lg">ลำดับรถ</th>
+                            <th class="p-3 bg-green-600 border-r border-green-500">PO Date</th>
+                            <th class="p-3 bg-green-600 border-r border-green-500">เวลาโหลด</th>
+                            <th class="p-3 bg-green-600 border-r border-green-500 min-w-[150px]">ปลายทาง (สาขา)</th>
+                            <th class="p-3 bg-green-600 border-r border-green-500">ทะเบียนรถ</th>
+                            <th class="p-3 bg-green-600 border-r border-green-500">ชื่อคนขับ</th>
+                            <th class="p-3 bg-[#c0504d] border-r border-[#a64d4d]">1.เข้าโรงงาน</th>
+                            <th class="p-3 bg-[#c0504d] border-r border-[#a64d4d]">2.เริ่มโหลด</th>
+                            <th class="p-3 bg-[#c0504d] border-r border-[#a64d4d]">3.โหลดเสร็จ</th>
+                            <th class="p-3 bg-[#c0504d] border-r border-[#a64d4d]">4.ยื่นเอกสาร</th>
+                            <th class="p-3 bg-[#c0504d] border-r border-[#a64d4d]">5.รับเอกสาร</th>
+                            <th class="p-3 bg-[#c0504d] border-r border-[#a64d4d]">6.ออกโรงงาน</th>
+                            <th class="p-3 bg-[#9bbb59] border-r border-[#8aa64f]">7.ถึงสาขา</th>
+                            <th class="p-3 bg-[#9bbb59]">8.จบงาน</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-gray-700 bg-white">
+                        {% if jobs|length == 0 %}
+                            <tr><td colspan="14" class="p-10 text-center text-gray-400">กรุณาเลือกวันที่ หรือ ไม่พบข้อมูล</td></tr>
+                        {% else %}
+                            {% macro report_time_cell(time_val, loc_val, text_class='') %}
+                                {% if time_val %}
+                                    {% if loc_val %}
+                                        <a href="https://maps.google.com/maps?q={{ loc_val }}" target="_blank" 
+                                           class="inline-flex items-center justify-center gap-1 hover:bg-gray-100/80 px-1.5 py-0.5 rounded transition group cursor-pointer {{ text_class }}" 
+                                           title="คลิกเพื่อดูพิกัดบนแผนที่">
+                                            {{ time_val }} <i class="fa-solid fa-location-dot text-[10px] opacity-30 group-hover:opacity-100 group-hover:text-blue-600"></i>
+                                        </a>
+                                    {% else %}
+                                        <span class="{{ text_class }}">{{ time_val }}</span>
+                                    {% endif %}
+                                {% endif %}
+                            {% endmacro %}
+
+                            {% for job in jobs %}
+                                {% set is_same = False %}
+                                {% if not loop.first and loop.previtem.Car_No == job.Car_No and loop.previtem.Driver == job.Driver and loop.previtem.PO_Date == job.PO_Date %}
+                                    {% set is_same = True %}
+                                {% endif %}
+                                
+                                {% set start_load_color = '' %}
+                                {% if job.T2_StartLoad %}
+                                    {% if job.is_start_late %} 
+                                        {% set start_load_color = 'text-red-600 font-bold' %}
+                                    {% else %} 
+                                        {% set start_load_color = 'text-green-600 font-bold' %} 
+                                    {% endif %}
+                                {% endif %}
+                                
+                                <tr class="border-b hover:bg-gray-50 transition">
+                                    <td class="p-2 border-r font-bold bg-gray-50 sticky left-0 z-10 border-gray-200 text-indigo-900">
+                                        {% if not is_same %} คันที่ {{ job.Car_No }} {% endif %}
+                                    </td>
+                                    <td class="p-2 border-r border-gray-200">
+                                        {% if not is_same %}{{ job.PO_Date | thai_date }}{% endif %}
+                                    </td>
+                                    <td class="p-2 border-r border-gray-200 font-bold">
+                                        {% if not is_same %}{{ job.Round }}{% endif %}
+                                    </td>
+                                    <td class="p-2 border-r border-gray-200 text-left pl-4 font-bold text-indigo-700">{{ job.Branch_Name }}</td>
+                                    <td class="p-2 border-r border-gray-200">
+                                        {% if not is_same %} {{ job.Plate }} {% endif %}
+                                    </td>
+                                    <td class="p-2 border-r border-gray-200 font-medium">
+                                        {% if not is_same %} {{ job.Driver }} {% endif %}
+                                    </td>
+                                    
+                                    <td class="p-2 border-r border-gray-200">
+                                        {% if not is_same %}
+                                            {{ report_time_cell(job.T1_Enter, job.L1_Loc) }}
+                                        {% endif %}
+                                    </td>
+                                    <td class="p-2 border-r border-gray-200">
+                                        {% if not is_same %}
+                                            {{ report_time_cell(job.T2_StartLoad, job.L2_Loc, start_load_color) }}
+                                        {% endif %}
+                                    </td>
+                                    <td class="p-2 border-r border-gray-200">
+                                        {% if not is_same %}
+                                            {{ report_time_cell(job.T3_EndLoad, job.L3_Loc) }}
+                                        {% endif %}
+                                    </td>
+                                    <td class="p-2 border-r border-gray-200">
+                                        {% if not is_same %}
+                                            {{ report_time_cell(job.T4_SubmitDoc, job.L4_Loc) }}
+                                        {% endif %}
+                                    </td>
+                                    <td class="p-2 border-r border-gray-200">
+                                        {% if not is_same %}
+                                            {{ report_time_cell(job.T5_RecvDoc, job.L5_Loc) }}
+                                        {% endif %}
+                                    </td>
+                                    <td class="p-2 border-r border-gray-200">
+                                        {% if not is_same %}
+                                            {{ report_time_cell(job.T6_Exit, job.L6_Loc) }}
+                                        {% endif %}
+                                    </td>
+                                    
+                                    <td class="p-2 border-r font-bold text-green-700 bg-green-50/50 border-gray-200">
+                                        {{ report_time_cell(job.T7_ArriveBranch, job.L7_Loc, 'text-green-800') }}
+                                    </td>
+                                    <td class="p-2 font-bold text-red-600 bg-red-50/50">
+                                        {{ report_time_cell(job.T8_EndJob, job.L8_Loc, 'text-red-700') }}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-2 text-right text-[10px] text-gray-400">Data refreshed at: <span id="report-time"></span></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Tab Logic
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('bg-indigo-600', 'text-white', 'shadow');
+            btn.classList.add('bg-white', 'text-gray-600');
+        });
+        document.getElementById(tabId).classList.remove('hidden');
+        let btn = document.getElementById(tabId.replace('tab-', 'btn-'));
+        btn.classList.remove('bg-white', 'text-gray-600');
+        btn.classList.add('bg-indigo-600', 'text-white', 'shadow');
+        localStorage.setItem('activeTab', tabId);
+    }
+
+    // Helper Functions
+    function updatePlate() {
+        const select = document.getElementById('driver_select');
+        const selectedOption = select.options[select.selectedIndex];
+        const plate = selectedOption.getAttribute('data-plate');
+        document.getElementById('plate_input').value = plate || "";
+    }
+
+    function addBranchField() {
+        const container = document.getElementById('branch-container');
+        const count = container.children.length + 1;
+        const div = document.createElement('div');
+        div.className = 'flex gap-2';
+        div.innerHTML = `<span class="bg-indigo-100 text-indigo-600 px-3 py-2 rounded-lg font-bold text-sm flex items-center shadow-sm">${count}</span><input type="text" name="branches" placeholder="ระบุชื่อสาขาที่ ${count}" required class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border"><button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 px-2 transition"><i class="fa-solid fa-trash"></i></button>`;
+        container.appendChild(div);
+    }
+
+    function copyCustomerLink() {
+        let url = window.location.origin + "/tracking";
+        navigator.clipboard.writeText(url).then(() => alert("✅ คัดลอกลิงค์สำหรับลูกค้าแล้ว:\n" + url));
+    }
+
+    function triggerExport() {
+        const selectedDate = document.getElementById('report_date_filter').value;
+        let url = '/export_excel';
+        if (selectedDate) url += `?date_filter=${selectedDate}`;
+        
+        // ใช้ window.location.href แทน window.open สำหรับการดาวน์โหลดไฟล์
+        window.location.href = url;
+    }
+
+    function triggerCustomerPDF() {
+        const selectedDate = document.getElementById('report_date_filter').value;
+        let url = '/export_pdf';
+        if (selectedDate) {
+            url += `?date_filter=${selectedDate}`;
+        }
+        
+        // ใช้ window.location.href แทน window.open สำหรับการดาวน์โหลดไฟล์
+        window.location.href = url;
+    }
+	
+	function triggerCompactPDF() {
+    const selectedDate = document.getElementById('report_date_filter').value;
+    let url = '/export_pdf_summary'; 
+    if (selectedDate) {
+        url += `?date_filter=${selectedDate}`;
+    }
+    window.location.href = url;
+	}
+	
+    document.addEventListener("DOMContentLoaded", function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tabParam = urlParams.get('tab');
+        const savedTab = localStorage.getItem('activeTab') || 'tab-monitor';
+        if(tabParam) switchTab('tab-' + tabParam); else switchTab(savedTab);
+        document.getElementById('report-time').innerText = new Date().toLocaleString('th-TH');
+    });
+	
+	// --- [UPDATED] LINE Share Function (Exact Match to Image) ---
+    function shareLine(shiftType) {
+        // 1. รับข้อมูล
+        const dayData = {{ line_data_day | tojson }};
+        const nightData = {{ line_data_night | tojson }};
+        
+        const dataList = (shiftType === 'day') ? dayData : nightData;
+        const shiftName = (shiftType === 'day') ? 'รอบโหลดกลางวัน' : 'รอบโหลดกลางคืน';
+        const shiftEmoji = (shiftType === 'day') ? '☀️' : '🌙';
+        
+        // 2. Format วันที่ PO
+        const poDateVal = document.getElementById('customer_date_filter').value;
+        const [py, pm, pd] = poDateVal.split('-');
+        const yearThaiShort = (parseInt(py) + 543).toString().slice(2);
+        const poDateThai = `${pd}.${pm}.${yearThaiShort}`; 
+        
+        if (dataList.length === 0) {
+            alert(`⚠️ ไม่พบข้อมูลงานสำหรับ ${shiftName}`);
+            return;
+        }
+
+        const loadDateShow = dataList[0].load_date; 
+
+        // --- สร้างข้อความ Header ---
+        let msg = `📄 LMT PO ${poDateThai} (${shiftEmoji} ${shiftName} วันที่ ${loadDateShow})\n\n`;
+
+        // จัดกลุ่มตามเวลา
+        let groupedByRound = {};
+        dataList.forEach(item => {
+            let r = item.round || "ไม่ระบุเวลา";
+            if (!groupedByRound[r]) groupedByRound[r] = [];
+            groupedByRound[r].push(item);
+        });
+
+        // Loop ตามเวลา
+        for (const [roundTime, cars] of Object.entries(groupedByRound)) {
+            // หัวข้อเวลา
+            msg += `🕒 รอบโหลด ${roundTime} น.\n`;
+            
+            cars.forEach(car => {
+                // ข้อมูลรถ (Truck Icon, No Person Icon)
+                msg += `🚛 คันที่ ${car.car_no} ${car.plate} ${car.driver}\n`;
+                
+                // รายชื่อสาขา (มีหมุด 📍 นำหน้าทุกบรรทัด)
+                car.branches.forEach(branch => {
+                    msg += `📍 ${branch}\n`;
+                });
+                
+                msg += `\n`; // เว้นบรรทัดจบคัน (ให้มีช่องว่างสวยงาม)
+            });
+        }
+
+        // Encode และส่ง
+        const encodedMsg = encodeURIComponent(msg);
+        const lineUrl = `https://line.me/R/msg/text/?${encodedMsg}`;
+        window.open(lineUrl, '_blank');
+    }
+</script>
+
+>>>>>>> 4ec745428e5b7e981fc474106da9e1815988b8be
 {% endblock %}

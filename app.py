@@ -158,7 +158,7 @@ def manager_dashboard():
 
     filtered_jobs = sorted(filtered_jobs, key=sort_key_func)
     
-    # --- Prepare Data for LINE Share (ใช้ Load_Date โดยตรง) ---
+# --- Prepare Data for LINE Share & Update Status ---
     line_data_day = []
     line_data_night = []
     
@@ -178,14 +178,14 @@ def manager_dashboard():
     for group in grouped_jobs:
         first = group[0]
         round_str = str(first['Round']).strip()
-        load_date_raw = str(first.get('Load_Date', first['PO_Date'])).strip() # ใช้ Load_Date
+        load_date_raw = str(first.get('Load_Date', first['PO_Date'])).strip()
         
-        # จัดรูปแบบวันที่โหลดให้สวยงาม (DD/MM/YY)
+        # จัดรูปแบบวันที่
         show_date_str = load_date_raw
         try:
             ld_obj = datetime.strptime(load_date_raw, "%Y-%m-%d")
             thai_year = ld_obj.year + 543
-            show_date_str = ld_obj.strftime(f"%d/%m/{str(thai_year)[2:]}")
+            show_date_str = ld_obj.strftime(f"%d.%m.{thai_year}") # Format: 28.11.2025
         except: pass
 
         # แยกกะ เช้า/ค่ำ
@@ -195,13 +195,56 @@ def manager_dashboard():
             if h < 6 or h >= 19: is_day = False
         except: pass
 
+        # --- [NEW] Logic หา "สถานะล่าสุด" (Latest Status) ---
+        status_txt = "รอเข้า"
+        status_time = ""
+
+        # เช็คย้อนกลับจากจบงาน -> เริ่มต้น
+        is_all_done = all(j['Status'] == 'Done' for j in group)
+        
+        if is_all_done:
+            status_txt = "จบงาน"
+            # เวลาจบของสาขาสุดท้าย
+            status_time = group[-1].get('T8_EndJob', '')
+        elif first.get('T6_Exit'):
+            # ออกโรงงานแล้ว เช็คว่าถึงสาขาไหนหรือยัง
+            status_txt = "ออกโรงงาน"
+            status_time = first.get('T6_Exit')
+            for b in group:
+                if b.get('T7_ArriveBranch') and not b.get('T8_EndJob'):
+                    status_txt = f"ถึง{b['Branch_Name']}"
+                    status_time = b.get('T7_ArriveBranch')
+                    break
+        elif first.get('T5_RecvDoc'):
+            status_txt = "รับเอกสาร"
+            status_time = first.get('T5_RecvDoc')
+        elif first.get('T4_SubmitDoc'):
+            status_txt = "ยื่นเอกสาร"
+            status_time = first.get('T4_SubmitDoc')
+        elif first.get('T3_EndLoad'):
+            status_txt = "โหลดเสร็จ"
+            status_time = first.get('T3_EndLoad')
+        elif first.get('T2_StartLoad'):
+            status_txt = "กำลังโหลด"
+            status_time = first.get('T2_StartLoad')
+        elif first.get('T1_Enter'):
+            status_txt = "เข้าโรงงาน"
+            status_time = first.get('T1_Enter')
+        
+        # จัดรูปแบบข้อความสถานะ (ถ้ามีเวลา ให้ใส่วงเล็บ)
+        full_status = f"{status_txt}"
+        if status_time:
+            full_status = f"{status_txt} ({status_time})"
+        # ----------------------------------------------------
+
         trip_data = {
             'round': round_str,
             'car_no': first['Car_No'],
             'plate': first['Plate'],
             'driver': first['Driver'],
             'branches': [j['Branch_Name'] for j in group],
-            'load_date': show_date_str
+            'load_date': show_date_str,
+            'latest_status': full_status # ส่งค่าสถานะไปหน้าบ้าน
         }
         
         if is_day: line_data_day.append(trip_data)

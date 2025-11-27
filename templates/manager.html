@@ -262,12 +262,19 @@
                         <i class="fa-solid fa-file-contract"></i> <span class="hidden sm:inline">Summary</span>
                     </a>
                     <a href="#" onclick="triggerExport()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-bold shadow transition flex items-center gap-2"><i class="fa-solid fa-file-excel"></i> Excel</a>
-                    <button type="button" onclick="shareLine('day')" class="bg-[#06C755] text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#05b34c] transition shadow-md flex items-center gap-1 transform active:scale-95" title="คัดลอกรอบกลางวัน">
-                        <i class="fa-brands fa-line text-lg"></i> <i class="fa-solid fa-sun text-yellow-300"></i>
-                    </button>
-                    <button type="button" onclick="shareLine('night')" class="bg-[#06C755] text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#05b34c] transition shadow-md flex items-center gap-1 transform active:scale-95" title="คัดลอกรอบกลางคืน">
-                        <i class="fa-brands fa-line text-lg"></i> <i class="fa-solid fa-moon text-indigo-100"></i>
-                    </button>
+                    <button type="button" onclick="shareLine('day')" class="bg-[#06C755] text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#05b34c] transition shadow-md flex items-center gap-1 transform active:scale-95" title="แผนงานกลางวัน">
+    <i class="fa-brands fa-line text-lg"></i> <i class="fa-solid fa-sun text-yellow-300"></i>
+</button>
+<button type="button" onclick="shareLine('night')" class="bg-[#06C755] text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#05b34c] transition shadow-md flex items-center gap-1 transform active:scale-95" title="แผนงานกลางคืน">
+    <i class="fa-brands fa-line text-lg"></i> <i class="fa-solid fa-moon text-indigo-100"></i>
+</button>
+
+<button type="button" onclick="copyUpdateText('day')" class="bg-blue-600 text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-blue-700 transition shadow-md flex items-center gap-1 transform active:scale-95" title="อัพเดทสถานะกลางวัน">
+    <i class="fa-solid fa-bullhorn"></i> <i class="fa-solid fa-sun text-yellow-300"></i>
+</button>
+<button type="button" onclick="copyUpdateText('night')" class="bg-indigo-600 text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-indigo-700 transition shadow-md flex items-center gap-1 transform active:scale-95" title="อัพเดทสถานะกลางคืน">
+    <i class="fa-solid fa-bullhorn"></i> <i class="fa-solid fa-moon text-indigo-100"></i>
+</button>
                     <a href="/manager?tab=report" class="bg-white text-gray-500 border border-gray-300 px-3 py-2 rounded-lg hover:bg-gray-100 text-sm shadow-sm"><i class="fa-solid fa-rotate-right"></i></a>
                 </form>
             </div>
@@ -524,6 +531,57 @@
         }
 
         copyToClipboard(msg, "ตารางงาน");
+    }
+	
+	// --- [NEW] Update Status Share Logic ---
+    function copyUpdateText(shiftType) {
+        // รับข้อมูลชุดเดิมจาก Python (เพราะเราเพิ่ม latest_status เข้าไปแล้ว)
+        const dayData = {{ line_data_day | tojson | safe }};
+        const nightData = {{ line_data_night | tojson | safe }};
+        
+        const dataList = (shiftType === 'day') ? dayData : nightData;
+        const shiftLabel = (shiftType === 'day') ? 'รอบบ่าย' : 'รอบดึก'; // ตามรูปแบบที่ขอ
+        
+        // รับค่า PO Date
+        const poDateVal = getFilterDate(); 
+        if (!poDateVal) { alert("กรุณาเลือกวันที่ก่อน"); return; }
+        const [py, pm, pd] = poDateVal.split('-').map(Number);
+        
+        // Format Header: LMT PO.28.11.2025
+        const poDateFormatted = `${pd.toString().padStart(2,'0')}.${pm.toString().padStart(2,'0')}.${py + 543}`; 
+
+        if (!dataList || dataList.length === 0) {
+            alert(`⚠️ ไม่พบข้อมูลสำหรับ ${shiftLabel}`);
+            return;
+        }
+
+        // สร้าง Header
+        let msg = `อัพเดท รอบโหลด (${shiftLabel})\n`;
+        msg += `🚛 LMT PO.${poDateFormatted}\n\n`;
+
+        // Group by Round
+        let groupedByRound = {};
+        dataList.forEach(item => {
+            let r = item.round || "ไม่ระบุ";
+            // แปลง : เป็น . ตามตัวอย่าง (เช่น 0:30 -> 0.30)
+            r = r.replace(':', '.'); 
+            if (!groupedByRound[r]) groupedByRound[r] = [];
+            groupedByRound[r].push(item);
+        });
+
+        // Loop สร้างเนื้อหา
+        for (const [roundTime, cars] of Object.entries(groupedByRound)) {
+            msg += `🕒 รอบโหลด : ${roundTime}\n`;
+            
+            cars.forEach(car => {
+                // รูปแบบ: คันที่ 80 บห-3169 = สถานะล่าสุด (เวลา)
+                msg += `คันที่ ${car.car_no} ${car.plate} = ${car.latest_status}\n`;
+            });
+            
+            msg += `\n`; // เว้นบรรทัดระหว่างรอบ
+        }
+
+        copyToClipboard(msg, "ข้อความอัพเดทสถานะ");
     }
 </script>
 

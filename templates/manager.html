@@ -276,6 +276,7 @@
 </div>
 
 <script>
+    // --- Initial Setup ---
     document.addEventListener("DOMContentLoaded", function() {
         const urlParams = new URLSearchParams(window.location.search);
         const tabParam = urlParams.get('tab');
@@ -286,6 +287,7 @@
         if (timeEl) timeEl.innerText = new Date().toLocaleString('th-TH');
     });
 
+    // --- Tab Logic ---
     function switchTab(tabId) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
         document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -294,13 +296,14 @@
         });
         document.getElementById(tabId).classList.remove('hidden');
         let btn = document.getElementById(tabId.replace('tab-', 'btn-'));
-        if(btn) {
+        if (btn) {
             btn.classList.remove('bg-white', 'text-gray-600');
             btn.classList.add('bg-indigo-600', 'text-white', 'shadow');
         }
         localStorage.setItem('activeTab', tabId);
     }
 
+    // --- Helper Functions ---
     function updatePlate() {
         const select = document.getElementById('driver_select');
         const selectedOption = select.options[select.selectedIndex];
@@ -323,13 +326,14 @@
         copyToClipboard(url, "ลิงค์สำหรับลูกค้า");
     }
 
-    // --- Export Functions ---
+    // --- Helper to get date safely ---
     function getFilterDate() {
         let el = document.getElementById('report_date_filter');
         if (!el) el = document.querySelector('input[name="date_filter"]');
         return el ? el.value : '';
     }
 
+    // --- Export Functions ---
     function triggerExport() {
         const selectedDate = getFilterDate();
         let url = '/export_excel'; 
@@ -351,7 +355,7 @@
         window.location.href = url;
     }
     
-    function triggerCustomerPrint() {
+    function triggerPrint() {
         const selectedDate = getFilterDate();
         let url = '/print_report';
         if (selectedDate) {
@@ -364,7 +368,6 @@
 
     // --- Core Copy Function ---
     async function copyToClipboard(text, successMessage) {
-        // Fallback for HTTP
         const textArea = document.createElement("textarea");
         textArea.value = text;
         textArea.style.position = "fixed";
@@ -382,7 +385,6 @@
             document.body.removeChild(textArea);
         }
 
-        // Modern HTTPS
         if (navigator.clipboard && window.isSecureContext) {
             try {
                 await navigator.clipboard.writeText(text);
@@ -396,6 +398,7 @@
 
     // --- LINE Share Logic ---
     function shareLine(shiftType) {
+        // รับข้อมูลจาก Python
         const dayData = {{ line_data_day | tojson | safe }};
         const nightData = {{ line_data_night | tojson | safe }};
         
@@ -403,25 +406,41 @@
         const shiftName = (shiftType === 'day') ? 'รอบโหลดกลางวัน' : 'รอบโหลดกลางคืน';
         const shiftEmoji = (shiftType === 'day') ? '☀️' : '🌙';
         
-        const poDateVal = getFilterDate();
+        // รับค่าวันที่จาก Input
+        const poDateVal = getFilterDate(); // YYYY-MM-DD
         if (!poDateVal) {
             alert("กรุณาเลือกวันที่ก่อนแชร์");
             return;
         }
 
-        const [py, pm, pd] = poDateVal.split('-');
-        const yearThaiShort = (parseInt(py) + 543).toString().slice(2);
-        const poDateThai = `${pd}.${pm}.${yearThaiShort}`; 
+        const [py, pm, pd] = poDateVal.split('-').map(Number);
         
+        // 1. Format PO Date (เช่น 28.11.68)
+        const yearThaiShort = (py + 543).toString().slice(2);
+        const poDateThai = `${pd.toString().padStart(2,'0')}.${pm.toString().padStart(2,'0')}.${yearThaiShort}`; 
+
+        // 2. [NEW LOGIC] Calculate Load Date (PO Date - 1 Day)
+        // สร้าง Date Object จากค่า PO
+        const loadDateObj = new Date(py, pm - 1, pd); 
+        // ลบ 1 วัน
+        loadDateObj.setDate(loadDateObj.getDate() - 1);
+        
+        // Format Load Date (เช่น 27/11/68)
+        const ld = loadDateObj.getDate().toString().padStart(2, '0');
+        const lm = (loadDateObj.getMonth() + 1).toString().padStart(2, '0');
+        const ly = (loadDateObj.getFullYear() + 543).toString().slice(2);
+        const loadDateShow = `${ld}/${lm}/${ly}`;
+
         if (!dataList || dataList.length === 0) {
             alert(`⚠️ ไม่พบข้อมูลงานสำหรับ ${shiftName}`);
             return;
         }
 
-        const loadDateShow = dataList[0].load_date; 
-
+        // 3. สร้างข้อความ Header
+        // ผลลัพธ์: 📄 LMT PO 28.11.68 (🌙 รอบโหลดกลางคืน วันที่ 27/11/68)
         let msg = `📄 LMT PO ${poDateThai} (${shiftEmoji} ${shiftName} วันที่ ${loadDateShow})\n\n`;
 
+        // จัดกลุ่มตามเวลา
         let groupedByRound = {};
         dataList.forEach(item => {
             let r = item.round || "ไม่ระบุเวลา";
@@ -429,13 +448,17 @@
             groupedByRound[r].push(item);
         });
 
+        // Loop สร้างข้อความ
         for (const [roundTime, cars] of Object.entries(groupedByRound)) {
             msg += `🕒 รอบโหลด ${roundTime} น.\n`;
+            
             cars.forEach(car => {
                 msg += `🚛 คันที่ ${car.car_no} ${car.plate} ${car.driver}\n`;
+                
                 car.branches.forEach(branch => {
                     msg += `📍 ${branch}\n`;
                 });
+                
                 msg += `\n`; 
             });
         }

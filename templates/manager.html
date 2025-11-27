@@ -5,9 +5,11 @@
     body, h1, h2, h3, h4, h5, h6, p, span, div, table, input, select, button {
         font-family: 'Kanit', sans-serif !important;
     }
+    /* ปรับขนาดฟอนต์ตารางให้กระชับ */
     .table-data { font-size: 0.8rem; } 
     .table-header { font-size: 0.75rem; }
     
+    /* Scrollbar สวยงาม */
     .custom-scrollbar::-webkit-scrollbar {
         height: 8px;
         width: 8px;
@@ -75,6 +77,7 @@
                     <a href="/manager?tab=monitor" class="text-gray-400 hover:text-indigo-600 px-2 border-l border-gray-200"><i class="fa-solid fa-rotate-right"></i></a>
                 </form>
             </div>
+            
             <div class="overflow-x-auto custom-scrollbar">
                 <table class="w-full text-left text-gray-600 table-data">
                     <thead class="text-gray-700 uppercase bg-gray-100 border-b table-header">
@@ -112,7 +115,8 @@
                                     <td class="px-4 py-3 text-center">{{ status_badge | safe }}</td>
                                     <td class="px-4 py-3 whitespace-nowrap">
                                         <div class="font-bold text-gray-800">{{ job.PO_Date | thai_date }}</div>
-                                        <div class="text-xs text-blue-600 font-medium bg-blue-50 px-1 rounded inline-block">โหลด: {{ job.Load_Date | thai_date }}</div>
+                                        {% set show_load = job.get('Load_Date', job.PO_Date) %}
+                                        <div class="text-xs text-blue-600 font-medium bg-blue-50 px-1 rounded inline-block mt-0.5">โหลด: {{ show_load | thai_date }}</div>
                                     </td>
                                     <td class="px-4 py-3 whitespace-nowrap font-bold text-gray-800">
                                         คันที่ #{{ job.Car_No }}
@@ -146,7 +150,7 @@
     </div>
 
     <div id="tab-create" class="tab-content hidden">
-        <div class="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-8 border border-gray-100">
+         <div class="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-8 border border-gray-100">
             <h3 class="text-xl font-bold text-gray-800 mb-6 border-b pb-2 flex items-center gap-2"><i class="fa-solid fa-pen-to-square text-indigo-600"></i> สร้างใบงานใหม่</h3>
             <form action="/create_job" method="POST" class="space-y-5">
                 
@@ -158,7 +162,7 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">
-                            วันที่เข้าโหลดจริง <span class="text-xs text-indigo-500">(Auto: PO-1)</span>
+                            วันที่เข้าโหลดจริง <span class="text-xs text-indigo-500 font-normal">(Auto: PO -1 วัน)</span>
                         </label>
                         <input type="date" name="load_date" id="load_date_input" required 
                                class="w-full rounded-lg border-indigo-200 shadow-sm p-2.5 border bg-indigo-50/30 focus:ring-indigo-500 focus:border-indigo-500">
@@ -199,27 +203,133 @@
     </div>
 
     <div id="tab-report" class="tab-content">
-        {% include 'manager_report_partial.html' ignore missing %}
         <div class="bg-white rounded-xl shadow-lg p-4 border border-gray-100">
-             <div class="border rounded-lg overflow-hidden overflow-x-auto shadow-inner bg-gray-500 custom-scrollbar">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <h3 class="font-bold text-gray-800 flex items-center gap-2 text-lg"><div class="bg-green-100 p-2 rounded text-green-700"><i class="fa-solid fa-file-csv"></i></div> สรุปรายงานประจำวัน</h3>
+                <form method="GET" action="/manager" class="flex flex-wrap gap-2 w-full md:w-auto items-center justify-end">
+                    <input type="hidden" name="tab" value="report">
+                    <div class="flex items-center gap-2 bg-white p-1.5 rounded-lg border border-gray-300 shadow-sm">
+                        <a href="/manager?tab=report&date_filter={{ prev_date }}" class="px-2 text-gray-500 hover:text-indigo-600 border-r border-gray-200"><i class="fa-solid fa-chevron-left"></i></a>
+                        <span class="text-xs font-bold text-gray-500 pl-1">PO:</span>
+                        <input type="date" name="date_filter" id="report_date_filter" value="{{ current_filter_date }}" onchange="this.form.submit()" class="text-sm border-none focus:ring-0 cursor-pointer font-medium text-gray-700 h-8 bg-transparent">
+                        <a href="/manager?tab=report&date_filter={{ next_date }}" class="px-2 text-gray-500 hover:text-indigo-600 border-l border-gray-200"><i class="fa-solid fa-chevron-right"></i></a>
+                    </div>
+                    <a href="#" onclick="triggerCustomerPDF()" class="bg-red-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-red-700 transition shadow-md flex items-center gap-2 transform active:scale-95">
+                        <i class="fa-solid fa-file-pdf"></i> <span class="hidden sm:inline">PDF</span>
+                    </a>
+                    <a href="#" onclick="triggerCompactPDF()" class="bg-orange-500 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-orange-600 transition shadow-md flex items-center gap-2 transform active:scale-95">
+                        <i class="fa-solid fa-file-contract"></i> <span class="hidden sm:inline">Summary</span>
+                    </a>
+                    <a href="#" onclick="triggerExport()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-bold shadow transition flex items-center gap-2"><i class="fa-solid fa-file-excel"></i> Excel</a>
+                    <button type="button" onclick="shareLine('day')" class="bg-[#06C755] text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#05b34c] transition shadow-md flex items-center gap-1 transform active:scale-95" title="คัดลอกรอบกลางวัน">
+                        <i class="fa-brands fa-line text-lg"></i> <i class="fa-solid fa-sun text-yellow-300"></i>
+                    </button>
+                    <button type="button" onclick="shareLine('night')" class="bg-[#06C755] text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#05b34c] transition shadow-md flex items-center gap-1 transform active:scale-95" title="คัดลอกรอบกลางคืน">
+                        <i class="fa-brands fa-line text-lg"></i> <i class="fa-solid fa-moon text-indigo-100"></i>
+                    </button>
+                    <a href="/manager?tab=report" class="bg-white text-gray-500 border border-gray-300 px-3 py-2 rounded-lg hover:bg-gray-100 text-sm shadow-sm"><i class="fa-solid fa-rotate-right"></i></a>
+                </form>
+            </div>
+
+            <div class="border rounded-lg overflow-hidden overflow-x-auto shadow-inner bg-gray-500 custom-scrollbar">
                 <table class="w-full text-center border-collapse whitespace-nowrap table-data">
                     <thead>
                         <tr class="text-white table-header font-bold tracking-wide">
                             <th class="px-2 py-2 bg-green-700 border-r border-green-600 sticky left-0 z-10 shadow-lg">ลำดับ</th>
                             <th class="px-2 py-2 bg-green-600 border-r border-green-500">PO Date</th>
-                            <th class="px-2 py-2 bg-blue-600 border-r border-blue-500">Load Date</th> <th class="px-2 py-2 bg-green-600 border-r border-green-500">เวลา</th>
-                            </tr>
+                            <th class="px-2 py-2 bg-blue-600 border-r border-blue-500">วันที่โหลด</th>
+                            <th class="px-2 py-2 bg-green-600 border-r border-green-500">เวลาโหลด</th>
+                            <th class="px-2 py-2 bg-green-600 border-r border-green-500 min-w-[150px]">ปลายทาง (สาขา)</th>
+                            <th class="px-2 py-2 bg-green-600 border-r border-green-500">ทะเบียน</th>
+                            <th class="px-2 py-2 bg-green-600 border-r border-green-500">คนขับ</th>
+                            <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">เข้าโรงงาน</th>
+                            <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">เริ่มโหลด</th>
+                            <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">โหลดเสร็จ</th>
+                            <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">ยื่นเอกสาร</th>
+                            <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">รับเอกสาร</th>
+                            <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">ออกโรงงาน</th>
+                            <th class="px-2 py-2 bg-[#9bbb59] border-r border-[#8aa64f]">ถึงสาขา</th>
+                            <th class="px-2 py-2 bg-[#9bbb59]">จบงาน</th>
+                        </tr>
                     </thead>
-                    <tbody>
-                         </tbody>
+                    <tbody class="text-gray-700 bg-white">
+                        {% if jobs|length == 0 %}
+                            <tr><td colspan="15" class="p-10 text-center text-gray-400">กรุณาเลือกวันที่ หรือ ไม่พบข้อมูล</td></tr>
+                        {% else %}
+                            {% macro report_time_cell(time_val, loc_val, text_class='') %}
+                                {% if time_val %}
+                                    {% if loc_val %}
+                                        <a href="https://maps.google.com/maps?q={{ loc_val }}" target="_blank" class="inline-flex items-center justify-center gap-1 hover:bg-gray-100/80 px-1.5 py-0.5 rounded transition group cursor-pointer {{ text_class }}" title="ดูพิกัด">
+                                            {{ time_val }} <i class="fa-solid fa-location-dot text-[9px] opacity-30 group-hover:opacity-100 group-hover:text-blue-600"></i>
+                                        </a>
+                                    {% else %}
+                                        <span class="{{ text_class }}">{{ time_val }}</span>
+                                    {% endif %}
+                                {% endif %}
+                            {% endmacro %}
+
+                            {% for job in jobs %}
+                                {% set is_same = False %}
+                                {% if not loop.first and loop.previtem.Car_No == job.Car_No and loop.previtem.Driver == job.Driver and loop.previtem.PO_Date == job.PO_Date %}
+                                    {% set is_same = True %}
+                                {% endif %}
+                                
+                                {% set start_load_color = '' %}
+                                {% if job.T2_StartLoad %}
+                                    {% if job.is_start_late %} 
+                                        {% set start_load_color = 'text-red-600 font-bold' %}
+                                    {% else %} 
+                                        {% set start_load_color = 'text-green-600 font-bold' %} 
+                                    {% endif %}
+                                {% endif %}
+                                
+                                <tr class="border-b hover:bg-gray-50 transition">
+                                    <td class="px-2 py-1 border-r font-bold bg-gray-50 sticky left-0 z-10 border-gray-200 text-indigo-900 text-center">{% if not is_same %} #{{ job.Car_No }} {% endif %}</td>
+                                    <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %}{{ job.PO_Date | thai_date }}{% endif %}</td>
+                                    
+                                    <td class="px-2 py-1 border-r border-gray-200 text-blue-700 font-bold bg-blue-50/20">
+                                        {% if not is_same %}
+                                            {% set show_load = job.get('Load_Date', job.PO_Date) %}
+                                            {{ show_load | thai_date }}
+                                        {% endif %}
+                                    </td>
+
+                                    <td class="px-2 py-1 border-r border-gray-200 font-bold">{% if not is_same %}{{ job.Round }}{% endif %}</td>
+                                    <td class="px-2 py-1 border-r border-gray-200 text-left pl-2 font-bold text-indigo-700 truncate max-w-[200px]" title="{{ job.Branch_Name }}">{{ job.Branch_Name }}</td>
+                                    <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %} {{ job.Plate }} {% endif %}</td>
+                                    <td class="px-2 py-1 border-r border-gray-200 font-medium truncate max-w-[120px]" title="{{ job.Driver }}">{% if not is_same %} {{ job.Driver }} {% endif %}</td>
+                                    <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T1_Enter, job.L1_Loc) }}{% endif %}</td>
+                                    <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T2_StartLoad, job.L2_Loc, start_load_color) }}{% endif %}</td>
+                                    <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T3_EndLoad, job.L3_Loc) }}{% endif %}</td>
+                                    <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T4_SubmitDoc, job.L4_Loc) }}{% endif %}</td>
+                                    <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T5_RecvDoc, job.L5_Loc) }}{% endif %}</td>
+                                    <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T6_Exit, job.L6_Loc) }}{% endif %}</td>
+                                    <td class="px-2 py-1 border-r font-bold text-green-700 bg-green-50/50 border-gray-200">{{ report_time_cell(job.T7_ArriveBranch, job.L7_Loc, 'text-green-800') }}</td>
+                                    <td class="px-2 py-1 font-bold text-red-600 bg-red-50/50">{{ report_time_cell(job.T8_EndJob, job.L8_Loc, 'text-red-700') }}</td>
+                                </tr>
+                            {% endfor %}
+                        {% endif %}
+                    </tbody>
                 </table>
-             </div>
+            </div>
+            <div class="mt-2 text-right text-[10px] text-gray-400">Data refreshed at: <span id="report-time"></span></div>
         </div>
     </div>
 </div>
 
 <script>
-    // --- Auto Set Load Date Logic ---
+    // --- Initial Setup ---
+    document.addEventListener("DOMContentLoaded", function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tabParam = urlParams.get('tab');
+        const savedTab = localStorage.getItem('activeTab') || 'tab-monitor';
+        if(tabParam) switchTab('tab-' + tabParam); else switchTab(savedTab);
+        
+        const timeEl = document.getElementById('report-time');
+        if (timeEl) timeEl.innerText = new Date().toLocaleString('th-TH');
+    });
+
+    // --- Auto Set Load Date (PO Date - 1 วัน) ---
     function autoSetLoadDate() {
         const poInput = document.getElementById('po_date_input');
         const loadInput = document.getElementById('load_date_input');
@@ -237,17 +347,6 @@
             loadInput.value = `${year}-${month}-${day}`;
         }
     }
-	
-    // --- Initial Setup ---
-    document.addEventListener("DOMContentLoaded", function() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const tabParam = urlParams.get('tab');
-        const savedTab = localStorage.getItem('activeTab') || 'tab-monitor';
-        if(tabParam) switchTab('tab-' + tabParam); else switchTab(savedTab);
-        
-        const timeEl = document.getElementById('report-time');
-        if (timeEl) timeEl.innerText = new Date().toLocaleString('th-TH');
-    });
 
     // --- Tab Logic ---
     function switchTab(tabId) {
@@ -288,14 +387,12 @@
         copyToClipboard(url, "ลิงค์สำหรับลูกค้า");
     }
 
-    // --- Helper to get date safely ---
     function getFilterDate() {
         let el = document.getElementById('report_date_filter');
         if (!el) el = document.querySelector('input[name="date_filter"]');
         return el ? el.value : '';
     }
 
-    // --- Export Functions ---
     function triggerExport() {
         const selectedDate = getFilterDate();
         let url = '/export_excel'; 
@@ -316,19 +413,7 @@
         if (selectedDate) url += `?date_filter=${selectedDate}`;
         window.location.href = url;
     }
-    
-    function triggerPrint() {
-        const selectedDate = getFilterDate();
-        let url = '/print_report';
-        if (selectedDate) {
-            url += `?date_filter=${selectedDate}`;
-            window.open(url, '_blank');
-        } else {
-            alert("กรุณาเลือกวันที่ PO ก่อนพิมพ์");
-        }
-    }
 
-    // --- Core Copy Function ---
     async function copyToClipboard(text, successMessage) {
         const textArea = document.createElement("textarea");
         textArea.value = text;
@@ -358,9 +443,8 @@
         }
     }
 
-    // --- LINE Share Logic ---
+    // --- LINE Share Logic (ใช้ Load Date ตรงๆ แล้ว) ---
     function shareLine(shiftType) {
-        // รับข้อมูลจาก Python
         const dayData = {{ line_data_day | tojson | safe }};
         const nightData = {{ line_data_night | tojson | safe }};
         
@@ -368,41 +452,22 @@
         const shiftName = (shiftType === 'day') ? 'รอบโหลดกลางวัน' : 'รอบโหลดกลางคืน';
         const shiftEmoji = (shiftType === 'day') ? '☀️' : '🌙';
         
-        // รับค่าวันที่จาก Input
-        const poDateVal = getFilterDate(); // YYYY-MM-DD
-        if (!poDateVal) {
-            alert("กรุณาเลือกวันที่ก่อนแชร์");
-            return;
-        }
+        const poDateVal = getFilterDate(); 
+        if (!poDateVal) { alert("กรุณาเลือกวันที่ก่อนแชร์"); return; }
 
         const [py, pm, pd] = poDateVal.split('-').map(Number);
-        
-        // 1. Format PO Date (เช่น 28.11.68)
         const yearThaiShort = (py + 543).toString().slice(2);
         const poDateThai = `${pd.toString().padStart(2,'0')}.${pm.toString().padStart(2,'0')}.${yearThaiShort}`; 
-
-        // 2. [NEW LOGIC] Calculate Load Date (PO Date - 1 Day)
-        // สร้าง Date Object จากค่า PO
-        const loadDateObj = new Date(py, pm - 1, pd); 
-        // ลบ 1 วัน
-        loadDateObj.setDate(loadDateObj.getDate() - 1);
-        
-        // Format Load Date (เช่น 27/11/68)
-        const ld = loadDateObj.getDate().toString().padStart(2, '0');
-        const lm = (loadDateObj.getMonth() + 1).toString().padStart(2, '0');
-        const ly = (loadDateObj.getFullYear() + 543).toString().slice(2);
-        const loadDateShow = `${ld}/${lm}/${ly}`;
 
         if (!dataList || dataList.length === 0) {
             alert(`⚠️ ไม่พบข้อมูลงานสำหรับ ${shiftName}`);
             return;
         }
 
-        // 3. สร้างข้อความ Header
-        // ผลลัพธ์: 📄 LMT PO 28.11.68 (🌙 รอบโหลดกลางคืน วันที่ 27/11/68)
-        let msg = `📄 LMT PO ${poDateThai} (${shiftEmoji} ${shiftName} วันที่ ${loadDateShow})\n\n`;
+        // ข้อความ Header
+        // 📄 LMT PO 28.11.68 (☀️ รอบโหลดกลางวัน)
+        let msg = `📄 LMT PO ${poDateThai} (${shiftEmoji} ${shiftName})\n\n`;
 
-        // จัดกลุ่มตามเวลา
         let groupedByRound = {};
         dataList.forEach(item => {
             let r = item.round || "ไม่ระบุเวลา";
@@ -410,17 +475,14 @@
             groupedByRound[r].push(item);
         });
 
-        // Loop สร้างข้อความ
         for (const [roundTime, cars] of Object.entries(groupedByRound)) {
             msg += `🕒 รอบโหลด ${roundTime} น.\n`;
             
             cars.forEach(car => {
+                // แสดงวันที่โหลดด้วย เพื่อความชัดเจน
+                msg += `📅 โหลดวันที่: ${car.load_date}\n`;
                 msg += `🚛 คันที่ ${car.car_no} ${car.plate} ${car.driver}\n`;
-                
-                car.branches.forEach(branch => {
-                    msg += `📍 ${branch}\n`;
-                });
-                
+                car.branches.forEach(branch => { msg += `📍 ${branch}\n`; });
                 msg += `\n`; 
             });
         }

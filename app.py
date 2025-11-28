@@ -65,12 +65,10 @@ def manager_login():
 def manager_dashboard():
     if 'user' not in session: return redirect(url_for('manager_login'))
     
-    # 1. โหลดข้อมูลเพียงครั้งเดียว (Optimization)
     sheet = get_db()
     raw_jobs = sheet.worksheet('Jobs').get_all_records()
     drivers = sheet.worksheet('Drivers').get_all_records()
 
-    # 2. Date Filter
     date_filter = request.args.get('date_filter')
     now_thai = datetime.now() + timedelta(hours=7)
     today_date = now_thai.strftime("%Y-%m-%d")
@@ -78,10 +76,8 @@ def manager_dashboard():
     if not date_filter:
         date_filter = today_date
 
-    # 3. Filter Jobs by PO Date
     filtered_jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
 
-    # 4. Sorting
     def sort_key_func(job):
         po_date = str(job['PO_Date'])
         car_no_str = str(job['Car_No']).strip()
@@ -92,7 +88,6 @@ def manager_dashboard():
 
     filtered_jobs = sorted(filtered_jobs, key=sort_key_func)
     
-    # --- Process Data (Stats, Grouping, Line Data) in Single Pass ---
     jobs_by_trip_key = {}
     total_done_jobs = 0
     total_branches = len(filtered_jobs)
@@ -102,12 +97,10 @@ def manager_dashboard():
     current_group = []
     prev_key = None
     
-    # สำหรับ Late Arrival
     late_arrivals_by_po = {}
     total_late_cars = 0
 
     for job in filtered_jobs:
-        # A. Grouping logic
         curr_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
         if curr_key != prev_key and prev_key is not None:
             grouped_jobs_for_stats.append(current_group)
@@ -115,7 +108,6 @@ def manager_dashboard():
         current_group.append(job)
         prev_key = curr_key
         
-        # B. Stats Calculation
         trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']))
         if trip_key not in jobs_by_trip_key:
             jobs_by_trip_key[trip_key] = []
@@ -124,7 +116,6 @@ def manager_dashboard():
         if job['Status'] == 'Done':
             total_done_jobs += 1
             
-        # C. Late Arrival Alert Logic
         if not job.get('T1_Enter') and job['Status'] != 'Done':
             try:
                 load_date_str = job.get('Load_Date', job['PO_Date'])
@@ -145,7 +136,6 @@ def manager_dashboard():
                     
                     job['late_duration'] = f"{hours} ชม. {mins} น."
                     
-                    # Prevent duplicates in alert list
                     if not any(x['Car_No'] == job['Car_No'] for x in late_arrivals_by_po[po_key]):
                         late_arrivals_by_po[po_key].append(job)
                         total_late_cars += 1
@@ -154,7 +144,6 @@ def manager_dashboard():
             
     if current_group: grouped_jobs_for_stats.append(current_group)
 
-    # D. Calculate Completed Trips
     completed_trips = 0
     for trip_key, job_list in jobs_by_trip_key.items():
         if all(job['Status'] == 'Done' for job in job_list):
@@ -167,7 +156,6 @@ def manager_dashboard():
     total_trips = len(jobs_by_trip_key)
     total_running_jobs = total_branches - total_done_jobs
 
-    # E. Prepare Line Data
     line_data_day = []
     line_data_night = []
 
@@ -189,7 +177,6 @@ def manager_dashboard():
             if h < 6 or h >= 19: is_day = False
         except: pass
 
-        # Status Logic
         status_txt = "รอเข้า"
         status_time = ""
         found_branch_activity = False
@@ -250,7 +237,6 @@ def manager_dashboard():
         except: return 99999
     line_data_night.sort(key=night_sort)
 
-    # Pre-calculate Late Status for Display
     for job in filtered_jobs:
         job['is_start_late'] = False
         t_plan_str = str(job.get('Round', '')).strip()
@@ -265,7 +251,6 @@ def manager_dashboard():
                 if t_act > t_plan: job['is_start_late'] = True
             except: pass
 
-    # Pagination
     try:
         current_date_obj = datetime.strptime(date_filter, "%Y-%m-%d")
         prev_date = (current_date_obj - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -342,7 +327,6 @@ def delete_job():
         
         for i, row in enumerate(all_values):
             if i > 0: 
-                # Check PO, Round, CarNo
                 if (row[0] == po_date and 
                     str(row[2]) == str(round_time) and  
                     str(row[3]) == str(car_no)):        
@@ -356,7 +340,6 @@ def delete_job():
 
 @app.route('/export_excel')
 def export_excel():
-    # 1. Load Data Once
     sheet = get_db()
     raw_jobs = sheet.worksheet('Jobs').get_all_records()
     
@@ -366,7 +349,6 @@ def export_excel():
     else:
         jobs = raw_jobs
         
-    # 2. Sort Data
     def sort_key_func(job):
         po_date = str(job['PO_Date'])
         car_no_str = str(job['Car_No']).strip()
@@ -377,7 +359,6 @@ def export_excel():
 
     jobs = sorted(jobs, key=sort_key_func)
     
-    # 3. Process Data for Excel & Summary
     export_data = []
     prev_trip_key = None
     
@@ -388,13 +369,11 @@ def export_excel():
         current_trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
         is_same = (current_trip_key == prev_trip_key)
         
-        # Grouping for Summary
         if current_trip_key != prev_trip_key and prev_trip_key is not None:
             grouped_jobs_for_summary.append(current_group)
             current_group = []
         current_group.append(job)
         
-        # Midnight Delay Logic
         t2_display = job['T2_StartLoad']
         if not is_same and job['T2_StartLoad']: 
             try:
@@ -455,7 +434,6 @@ def export_excel():
     wb = load_workbook(output)
     ws = wb.active
     
-    # Styles
     font_header = Font(name='Cordia New', size=14, bold=True, color='FFFFFF') 
     font_body = Font(name='Cordia New', size=14)
     font_summary_head = Font(name='Cordia New', size=14, bold=True)
@@ -532,7 +510,6 @@ def export_excel():
             if col_name in ['คนขับ', 'ปลายทาง (สาขา)', 'ทะเบียนรถ']: cell.alignment = align_left
             else: cell.alignment = align_center
 
-    # --- 4. Calculate Summary Stats (Fixed Logic) ---
     def create_counter(): return {'count':0, 't1':0, 't2':0, 't3':0, 't4':0, 't5':0, 't6':0, 't7':0, 't8':0}
     sum_day = create_counter()
     sum_night = create_counter()
@@ -557,14 +534,17 @@ def export_excel():
         if first_job.get('T5_RecvDoc'): target['t5'] += 1
         if first_job.get('T6_Exit'): target['t6'] += 1
         
-        # [FIXED] Use any() to check if ANY branch in the trip has timestamp
-        if any(j.get('T7_ArriveBranch') for j in group): target['t7'] += 1
-        if any(j.get('T8_EndJob') for j in group): target['t8'] += 1
+        # [FIXED LOGIC] ใช้ any() สำหรับการถึงสาขา (อย่างน้อย 1 สาขาถึง)
+        if any(str(j.get('T7_ArriveBranch', '')).strip() != '' for j in group): 
+            target['t7'] += 1
+            
+        # [FIXED LOGIC] ใช้ all() สำหรับการจบงาน (ต้องจบทุกสาขาในเที่ยวรถนั้น)
+        if all(str(j.get('T8_EndJob', '')).strip() != '' for j in group): 
+            target['t8'] += 1
 
     sum_total = create_counter()
     for k in sum_total: sum_total[k] = sum_day[k] + sum_night[k]
 
-    # --- Write Summary Table ---
     start_row = ws.max_row + 2 
     summary_headers = ['รอบโหลด', 'จำนวนรถ', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ยื่นเอกสาร', 'รับเอกสาร', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
     col_map_idx = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14] 
@@ -583,7 +563,6 @@ def export_excel():
         for i, val in enumerate(vals):
             ws.cell(row=curr_r, column=col_map_idx[i+1], value=val)
 
-    # Styles for Summary
     for r in range(start_row, start_row + 4):
         for c in range(5, 15): 
             cell = ws.cell(row=r, column=c)
@@ -597,7 +576,6 @@ def export_excel():
                 cell.fill = fill_sum_total
                 cell.font = font_summary_head
 
-    # Column Widths
     for column_cells in ws.columns:
         col_letter = get_column_letter(column_cells[0].column)
         col_header = column_cells[0].value
@@ -620,7 +598,6 @@ def export_excel():
     
 @app.route('/export_pdf')
 def export_pdf():
-    # 1. Load Data
     sheet = get_db()
     raw_jobs = sheet.worksheet('Jobs').get_all_records()
     
@@ -640,7 +617,6 @@ def export_pdf():
 
     jobs = sorted(jobs, key=sort_key_func)
 
-    # 2. Process Data (Delay Logic + Grouping + Summary)
     def create_counter(): return {'total': 0, 't1': 0, 't2': 0, 't3': 0, 't6': 0, 't7': 0, 't8': 0}
     sum_day = create_counter()
     sum_night = create_counter()
@@ -649,7 +625,6 @@ def export_pdf():
     prev_key = None
     
     for job in jobs:
-        # Grouping
         curr_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
         if curr_key != prev_key and prev_key is not None:
             grouped_jobs.append(current_group)
@@ -657,7 +632,6 @@ def export_pdf():
         current_group.append(job)
         prev_key = curr_key
         
-        # Delay Logic
         job['is_late'] = False
         job['delay_msg'] = ""
         t_plan_str = str(job['Round']).strip()
@@ -681,7 +655,6 @@ def export_pdf():
             
     if current_group: grouped_jobs.append(current_group)
 
-    # Calculate Summary
     for group in grouped_jobs:
         if not group: continue
         first_job = group[0]
@@ -700,16 +673,14 @@ def export_pdf():
         if first_job.get('T3_EndLoad'): target_sum['t3'] += 1
         if first_job.get('T6_Exit'): target_sum['t6'] += 1
         
-        # [FIXED] Summary Logic with any()
-        if any(j.get('T7_ArriveBranch') for j in group): target_sum['t7'] += 1
-        if any(j.get('T8_EndJob') for j in group): target_sum['t8'] += 1
+        # [FIXED LOGIC] สำหรับ PDF ก็ใช้ลอจิกเดียวกัน: T7(any), T8(all)
+        if any(str(j.get('T7_ArriveBranch', '')).strip() != '' for j in group): target_sum['t7'] += 1
+        if all(str(j.get('T8_EndJob', '')).strip() != '' for j in group): target_sum['t8'] += 1
 
     sum_total = create_counter()
     for key in sum_total:
         sum_total[key] = sum_day[key] + sum_night[key]
 
-
-    # --- Setup PDF ---
     basedir = os.path.abspath(os.path.dirname(__file__))
     font_path = os.path.join(basedir, 'static', 'fonts', 'Sarabun-Regular.ttf')
     logo_path = os.path.join(basedir, 'static', 'mylogo.png') 
@@ -858,7 +829,6 @@ def export_pdf():
             pdf.set_draw_color(0, 0, 0)
             pdf.set_line_width(0.2)
 
-    # --- Summary Page ---
     pdf.is_summary_page = True
     pdf.add_page()
     
@@ -926,7 +896,6 @@ def export_pdf():
     
 @app.route('/export_pdf_summary')
 def export_pdf_summary():
-    # 1. Load Data Once
     sheet = get_db()
     raw_jobs = sheet.worksheet('Jobs').get_all_records()
     
@@ -946,7 +915,6 @@ def export_pdf_summary():
 
     jobs = sorted(jobs, key=sort_key_func)
 
-    # 2. Process Data
     def create_counter(): return {'count':0, 't1':0, 't2':0, 't3':0, 't4':0, 't5':0, 't6':0, 't7':0, 't8':0}
     sum_day = create_counter()
     sum_night = create_counter()
@@ -962,7 +930,6 @@ def export_pdf_summary():
         current_group.append(job)
         prev_key = curr_key
         
-        # Delay Logic
         job['is_late'] = False
         t_plan_str = str(job['Round']).strip()
         t_act_str = str(job['T2_StartLoad']).strip()
@@ -978,7 +945,6 @@ def export_pdf_summary():
             
     if current_group: grouped_jobs.append(current_group)
 
-    # Calculate Summary
     for group in grouped_jobs:
         if not group: continue
         first_job = group[0]
@@ -999,15 +965,13 @@ def export_pdf_summary():
         if first_job.get('T5_RecvDoc'): target['t5'] += 1
         if first_job.get('T6_Exit'): target['t6'] += 1
         
-        # [FIXED] Summary Logic
-        if any(j.get('T7_ArriveBranch') for j in group): target['t7'] += 1 
-        if any(j.get('T8_EndJob') for j in group): target['t8'] += 1       
+        # [FIXED LOGIC] Summary PDF ก็แก้เป็น all() เช่นกัน
+        if any(str(j.get('T7_ArriveBranch', '')).strip() != '' for j in group): target['t7'] += 1 
+        if all(str(j.get('T8_EndJob', '')).strip() != '' for j in group): target['t8'] += 1       
 
     sum_total = create_counter()
     for k in sum_total: sum_total[k] = sum_day[k] + sum_night[k]
 
-
-    # --- 3. Setup PDF ---
     basedir = os.path.abspath(os.path.dirname(__file__))
     font_path = os.path.join(basedir, 'static', 'fonts', 'Sarabun-Regular.ttf')
     logo_path = os.path.join(basedir, 'static', 'mylogo.png') 
@@ -1130,7 +1094,6 @@ def export_pdf_summary():
                 pdf.set_line_width(0.2)
                 pdf.set_draw_color(180, 180, 180)
 
-    # --- Summary Table ---
     pdf.ln(5)
     if pdf.get_y() + 30 > pdf.page_break_trigger:
         pdf.add_page()
@@ -1176,7 +1139,6 @@ def customer_view():
 
     jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
     
-    # Pagination Logic
     try:
         current_date_obj = datetime.strptime(date_filter, "%Y-%m-%d")
         prev_date = (current_date_obj - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -1185,20 +1147,16 @@ def customer_view():
         prev_date = date_filter
         next_date = date_filter
 
-    # Stats Logic
     jobs_by_trip_key = {}
     total_done_jobs = 0
     total_branches = len(jobs)
     
-    # Merged Loop for Stats & Delay
     for job in jobs:
-        # A. Stats
         trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']))
         if trip_key not in jobs_by_trip_key: jobs_by_trip_key[trip_key] = []
         jobs_by_trip_key[trip_key].append(job)
         if job['Status'] == 'Done': total_done_jobs += 1
             
-        # B. Delay Logic
         job['is_late'] = False
         job['delay_tooltip'] = ""
         t_plan_str = str(job.get('Round', '')).strip()
@@ -1249,7 +1207,7 @@ def customer_view():
 def driver_select():
     sheet = get_db()
     drivers = sheet.worksheet('Drivers').col_values(1)[1:]
-    all_jobs = sheet.worksheet('Jobs').get_all_records() # Load once
+    all_jobs = sheet.worksheet('Jobs').get_all_records() 
     now_thai = datetime.now() + timedelta(hours=7)
     
     driver_info = {} 
@@ -1313,7 +1271,6 @@ def driver_tasks():
     raw_data = sheet.worksheet('Jobs').get_all_records()
     my_jobs = []
     
-    # Filter in Python
     for i, job in enumerate(raw_data): 
         if job['Driver'] == driver_name and job['Status'] != 'Done':
             job['row_id'] = i + 2

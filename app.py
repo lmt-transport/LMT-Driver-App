@@ -1389,22 +1389,47 @@ def driver_tasks():
     if not driver_name: return redirect(url_for('driver_select'))
         
     sheet = get_db()
-    # [CHANGED] ใช้ Cache
+    # ใช้ Cache เพื่อความเร็ว
     raw_data = get_cached_records(sheet, 'Jobs')
     my_jobs = []
     
+    # วันที่ปัจจุบัน (เอาไว้เช็คว่างานไหนเพิ่งจบไป)
+    now_thai = datetime.now() + timedelta(hours=7)
+    today_date = now_thai.date()
+    
     for i, job in enumerate(raw_data): 
-        if job['Driver'] == driver_name and job['Status'] != 'Done':
-            job['row_id'] = i + 2
-            my_jobs.append(job)
+        # เงื่อนไข: เป็นงานของคนขับคนนี้
+        if job['Driver'] == driver_name:
+            
+            is_show = False
+            
+            # 1. ถ้างานยังไม่จบ -> แสดงแน่นอน
+            if job['Status'] != 'Done':
+                is_show = True
+            
+            # 2. ถ้างานจบแล้ว -> เช็คว่าเป็นงานเร็วๆ นี้ไหม (วันนี้ หรือ อนาคต)
+            else:
+                try:
+                    # แปลง PO_Date เป็น object วันที่
+                    job_po_date = datetime.strptime(job['PO_Date'], "%Y-%m-%d").date()
+                    # ถ้าเป็นงานตั้งแต่วันนี้เป็นต้นไป ให้แสดง (เผื่อกดผิดจะได้แก้ได้)
+                    if job_po_date >= today_date:
+                        is_show = True
+                except:
+                    # ถ้าวันที่ผิดพลาด ให้แสดงไว้ก่อนกันเหนียว
+                    is_show = True
+            
+            if is_show:
+                job['row_id'] = i + 2
+                my_jobs.append(job)
             
     def sort_key_func(job):
         return (str(job['PO_Date']), str(job.get('Load_Date', '')), str(job['Round']))
     my_jobs = sorted(my_jobs, key=sort_key_func)
     
-    now_thai = datetime.now() + timedelta(hours=7)
     today_date_str = now_thai.strftime("%Y-%m-%d")
 
+    # ... (ส่วน Logic การตกแต่งการ์ด Smart Title คงเดิม) ...
     for job in my_jobs:
         try:
             load_date_str = job.get('Load_Date', job['PO_Date'])
@@ -1419,7 +1444,12 @@ def driver_tasks():
             real_date_str = f"{job_dt.day}/{job_dt.month}/{str(th_year)[2:]}"
             h = job_dt.hour
 
-            if hours_diff <= 0:
+            if job['Status'] == 'Done': # [NEW] ถ้าจบงานแล้ว ให้ขึ้นสีเขียว
+                job['smart_title'] = "✅ งานเสร็จแล้ว"
+                job['smart_detail'] = f"ส่งครบเรียบร้อย ({real_date_str})"
+                job['ui_class'] = {'bg': 'bg-green-50 border-green-200', 'text': 'text-green-600', 'icon': 'fa-circle-check'}
+            
+            elif hours_diff <= 0:
                 if hours_diff > -12:
                     job['smart_title'] = f"❗ เข้าโหลดงานตอนนี้"
                     job['ui_class'] = {'bg': 'bg-red-50 border-red-100 ring-2 ring-red-200 animate-pulse', 'text': 'text-red-600', 'icon': 'fa-truck-ramp-box'}
@@ -1427,6 +1457,7 @@ def driver_tasks():
                     job['smart_title'] = f"🔥 งานค้างส่ง"
                     job['ui_class'] = {'bg': 'bg-red-50 border-red-100', 'text': 'text-red-500', 'icon': 'fa-triangle-exclamation'}
                 job['smart_detail'] = f"กำหนด: {round_str} น. ({real_date_str})"
+            
             elif 0 < hours_diff <= 16:
                 if 6 <= h <= 12:   p, i, t = "เช้านี้", "fa-sun", "yellow"
                 elif 13 <= h <= 18: p, i, t = "บ่ายนี้", "fa-cloud-sun", "orange"
@@ -1434,6 +1465,7 @@ def driver_tasks():
                 job['smart_title'] = f"โหลดสินค้า{p}"
                 job['smart_detail'] = f"เวลา {round_str} น. ของวันที่ {real_date_str}"
                 job['ui_class'] = {'bg': f'bg-{t}-50 border-{t}-100 ring-1 ring-{t}-50', 'text': f'text-{t}-600', 'icon': i}
+            
             elif 16 < hours_diff <= 40:
                 period = "คืนพรุ่งนี้" if (h >= 19 or h <= 5) else "วันพรุ่งนี้"
                 job['smart_title'] = f"⏩ เตรียมโหลด{period}"

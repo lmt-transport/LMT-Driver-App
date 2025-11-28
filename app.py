@@ -68,12 +68,12 @@ def manager_login():
 def manager_dashboard():
     if 'user' not in session: return redirect(url_for('manager_login'))
     
+    # 1. โหลดข้อมูลเพียงครั้งเดียว
     sheet = get_db()
-    # ดึงข้อมูลทั้งหมด
     raw_jobs = sheet.worksheet('Jobs').get_all_records()
     drivers = sheet.worksheet('Drivers').get_all_records()
 
-    # 1. Date Filter
+    # 2. Date Filter
     date_filter = request.args.get('date_filter')
     now_thai = datetime.now() + timedelta(hours=7)
     today_date = now_thai.strftime("%Y-%m-%d")
@@ -81,72 +81,8 @@ def manager_dashboard():
     if not date_filter:
         date_filter = today_date
 
-    # 2. Filter Jobs by PO Date
+    # 3. Filter Jobs by PO Date
     filtered_jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
-
-    # 3. Stats Calculation
-    jobs_by_trip_key = {}
-    total_done_jobs = 0
-    total_branches = len(filtered_jobs)
-    
-    trip_last_end_time = {} 
-
-    for job in filtered_jobs:
-        trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']))
-        if trip_key not in jobs_by_trip_key:
-            jobs_by_trip_key[trip_key] = []
-        jobs_by_trip_key[trip_key].append(job)
-        
-        if job['Status'] == 'Done':
-            total_done_jobs += 1
-
-    completed_trips = 0
-    for trip_key, job_list in jobs_by_trip_key.items():
-        if all(job['Status'] == 'Done' for job in job_list):
-            completed_trips += 1
-            last_end_time = max([j['T8_EndJob'] for j in job_list if j['T8_EndJob']], default="")
-            trip_last_end_time[trip_key] = last_end_time
-        else:
-            trip_last_end_time[trip_key] = ""
-
-    total_trips = len(jobs_by_trip_key)
-    total_running_jobs = total_branches - total_done_jobs
-
-    # --- [FEATURE 1] Late Arrival Alert Logic (รถยังไม่เข้าคลัง) ---
-    late_arrivals_by_po = {}
-    total_late_cars = 0
-
-    for job in filtered_jobs:
-        # เงื่อนไข: ยังไม่ลงเวลา T1 และ สถานะยังไม่จบ
-        if not job.get('T1_Enter') and job['Status'] != 'Done':
-            try:
-                load_date_str = job.get('Load_Date', job['PO_Date'])
-                round_str = str(job['Round']).strip()
-                
-                # สร้าง DateTime ของกำหนดการ
-                plan_dt_str = f"{load_date_str} {round_str}"
-                try: plan_dt = datetime.strptime(plan_dt_str, "%Y-%m-%d %H:%M")
-                except: plan_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
-                
-                # ถ้าเลยเวลาปัจจุบันแล้ว
-                if now_thai > plan_dt:
-                    po_key = str(job['PO_Date'])
-                    if po_key not in late_arrivals_by_po:
-                        late_arrivals_by_po[po_key] = []
-                    
-                    diff = now_thai - plan_dt
-                    hours = int(diff.total_seconds() // 3600)
-                    mins = int((diff.total_seconds() % 3600) // 60)
-                    
-                    job['late_duration'] = f"{hours} ชม. {mins} น."
-                    
-                    # ป้องกันการนับซ้ำใน Trip เดียวกัน (เช็คว่า Car No นี้มีใน list หรือยัง)
-                    if not any(x['Car_No'] == job['Car_No'] for x in late_arrivals_by_po[po_key]):
-                        late_arrivals_by_po[po_key].append(job)
-                        total_late_cars += 1
-            except: 
-                pass
-    # -----------------------------------------------------------
 
     # 4. Sorting
     def sort_key_func(job):
@@ -159,24 +95,85 @@ def manager_dashboard():
 
     filtered_jobs = sorted(filtered_jobs, key=sort_key_func)
     
-    # --- Prepare Data for LINE Share & Update Status ---
+    # --- [ปรับปรุง] คำนวณ Stats, Grouping และ Line Data ใน Loop เดียวกันเพื่อประสิทธิภาพ ---
+    jobs_by_trip_key = {}
+    total_done_jobs = 0
+    total_branches = len(filtered_jobs)
+    trip_last_end_time = {} 
+    
+    grouped_jobs_for_stats = []
+    current_group = []
+    prev_key = None
+    
+    # สำหรับ Late Arrival
+    late_arrivals_by_po = {}
+    total_late_cars = 0
+
+    for job in filtered_jobs:
+        # A. Grouping
+        curr_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
+        if curr_key != prev_key and prev_key is not None:
+            grouped_jobs_for_stats.append(current_group)
+            current_group = []
+        current_group.append(job)
+        prev_key = curr_key
+        
+        # B. Stats Calculation
+        trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']))
+        if trip_key not in jobs_by_trip_key:
+            jobs_by_trip_key[trip_key] = []
+        jobs_by_trip_key[trip_key].append(job)
+        
+        if job['Status'] == 'Done':
+            total_done_jobs += 1
+            
+        # C. Late Arrival Alert Logic
+        if not job.get('T1_Enter') and job['Status'] != 'Done':
+            try:
+                load_date_str = job.get('Load_Date', job['PO_Date'])
+                round_str = str(job['Round']).strip()
+                
+                plan_dt_str = f"{load_date_str} {round_str}"
+                try: plan_dt = datetime.strptime(plan_dt_str, "%Y-%m-%d %H:%M")
+                except: plan_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
+                
+                if now_thai > plan_dt:
+                    po_key = str(job['PO_Date'])
+                    if po_key not in late_arrivals_by_po:
+                        late_arrivals_by_po[po_key] = []
+                    
+                    diff = now_thai - plan_dt
+                    hours = int(diff.total_seconds() // 3600)
+                    mins = int((diff.total_seconds() % 3600) // 60)
+                    
+                    job['late_duration'] = f"{hours} ชม. {mins} น."
+                    
+                    if not any(x['Car_No'] == job['Car_No'] for x in late_arrivals_by_po[po_key]):
+                        late_arrivals_by_po[po_key].append(job)
+                        total_late_cars += 1
+            except: 
+                pass
+            
+    if current_group: grouped_jobs_for_stats.append(current_group)
+
+    # D. Calculate Completed Trips & Last End Time
+    completed_trips = 0
+    for trip_key, job_list in jobs_by_trip_key.items():
+        if all(job['Status'] == 'Done' for job in job_list):
+            completed_trips += 1
+            last_end_time = max([j['T8_EndJob'] for j in job_list if j['T8_EndJob']], default="")
+            trip_last_end_time[trip_key] = last_end_time
+        else:
+            trip_last_end_time[trip_key] = ""
+            
+    total_trips = len(jobs_by_trip_key)
+    total_running_jobs = total_branches - total_done_jobs
+
+    # E. Prepare Line Data & Advanced Latest Status Logic
     line_data_day = []
     line_data_night = []
-    
-    grouped_jobs = []
-    if filtered_jobs:
-        current_group = []
-        prev_key = (str(filtered_jobs[0]['PO_Date']), str(filtered_jobs[0]['Car_No']), str(filtered_jobs[0]['Round']), str(filtered_jobs[0]['Driver']))
-        for job in filtered_jobs:
-            curr_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
-            if curr_key != prev_key:
-                grouped_jobs.append(current_group)
-                current_group = []
-                prev_key = curr_key
-            current_group.append(job)
-        if current_group: grouped_jobs.append(current_group)
-    
-    for group in grouped_jobs:
+
+    for group in grouped_jobs_for_stats:
         first = group[0]
         round_str = str(first['Round']).strip()
         load_date_raw = str(first.get('Load_Date', first['PO_Date'])).strip()
@@ -196,22 +193,20 @@ def manager_dashboard():
             if h < 6 or h >= 19: is_day = False
         except: pass
 
-        # --- [FEATURE 2] Advanced Latest Status Logic ---
+        # Advanced Latest Status Logic (โค้ดเดิม)
         status_txt = "รอเข้า"
         status_time = ""
         found_branch_activity = False
 
-        # 1. เช็คว่าจบงานครบทุกสาขาไหม
         if all(j['Status'] == 'Done' for j in group):
             status_txt = "จบงานทุกสาขา"
             status_time = group[-1].get('T8_EndJob', '')
             found_branch_activity = True
         else:
-            # 2. เช็คความคืบหน้ารายสาขา
             latest_branch_txt = ""
             latest_branch_time = ""
             
-            for idx, j in enumerate(group, 1): # เริ่มนับสาขาที่ 1
+            for idx, j in enumerate(group, 1):
                 t8 = j.get('T8_EndJob')
                 t7 = j.get('T7_ArriveBranch')
                 
@@ -227,33 +222,17 @@ def manager_dashboard():
                 status_time = latest_branch_time
                 found_branch_activity = True
 
-        # 3. ถ้าไม่มีกิจกรรมที่สาขา เช็คโรงงาน
         if not found_branch_activity:
-            if first.get('T6_Exit'):
-                status_txt = "ออกโรงงาน"
-                status_time = first.get('T6_Exit')
-            elif first.get('T5_RecvDoc'):
-                status_txt = "รับเอกสาร"
-                status_time = first.get('T5_RecvDoc')
-            elif first.get('T4_SubmitDoc'):
-                status_txt = "ยื่นเอกสาร"
-                status_time = first.get('T4_SubmitDoc')
-            elif first.get('T3_EndLoad'):
-                status_txt = "โหลดเสร็จ"
-                status_time = first.get('T3_EndLoad')
-            elif first.get('T2_StartLoad'):
-                status_txt = "กำลังโหลด"
-                status_time = first.get('T2_StartLoad')
-            elif first.get('T1_Enter'):
-                status_txt = "เข้าโรงงาน"
-                status_time = first.get('T1_Enter')
+            if first.get('T6_Exit'): status_txt, status_time = "ออกโรงงาน", first.get('T6_Exit')
+            elif first.get('T5_RecvDoc'): status_txt, status_time = "รับเอกสาร", first.get('T5_RecvDoc')
+            elif first.get('T4_SubmitDoc'): status_txt, status_time = "ยื่นเอกสาร", first.get('T4_SubmitDoc')
+            elif first.get('T3_EndLoad'): status_txt, status_time = "โหลดเสร็จ", first.get('T3_EndLoad')
+            elif first.get('T2_StartLoad'): status_txt, status_time = "กำลังโหลด", first.get('T2_StartLoad')
+            elif first.get('T1_Enter'): status_txt, status_time = "เข้าโรงงาน", first.get('T1_Enter')
         
-        # Format Status String
         full_status = f"{status_txt}"
-        if status_time:
-            full_status = f"{status_txt} ({status_time})"
-        # ------------------------------------------------
-
+        if status_time: full_status = f"{status_txt} ({status_time})"
+        
         trip_data = {
             'round': round_str,
             'car_no': first['Car_No'],
@@ -266,7 +245,8 @@ def manager_dashboard():
         
         if is_day: line_data_day.append(trip_data)
         else: line_data_night.append(trip_data)
-
+    
+    # Line Data Sort (โค้ดเดิม)
     line_data_day.sort(key=lambda x: x['round'])
     def night_sort(item):
         try:
@@ -276,7 +256,7 @@ def manager_dashboard():
     line_data_night.sort(key=night_sort)
     # -----------------------------------------------------------------
 
-    # Pre-calculate Late Status for Display
+    # Pre-calculate Late Status for Display (โค้ดเดิม)
     for job in filtered_jobs:
         job['is_start_late'] = False
         t_plan_str = str(job.get('Round', '')).strip()
@@ -345,9 +325,10 @@ def create_job():
             break
             
     new_rows = []
+    # --- [แก้ไข] เพิ่ม Load_Date ในแถวใหม่ (Index 1) ---
     for branch in branches:
         if branch.strip(): 
-            # Insert Load_Date at index 1 (Column B)
+            # Row Structure: [PO_Date, Load_Date, Round, Car_No, Driver, Plate, Branch_Name, T1_Enter, T2_StartLoad, T3_EndLoad, T4_SubmitDoc, T5_RecvDoc, T6_Exit, T7_ArriveBranch, T8_EndJob, Status, L1_Loc, L2_Loc, L3_Loc, L4_Loc, L5_Loc, L6_Loc, L7_Loc, L8_Loc]
             row = [po_date, load_date, round_time, car_no, driver_name, plate, branch, "", "", "", "", "", "", "", "", "New", "", "", "", "", "", "", "", "", ""]
             new_rows.append(row)
     
@@ -370,14 +351,10 @@ def delete_job():
         
         for i, row in enumerate(all_values):
             if i > 0: # ข้าม Header
-                # --- [แก้ไข] ปรับ Index การเช็คข้อมูล ---
-                # row[0] = PO (A)
-                # row[1] = Load (B)
-                # row[2] = Round (C)
-                # row[3] = Car (D)
+                # row[0] = PO (A), row[2] = Round (C), row[3] = Car (D)
                 if (row[0] == po_date and 
-                    str(row[2]) == str(round_time) and  # แก้จาก 1 เป็น 2
-                    str(row[3]) == str(car_no)):        # แก้จาก 2 เป็น 3
+                    str(row[2]) == str(round_time) and  
+                    str(row[3]) == str(car_no)):        
                     
                     rows_to_delete.append(i + 1)
                     
@@ -389,51 +366,48 @@ def delete_job():
 
 @app.route('/export_excel')
 def export_excel():
+    # 1. โหลดข้อมูลเพียงครั้งเดียว
     sheet = get_db()
     raw_jobs = sheet.worksheet('Jobs').get_all_records()
     
+    # 2. กรองข้อมูลตามวันที่
     date_filter = request.args.get('date_filter')
     if date_filter:
         jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
     else:
         jobs = raw_jobs
         
-    # Sort Data
+    # 3. จัดเรียงข้อมูล
     def sort_key_func(job):
         po_date = str(job['PO_Date'])
         car_no_str = str(job['Car_No']).strip()
+        round_val = str(job['Round'])
         try: car_no_int = int(car_no_str)
         except ValueError: car_no_int = 99999 
-        return (po_date, car_no_int)
+        return (po_date, car_no_int, round_val)
 
     jobs = sorted(jobs, key=sort_key_func)
     
-    # --- 1. เตรียมข้อมูลสำหรับ Main Table ---
+    # --- 4. เตรียมข้อมูลสำหรับ Main Table & Summary (ทำใน loop เดียว) ---
     export_data = []
     prev_trip_key = None
     
-    # ตัวแปรสำหรับคำนวณ Summary
-    grouped_jobs = []
+    grouped_jobs_for_summary = []
     current_group = []
-    if jobs:
-        prev_key_grp = (str(jobs[0]['PO_Date']), str(jobs[0]['Car_No']), str(jobs[0]['Round']), str(jobs[0]['Driver']))
-        for job in jobs:
-            curr_key_grp = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
-            if curr_key_grp != prev_key_grp:
-                grouped_jobs.append(current_group)
-                current_group = []
-                prev_key_grp = curr_key_grp
-            current_group.append(job)
-        if current_group: grouped_jobs.append(current_group)
-
-    # Loop สร้าง Main Data Row
-    for job in jobs:
+    
+    for job_index, job in enumerate(jobs):
         current_trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
         is_same = (current_trip_key == prev_trip_key)
         
-        # Midnight Crossover Logic
+        # A. จัดกลุ่มสำหรับ Summary
+        if current_trip_key != prev_trip_key and prev_trip_key is not None:
+            grouped_jobs_for_summary.append(current_group)
+            current_group = []
+        current_group.append(job)
+        
+        # B. Midnight Crossover Logic
         t2_display = job['T2_StartLoad']
-        if not is_same: 
+        if not is_same and job['T2_StartLoad']: 
             try:
                 plan_time_str = str(job['Round']).strip()
                 actual_time_str = str(job['T2_StartLoad']).strip()
@@ -455,12 +429,14 @@ def export_excel():
                         t2_display = f"{actual_time_str}{delay_msg}"
             except: pass 
 
+        # C. Format Date
         formatted_date = job['PO_Date']
         try:
             date_obj = datetime.strptime(str(job['PO_Date']).strip(), "%Y-%m-%d")
             formatted_date = date_obj.strftime("%d/%m/%Y")
         except: pass
             
+        # D. สร้าง Row ข้อมูล
         row = {
             'ลำดับรถ': "" if is_same else job['Car_No'],
             'PO Date': "" if is_same else formatted_date,
@@ -480,6 +456,8 @@ def export_excel():
         export_data.append(row)
         prev_trip_key = current_trip_key
 
+    if current_group: grouped_jobs_for_summary.append(current_group) # เพิ่มกลุ่มสุดท้าย
+
     df = pd.DataFrame(export_data)
     
     output = io.BytesIO()
@@ -490,7 +468,7 @@ def export_excel():
     wb = load_workbook(output)
     ws = wb.active
     
-    # Styles
+    # Styles (โค้ดเดิม)
     font_header = Font(name='Cordia New', size=14, bold=True, color='FFFFFF') 
     font_body = Font(name='Cordia New', size=14)
     font_summary_head = Font(name='Cordia New', size=14, bold=True)
@@ -517,7 +495,7 @@ def export_excel():
     current_trip_id = None
     is_zebra_active = False
 
-    # Loop Styling Main Table
+    # Loop Styling Main Table (โค้ดเดิม)
     for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
         ws.row_dimensions[row[0].row].height = 21
 
@@ -536,7 +514,7 @@ def export_excel():
             if job_index == len(jobs) - 1: is_group_end = True
             else:
                 next_job = jobs[job_index + 1]
-                if (str(job_data['PO_Date']) != str(next_job['PO_Date'])) or (str(job_data['Car_No']) != str(next_job['Car_No'])):
+                if (str(job_data['PO_Date']) != str(next_job['PO_Date'])) or (str(job_data['Car_No']) != str(next_job['Car_No'])) or (str(job_data['Round']) != str(next_job['Round'])):
                     is_group_end = True
 
             this_trip_key = (str(job_data['PO_Date']), str(job_data['Car_No']), str(job_data['Round']))
@@ -568,12 +546,12 @@ def export_excel():
             if col_name in ['คนขับ', 'ปลายทาง (สาขา)', 'ทะเบียนรถ']: cell.alignment = align_left
             else: cell.alignment = align_center
 
-    # --- [NEW] คำนวณ Summary Stats ---
+    # --- 5. คำนวณ Summary Stats (ใช้ grouped_jobs_for_summary) ---
     def create_counter(): return {'count':0, 't1':0, 't2':0, 't3':0, 't4':0, 't5':0, 't6':0, 't7':0, 't8':0}
     sum_day = create_counter()
     sum_night = create_counter()
     
-    for group in grouped_jobs:
+    for group in grouped_jobs_for_summary:
         if not group: continue
         first_job = group[0]
         last_job = group[-1]
@@ -593,26 +571,22 @@ def export_excel():
         if first_job.get('T4_SubmitDoc'): target['t4'] += 1
         if first_job.get('T5_RecvDoc'): target['t5'] += 1
         if first_job.get('T6_Exit'): target['t6'] += 1
-        if first_job.get('T7_ArriveBranch'): target['t7'] += 1 
-        if last_job.get('T8_EndJob'): target['t8'] += 1       
+        # [แก้ไข] นับ T7, T8 หากมีเวลาบันทึกในสาขาใดสาขาหนึ่งในเที่ยววิ่งนั้น
+        if any(j.get('T7_ArriveBranch') for j in group): target['t7'] += 1
+        if any(j.get('T8_EndJob') for j in group): target['t8'] += 1
 
     sum_total = create_counter()
     for k in sum_total: sum_total[k] = sum_day[k] + sum_night[k]
 
-    # --- [NEW] วาดตารางสรุป (Summary Table) แบบไม่ Merge ---
+    # --- 6. วาดตารางสรุป (Summary Table) (โค้ดเดิม) ---
     start_row = ws.max_row + 2 
     
     summary_headers = ['รอบโหลด', 'จำนวนรถ', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ยื่นเอกสาร', 'รับเอกสาร', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
     
-    # [FIX] Col Mapping: Label อยู่ Col E (5), ข้อมูลเริ่ม Col F (6) ถึง N (14)
-    # Col 5 = ปลายทาง, Col 6 = ทะเบียน ... Col 14 = จบงาน
     col_map_idx = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14] 
     
     # 1. Write Header Row
-    # เขียน "รอบโหลด" ลงคอลัมน์ E (5)
     ws.cell(row=start_row, column=5, value="รอบโหลด")
-    
-    # เขียนหัวข้ออื่นๆ ลงคอลัมน์ F-N
     header_labels = summary_headers[1:] 
     for i, label in enumerate(header_labels):
         ws.cell(row=start_row, column=col_map_idx[i+1], value=label)
@@ -628,17 +602,14 @@ def export_excel():
         curr_r = start_row + 1 + idx
         ws.row_dimensions[curr_r].height = 21
         
-        # เขียน Label ลงคอลัมน์ E (5)
         ws.cell(row=curr_r, column=5, value=label)
         
         vals = [data['count'], data['t1'], data['t2'], data['t3'], data['t4'], data['t5'], data['t6'], data['t7'], data['t8']]
         
-        # เขียนข้อมูลลงคอลัมน์ F-N
         for i, val in enumerate(vals):
             ws.cell(row=curr_r, column=col_map_idx[i+1], value=val)
 
     # 3. Apply Styles to Summary
-    # Loop ตั้งแต่ Col E (5) ถึง N (14)
     for r in range(start_row, start_row + 4):
         for c in range(5, 15): 
             cell = ws.cell(row=r, column=c)
@@ -653,7 +624,7 @@ def export_excel():
                 cell.fill = fill_sum_total
                 cell.font = font_summary_head
 
-    # Column Width Adjustment
+    # Column Width Adjustment (โค้ดเดิม)
     for column_cells in ws.columns:
         col_letter = get_column_letter(column_cells[0].column)
         col_header = column_cells[0].value
@@ -689,14 +660,31 @@ def export_pdf():
     def sort_key_func(job):
         po_date = str(job['PO_Date'])
         car_no_str = str(job['Car_No']).strip()
+        round_val = str(job['Round'])
         try: car_no_int = int(car_no_str)
         except ValueError: car_no_int = 99999 
-        return (po_date, car_no_int)
+        return (po_date, car_no_int, round_val)
 
     jobs = sorted(jobs, key=sort_key_func)
 
-    # --- คำนวณความล่าช้า (Logic ข้ามวัน) ---
+    # --- 2. คำนวณความล่าช้า จัดกลุ่ม และยอดสรุป (ทำใน loop เดียว) ---
+    def create_counter(): return {'total': 0, 't1': 0, 't2': 0, 't3': 0, 't6': 0, 't7': 0, 't8': 0}
+    sum_day = create_counter()
+    sum_night = create_counter()
+    grouped_jobs = []
+    current_group = []
+    prev_key = None
+    
     for job in jobs:
+        # A. Grouping
+        curr_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
+        if curr_key != prev_key and prev_key is not None:
+            grouped_jobs.append(current_group)
+            current_group = []
+        current_group.append(job)
+        prev_key = curr_key
+        
+        # B. คำนวณความล่าช้า (Midnight Crossover Logic)
         job['is_late'] = False
         job['delay_msg'] = ""
         t_plan_str = str(job['Round']).strip()
@@ -709,7 +697,6 @@ def export_pdf():
                 t_plan = datetime.strptime(t_plan_str, fmt_plan)
                 t_act = datetime.strptime(t_act_str, fmt_act)
                 
-                # Check Midnight Crossover
                 if (t_plan - t_act).total_seconds() > 12 * 3600:
                     t_act = t_act + timedelta(days=1)
 
@@ -721,31 +708,13 @@ def export_pdf():
                     minutes = int((total_seconds % 3600) // 60)
                     job['delay_msg'] = f"(ล่าช้า {hours} ชม. {minutes} น.)"
             except: pass
+            
+    if current_group: grouped_jobs.append(current_group) # เพิ่มกลุ่มสุดท้าย
 
-    # --- จัดกลุ่มข้อมูล ---
-    grouped_jobs = []
-    if jobs:
-        current_group = []
-        prev_key = (str(jobs[0]['PO_Date']), str(jobs[0]['Car_No']), str(jobs[0]['Round']), str(jobs[0]['Driver']))
-        for job in jobs:
-            curr_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
-            if curr_key != prev_key:
-                grouped_jobs.append(current_group)
-                current_group = []
-                prev_key = curr_key
-            current_group.append(job)
-        if current_group:
-            grouped_jobs.append(current_group)
-
-    # --- คำนวณยอดสรุป ---
-    def create_counter(): return {'total': 0, 't1': 0, 't2': 0, 't3': 0, 't6': 0, 't7': 0, 't8': 0}
-    sum_day = create_counter()
-    sum_night = create_counter()
-    
+    # C. คำนวณยอดสรุป (ใช้ grouped_jobs ที่ได้จาก loop บน)
     for group in grouped_jobs:
         if not group: continue
         first_job = group[0]
-        last_job = group[-1]
         
         round_time = str(first_job.get('Round', '')).strip()
         is_day_shift = True
@@ -760,14 +729,15 @@ def export_pdf():
         if first_job.get('T2_StartLoad'): target_sum['t2'] += 1
         if first_job.get('T3_EndLoad'): target_sum['t3'] += 1
         if first_job.get('T6_Exit'): target_sum['t6'] += 1
-        if first_job.get('T7_ArriveBranch'): target_sum['t7'] += 1
-        if last_job.get('T8_EndJob'): target_sum['t8'] += 1
+        if any(j.get('T7_ArriveBranch') for j in group): target_sum['t7'] += 1 # เช็คว่ามีสาขาไหนถึงแล้ว
+        if any(j.get('T8_EndJob') for j in group): target_sum['t8'] += 1 # เช็คว่ามีสาขาไหนจบแล้ว
 
     sum_total = create_counter()
     for key in sum_total:
         sum_total[key] = sum_day[key] + sum_night[key]
 
-    # --- Setup Class PDF ---
+
+    # --- Setup Class PDF (โค้ดเดิม) ---
     basedir = os.path.abspath(os.path.dirname(__file__))
     font_path = os.path.join(basedir, 'static', 'fonts', 'Sarabun-Regular.ttf')
     logo_path = os.path.join(basedir, 'static', 'mylogo.png') 
@@ -817,7 +787,7 @@ def export_pdf():
             self.set_x(-30)
             self.cell(0, 10, f'หน้า {self.page_no()}/{{nb}}', align='R')
 
-    # --- Generate PDF ---
+    # --- Generate PDF (โค้ดเดิม) ---
     pdf = PDF(orientation='L', unit='mm', format='A4')
     pdf.alias_nb_pages()
     pdf.set_margins(7, 10, 7)
@@ -839,7 +809,6 @@ def export_pdf():
             is_first_row = (idx == 0)
             is_last_in_group = (idx == len(group) - 1)
             
-            # 1. จับตำแหน่งแกน Y ก่อนเริ่มวาด
             y_top = pdf.get_y()
 
             pdf.set_fill_color(255, 255, 255)
@@ -867,8 +836,7 @@ def export_pdf():
             row_height = 9
             if is_late_row: row_height = 13
 
-            # 2. วาด Cells (Background & Text)
-            # ใช้ border='LR' (ซ้ายขวา) เพื่อไม่ให้ตีเส้นบนล่างทับกันเอง
+            # 2. วาด Cells
             pdf.set_font('Sarabun', '', 8)
             pdf.set_text_color(0, 0, 0)
             pdf.cell(cols[0], row_height, c_no, border='LR', align='C')
@@ -897,7 +865,6 @@ def export_pdf():
             pdf.cell(cols[7], row_height, t3, border='LR', align='C')
             pdf.cell(cols[8], row_height, t6, border='LR', align='C')
             
-            # พื้นหลังสีพิเศษ (จะถูกวาดลงไป)
             pdf.set_fill_color(213, 245, 227)
             pdf.cell(cols[9], row_height, t7, border='LR', align='C', fill=True)
             pdf.set_fill_color(250, 219, 216)
@@ -905,31 +872,26 @@ def export_pdf():
 
             pdf.ln()
             
-            # 3. [NEW] วาดเส้นทับลงไปทีหลังสุด (Overlay Lines)
-            # เส้นบน (Top Line) ของแถวปัจจุบัน
+            # 3. วาดเส้นทับ (Overlay Lines)
             if is_first_row:
-                # ถ้าเป็นเริ่มคันใหม่ -> เส้นดำหนา
                 pdf.set_draw_color(0, 0, 0) # Black
                 pdf.set_line_width(0.3)     # Thick
             else:
-                # ถ้าเป็นสาขารอง -> เส้นเทาบาง
                 pdf.set_draw_color(200, 200, 200) # Gray
                 pdf.set_line_width(0.1)     # Thin
                 
             pdf.line(7, y_top, 290, y_top)
 
-            # เส้นล่าง (Bottom Line) เฉพาะบรรทัดสุดท้ายของกลุ่ม
             if is_last_in_group:
                 y_bottom = pdf.get_y()
                 pdf.set_draw_color(0, 0, 0)
                 pdf.set_line_width(0.3)
                 pdf.line(7, y_bottom, 290, y_bottom)
 
-            # Reset Line
             pdf.set_draw_color(0, 0, 0)
             pdf.set_line_width(0.2)
 
-    # --- Summary Page ---
+    # --- Summary Page (โค้ดเดิม) ---
     pdf.is_summary_page = True
     pdf.add_page()
     
@@ -1010,14 +972,31 @@ def export_pdf_summary():
     def sort_key_func(job):
         po_date = str(job['PO_Date'])
         car_no_str = str(job['Car_No']).strip()
+        round_val = str(job['Round'])
         try: car_no_int = int(car_no_str)
         except ValueError: car_no_int = 99999 
-        return (po_date, car_no_int)
+        return (po_date, car_no_int, round_val)
 
     jobs = sorted(jobs, key=sort_key_func)
 
-    # Midnight Logic
+    # --- 2. คำนวณความล่าช้า จัดกลุ่ม และยอดสรุป (ทำใน loop เดียว) ---
+    def create_counter(): return {'count':0, 't1':0, 't2':0, 't3':0, 't4':0, 't5':0, 't6':0, 't7':0, 't8':0}
+    sum_day = create_counter()
+    sum_night = create_counter()
+    grouped_jobs = []
+    current_group = []
+    prev_key = None
+
     for job in jobs:
+        # A. Grouping
+        curr_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
+        if curr_key != prev_key and prev_key is not None:
+            grouped_jobs.append(current_group)
+            current_group = []
+        current_group.append(job)
+        prev_key = curr_key
+        
+        # B. คำนวณความล่าช้า (Midnight Crossover Logic)
         job['is_late'] = False
         t_plan_str = str(job['Round']).strip()
         t_act_str = str(job['T2_StartLoad']).strip()
@@ -1030,30 +1009,13 @@ def export_pdf_summary():
                 if (t_plan - t_act).total_seconds() > 12 * 3600: t_act += timedelta(days=1)
                 if t_act > t_plan: job['is_late'] = True
             except: pass
+            
+    if current_group: grouped_jobs.append(current_group) # เพิ่มกลุ่มสุดท้าย
 
-    # Grouping
-    grouped_jobs = []
-    if jobs:
-        current_group = []
-        prev_key = (str(jobs[0]['PO_Date']), str(jobs[0]['Car_No']), str(jobs[0]['Round']), str(jobs[0]['Driver']))
-        for job in jobs:
-            curr_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
-            if curr_key != prev_key:
-                grouped_jobs.append(current_group)
-                current_group = []
-                prev_key = curr_key
-            current_group.append(job)
-        if current_group: grouped_jobs.append(current_group)
-
-    # Calculate Summary
-    def create_counter(): return {'count':0, 't1':0, 't2':0, 't3':0, 't4':0, 't5':0, 't6':0, 't7':0, 't8':0}
-    sum_day = create_counter()
-    sum_night = create_counter()
-
+    # C. Calculate Summary (ใช้ grouped_jobs ที่ได้จาก loop บน)
     for group in grouped_jobs:
         if not group: continue
         first_job = group[0]
-        last_job = group[-1]
         
         round_time = str(first_job.get('Round', '')).strip()
         is_day_shift = True
@@ -1070,14 +1032,14 @@ def export_pdf_summary():
         if first_job.get('T4_SubmitDoc'): target['t4'] += 1
         if first_job.get('T5_RecvDoc'): target['t5'] += 1
         if first_job.get('T6_Exit'): target['t6'] += 1
-        if first_job.get('T7_ArriveBranch'): target['t7'] += 1 
-        if last_job.get('T8_EndJob'): target['t8'] += 1       
+        if any(j.get('T7_ArriveBranch') for j in group): target['t7'] += 1 
+        if any(j.get('T8_EndJob') for j in group): target['t8'] += 1       
 
     sum_total = create_counter()
     for k in sum_total: sum_total[k] = sum_day[k] + sum_night[k]
 
 
-    # --- 2. Setup PDF Class ---
+    # --- 3. Setup PDF Class (โค้ดเดิม) ---
     basedir = os.path.abspath(os.path.dirname(__file__))
     font_path = os.path.join(basedir, 'static', 'fonts', 'Sarabun-Regular.ttf')
     logo_path = os.path.join(basedir, 'static', 'mylogo.png') 
@@ -1094,22 +1056,18 @@ def export_pdf_summary():
             if os.path.exists(logo_path):
                 self.image(logo_path, x=7, y=6, w=10)
             
-            # Header Line 1: Report Name
             self.set_font('Sarabun', '', 12) 
             self.set_y(6)
             self.cell(0, 8, 'สรุปรายงานการจัดส่งสินค้า (Compact View)', align='C', new_x="LMARGIN", new_y="NEXT")
             
-            # [NEW] Header Line 2: Company Name
             self.set_font_size(10)
             self.cell(0, 7, 'บริษัท แอลเอ็มที. ทรานสปอร์ต จำกัด', align='C', new_x="LMARGIN", new_y="NEXT")
 
-            # Header Line 3: Date
             self.set_font_size(8)
             self.cell(0, 6, f'วันที่เอกสาร: {po_date_thai} | พิมพ์เมื่อ: {print_date}', align='C', new_x="LMARGIN", new_y="NEXT")
             
             self.ln(3)
             
-            # Table Header
             self.set_fill_color(44, 62, 80)
             self.set_text_color(255, 255, 255)
             self.set_draw_color(100, 100, 100)
@@ -1128,7 +1086,7 @@ def export_pdf_summary():
             self.set_text_color(150)
             self.cell(0, 10, f'หน้า {self.page_no()}/{{nb}}', align='R')
 
-    # --- Generate PDF ---
+    # --- Generate PDF (โค้ดเดิม) ---
     pdf = PDFSummary(orientation='P', unit='mm', format='A4')
     pdf.alias_nb_pages()
     pdf.set_margins(7, 7, 7)
@@ -1163,7 +1121,6 @@ def export_pdf_summary():
             t7 = str(job['T7_ArriveBranch'])
             t8 = str(job['T8_EndJob'])
 
-            # [ADJUST] ลดความสูงแถวลงเหลือ 5.8mm (ลดลง ~10% จาก 6.5mm)
             row_height = 5.8
 
             if pdf.get_y() + row_height > pdf.page_break_trigger:
@@ -1218,7 +1175,7 @@ def export_pdf_summary():
                 pdf.set_line_width(0.2)
                 pdf.set_draw_color(180, 180, 180)
 
-    # --- Summary Table ---
+    # --- Summary Table (โค้ดเดิม) ---
     pdf.ln(5)
     if pdf.get_y() + 30 > pdf.page_break_trigger:
         pdf.add_page()
@@ -1281,11 +1238,44 @@ def customer_view():
     jobs_by_trip_key = {}
     total_done_jobs = 0
     total_branches = len(jobs)
+    
+    # --- [ปรับปรุง] รวม Stats และ Delay Logic ใน Loop เดียว ---
     for job in jobs:
+        # A. Stats
         trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']))
         if trip_key not in jobs_by_trip_key: jobs_by_trip_key[trip_key] = []
         jobs_by_trip_key[trip_key].append(job)
         if job['Status'] == 'Done': total_done_jobs += 1
+            
+        # B. Delay Logic
+        job['is_late'] = False
+        job['delay_tooltip'] = ""
+        t_plan_str = str(job.get('Round', '')).strip()
+        t_act_str = str(job.get('T2_StartLoad', '')).strip()
+        
+        if t_plan_str and t_act_str:
+            try:
+                fmt_plan = "%H:%M" if len(t_plan_str) <= 5 else "%H:%M:%S"
+                fmt_act = "%H:%M" if len(t_act_str) <= 5 else "%H:%M:%S"
+                
+                t_plan = datetime.strptime(t_plan_str, fmt_plan)
+                t_act = datetime.strptime(t_act_str, fmt_act)
+
+                if (t_plan - t_act).total_seconds() > 12 * 3600:
+                    t_act = t_act + timedelta(days=1)
+                
+                if t_act > t_plan:
+                    job['is_late'] = True
+                    diff = t_act - t_plan
+                    total_seconds = diff.total_seconds()
+                    hours = int(total_seconds // 3600)
+                    minutes = int((total_seconds % 3600) // 60)
+                    job['delay_tooltip'] = f"ล่าช้า {hours} ชม. {minutes} น."
+                else:
+                    job['delay_tooltip'] = "เข้าโหลดตรงตามเวลา"
+            except (ValueError, TypeError):
+                pass
+    # --------------------------------------------------------
             
     completed_trips = 0
     for trip_key, job_list in jobs_by_trip_key.items():
@@ -1302,43 +1292,6 @@ def customer_view():
 
     jobs = sorted(jobs, key=sort_key_func)
     
-    # --- เพิ่ม Logic คำนวณความล่าช้าสำหรับแสดงผล (แทรกตรงนี้) ---
-    for job in jobs:
-        job['is_late'] = False
-        job['delay_tooltip'] = ""
-        
-        # ตรวจสอบว่ามีข้อมูลเวลาทั้งคู่หรือไม่
-        t_plan_str = str(job['Round']).strip()
-        t_act_str = str(job['T2_StartLoad']).strip()
-        
-        if t_plan_str and t_act_str:
-            try:
-                # แปลงรูปแบบเวลา (รองรับทั้ง HH:MM และ HH:MM:SS)
-                fmt_plan = "%H:%M" if len(t_plan_str) <= 5 else "%H:%M:%S"
-                fmt_act = "%H:%M" if len(t_act_str) <= 5 else "%H:%M:%S"
-                
-                t_plan = datetime.strptime(t_plan_str, fmt_plan)
-                t_act = datetime.strptime(t_act_str, fmt_act)
-
-                # Check Midnight Crossover
-                if (t_plan - t_act).total_seconds() > 12 * 3600:
-                    t_act = t_act + timedelta(days=1)
-                
-                if t_act > t_plan:
-                    # กรณีล่าช้า
-                    job['is_late'] = True
-                    diff = t_act - t_plan
-                    total_seconds = diff.total_seconds()
-                    hours = int(total_seconds // 3600)
-                    minutes = int((total_seconds % 3600) // 60)
-                    job['delay_tooltip'] = f"ล่าช้า {hours} ชม. {minutes} น."
-                else:
-                    # กรณีทันเวลา หรือก่อนเวลา
-                    job['delay_tooltip'] = "เข้าโหลดตรงตามเวลา"
-            except (ValueError, TypeError):
-                pass
-    # --------------------------------------------------------
-    
     return render_template('customer_view.html', 
                            jobs=jobs, all_dates=all_dates, current_date=date_filter,
                            total_trips=total_trips, completed_trips=completed_trips,
@@ -1350,6 +1303,7 @@ def customer_view():
 def driver_select():
     sheet = get_db()
     drivers = sheet.worksheet('Drivers').col_values(1)[1:]
+    # --- [ปรับปรุง] ใช้ col_values(1) แทน get_all_records() เพื่อโหลดข้อมูลน้อยลง ---
     all_jobs = sheet.worksheet('Jobs').get_all_records()
     
     now_thai = datetime.now() + timedelta(hours=7)
@@ -1371,19 +1325,17 @@ def driver_select():
             trip_key = f"{job['PO_Date']}_{job['Round']}_{job['Car_No']}"
             driver_info[d_name]['pending_set'].add(trip_key)
             
-            # --- NEW LOGIC: ใช้ Load_Date โดยตรง ---
+            # --- NEW LOGIC: ใช้ Load_Date โดยตรง (โค้ดเดิม) ---
             try:
                 load_date_str = job.get('Load_Date', job['PO_Date']) # fallback PO
                 round_str = str(job['Round']).strip()
                 
-                # สร้าง DateTime เต็มรูปแบบ (YYYY-MM-DD HH:MM)
                 job_dt_str = f"{load_date_str} {round_str}"
                 try:
                     job_dt = datetime.strptime(job_dt_str, "%Y-%m-%d %H:%M")
-                except ValueError: # Fallback ถ้า format ผิด
+                except ValueError: 
                     job_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
 
-                # คำนวณ Countdown
                 diff = job_dt - now_thai
                 hours_diff = diff.total_seconds() / 3600
                 h = job_dt.hour
@@ -1393,21 +1345,18 @@ def driver_select():
                 color = ""
                 weight = 999
                 
-                # A: ถึงเวลา/เลยเวลา
                 if hours_diff <= 0:
                     if hours_diff > -12: 
                         msg = "❗ โหลดตอนนี้"
                         color = "bg-red-500 text-white border-red-600 animate-pulse shadow-red-200"
                         weight = 1
                 
-                # B: ภายใน 16 ชม.
                 elif 0 < hours_diff <= 16:
                     if 6 <= h <= 12:   msg, color = "☀️ โหลดเช้านี้", "bg-yellow-100 text-yellow-700 border-yellow-200"
                     elif 13 <= h <= 18: msg, color = "⛅ โหลดบ่ายนี้", "bg-orange-100 text-orange-700 border-orange-200"
                     else:               msg, color = "🌙 โหลดคืนนี้", "bg-indigo-100 text-indigo-700 border-indigo-200"
                     weight = 2
                 
-                # C: พรุ่งนี้
                 elif 16 < hours_diff <= 40:
                     period = "คืนพรุ่งนี้" if (h >= 19 or h <= 5) else "วันพรุ่งนี้"
                     if driver_info[d_name]['sort_weight'] > 3:
@@ -1447,7 +1396,7 @@ def driver_tasks():
     now_thai = datetime.now() + timedelta(hours=7)
     today_date_str = now_thai.strftime("%Y-%m-%d")
 
-    # --- NEW LOGIC (Driver Tasks) ---
+    # --- NEW LOGIC (Driver Tasks) (โค้ดเดิม) ---
     for job in my_jobs:
         try:
             load_date_str = job.get('Load_Date', job['PO_Date'])
@@ -1517,8 +1466,7 @@ def update_status():
     sheet = get_db()
     ws = sheet.worksheet('Jobs')
     
-    # --- [แก้ไขจุดที่ 1] ปรับ Map คอลัมน์ให้ตรงกับ Google Sheet ใหม่ (ขยับ +1) ---
-    # T1 เริ่มที่คอลัมน์ H (ลำดับที่ 8)
+    # Time Columns: T1=H(8) to T8=O(15)
     time_col_map = {
         '1': 8,  # T1_Enter
         '2': 9,  # T2_StartLoad
@@ -1530,7 +1478,7 @@ def update_status():
         '8': 15  # T8_EndJob
     }
     
-    # L1 เริ่มที่คอลัมน์ Q (ลำดับที่ 17)
+    # Location Columns: L1=Q(17) to L8=X(24)
     loc_col_map = {
         '1': 17, # L1
         '2': 18, 
@@ -1550,27 +1498,23 @@ def update_status():
     if step in ['1', '2', '3', '4', '5', '6']:
         target_row_data = ws.row_values(row_id_target)
         
-        # --- [แก้ไขจุดที่ 2] การอ่านข้อมูลจากแถวเป้าหมาย (ขยับ Index) ---
-        # Index 0 = PO Date (A)
-        # Index 1 = Load Date (B) <-- ข้าม
-        # Index 2 = Round (C)
-        # Index 3 = Car No (D)
-        
+        # Index 0 = PO Date (A), Index 2 = Round (C), Index 3 = Car No (D)
         if len(target_row_data) < 4: return redirect(url_for('driver_tasks', name=driver_name))
         
         target_po = target_row_data[0] 
-        target_round = target_row_data[2] # แก้จาก 1 เป็น 2
-        target_car = target_row_data[3]   # แก้จาก 2 เป็น 3
+        target_round = target_row_data[2]
+        target_car = target_row_data[3]
         
+        # --- [ปรับปรุง] ใช้ get_all_values() เพียงครั้งเดียว ---
         all_values = ws.get_all_values()
         
         for i, row in enumerate(all_values[1:]): 
             current_row_id = i + 2 
-            # ตรวจสอบเงื่อนไขว่าใช่เที่ยวเดียวกันไหม
+            
             if (len(row) > 3 and 
                 row[0] == target_po and 
-                row[2] == target_round and  # แก้จาก 1 เป็น 2
-                row[3] == target_car):      # แก้จาก 2 เป็น 3
+                row[2] == target_round and  
+                row[3] == target_car):      
                 
                 cell_coord_time = gspread.utils.rowcol_to_a1(current_row_id, time_col)
                 updates.append({'range': cell_coord_time, 'values': [[current_time]]})
@@ -1590,9 +1534,9 @@ def update_status():
             updates.append({'range': cell_coord_loc, 'values': [[location_str]]})
         if updates: ws.batch_update(updates)
 
-    # --- [แก้ไขจุดที่ 3] คอลัมน์ Status ย้ายไป P (ลำดับที่ 16) ---
+    # คอลัมน์ Status ย้ายไป P (ลำดับที่ 16)
     if step == '8': 
-        ws.update_cell(row_id_target, 16, "Done") # แก้จาก 15 เป็น 16
+        ws.update_cell(row_id_target, 16, "Done")
         
     return redirect(url_for('driver_tasks', name=driver_name))
 

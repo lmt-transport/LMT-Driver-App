@@ -62,49 +62,6 @@
 
     <div id="tab-monitor" class="tab-content">
         
-        {% if total_late_cars > 0 %}
-        <div class="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl shadow-sm animate-pulse">
-            <div class="flex justify-between items-start">
-                <div class="flex items-center gap-3">
-                    <div class="bg-red-100 p-2 rounded-full text-red-600">
-                        <i class="fa-solid fa-bell fa-shake text-xl"></i>
-                    </div>
-                    <div>
-                        <h4 class="text-red-800 font-bold text-lg">แจ้งเตือน: พบรถยังไม่เข้าคลัง {{ total_late_cars }} คัน</h4>
-                        <p class="text-red-600 text-sm">เลยกำหนดเวลาโหลดสินค้าแล้ว กรุณาติดตามคนขับ</p>
-                    </div>
-                </div>
-                <button onclick="this.parentElement.parentElement.style.display='none'" class="text-red-400 hover:text-red-600"><i class="fa-solid fa-xmark text-xl"></i></button>
-            </div>
-            
-            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {% for po_date, cars in late_arrivals_by_po.items() %}
-                <div class="bg-white border border-red-100 rounded-lg p-3 shadow-sm">
-                    <div class="border-b border-red-50 pb-2 mb-2 flex justify-between items-center">
-                        <span class="text-xs font-bold text-gray-500 uppercase">PO: {{ po_date | thai_date }}</span>
-                        <span class="bg-red-100 text-red-700 text-[10px] px-2 py-0.5 rounded-full font-bold">{{ cars|length }} คัน</span>
-                    </div>
-                    <div class="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
-                        {% for car in cars %}
-                        <div class="flex justify-between items-start text-sm">
-                            <div>
-                                <div class="font-bold text-gray-800">
-                                    <i class="fa-solid fa-truck text-gray-400"></i> คันที่ {{ car.Car_No }}
-                                </div>
-                                <div class="text-xs text-gray-500">{{ car.Driver }} ({{ car.Plate }})</div>
-                            </div>
-                            <div class="text-right">
-                                <div class="text-red-600 font-bold text-xs">นัด {{ car.Round }}</div>
-                                <div class="text-[10px] text-red-400">สาย {{ car.late_duration }}</div>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
         <div class="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
             <div class="p-4 border-b flex flex-wrap justify-between items-center bg-gray-50 gap-3">
                 <h3 class="font-bold text-gray-700 flex items-center gap-2 text-lg">
@@ -263,18 +220,18 @@
                     </a>
                     <a href="#" onclick="triggerExport()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-bold shadow transition flex items-center gap-2"><i class="fa-solid fa-file-excel"></i> Excel</a>
                     <button type="button" onclick="shareLine('day')" class="bg-[#06C755] text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#05b34c] transition shadow-md flex items-center gap-1 transform active:scale-95" title="แผนงานกลางวัน">
-    <i class="fa-brands fa-line text-lg"></i> <i class="fa-solid fa-sun text-yellow-300"></i>
-</button>
-<button type="button" onclick="shareLine('night')" class="bg-[#06C755] text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#05b34c] transition shadow-md flex items-center gap-1 transform active:scale-95" title="แผนงานกลางคืน">
-    <i class="fa-brands fa-line text-lg"></i> <i class="fa-solid fa-moon text-indigo-100"></i>
-</button>
+                        <i class="fa-brands fa-line text-lg"></i> <i class="fa-solid fa-sun text-yellow-300"></i>
+                    </button>
+                    <button type="button" onclick="shareLine('night')" class="bg-[#06C755] text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#05b34c] transition shadow-md flex items-center gap-1 transform active:scale-95" title="แผนงานกลางคืน">
+                        <i class="fa-brands fa-line text-lg"></i> <i class="fa-solid fa-moon text-indigo-100"></i>
+                    </button>
 
-<button type="button" onclick="copyUpdateText('day')" class="bg-blue-600 text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-blue-700 transition shadow-md flex items-center gap-1 transform active:scale-95" title="อัพเดทสถานะกลางวัน">
-    <i class="fa-solid fa-bullhorn"></i> <i class="fa-solid fa-sun text-yellow-300"></i>
-</button>
-<button type="button" onclick="copyUpdateText('night')" class="bg-indigo-600 text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-indigo-700 transition shadow-md flex items-center gap-1 transform active:scale-95" title="อัพเดทสถานะกลางคืน">
-    <i class="fa-solid fa-bullhorn"></i> <i class="fa-solid fa-moon text-indigo-100"></i>
-</button>
+                    <button type="button" onclick="copyUpdateText('day')" class="bg-blue-600 text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-blue-700 transition shadow-md flex items-center gap-1 transform active:scale-95" title="อัพเดทสถานะกลางวัน">
+                        <i class="fa-solid fa-bullhorn"></i> <i class="fa-solid fa-sun text-yellow-300"></i>
+                    </button>
+                    <button type="button" onclick="copyUpdateText('night')" class="bg-indigo-600 text-white px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-indigo-700 transition shadow-md flex items-center gap-1 transform active:scale-95" title="อัพเดทสถานะกลางคืน">
+                        <i class="fa-solid fa-bullhorn"></i> <i class="fa-solid fa-moon text-indigo-100"></i>
+                    </button>
                     <a href="/manager?tab=report" class="bg-white text-gray-500 border border-gray-300 px-3 py-2 rounded-lg hover:bg-gray-100 text-sm shadow-sm"><i class="fa-solid fa-rotate-right"></i></a>
                 </form>
             </div>
@@ -482,9 +439,7 @@
         }
     }
 
-// --- LINE Share Logic (Date at Top Once) ---
     function shareLine(shiftType) {
-        // รับข้อมูลจาก Python
         const dayData = {{ line_data_day | tojson | safe }};
         const nightData = {{ line_data_night | tojson | safe }};
         
@@ -507,15 +462,12 @@
             return;
         }
 
-        // 1. สร้าง Header
         let msg = `📄 LMT PO ${poDateThai} (${shiftEmoji} ${shiftName})\n`;
 
-        // 2. [แก้ไข] แสดงวันที่โหลดครั้งเดียวตรงนี้ (ดึงจากรายการแรกสุด)
         if (dataList.length > 0) {
             msg += `📅 โหลดวันที่: ${dataList[0].load_date}\n\n`;
         }
 
-        // จัดกลุ่มตามเวลา
         let groupedByRound = {};
         dataList.forEach(item => {
             let r = item.round || "ไม่ระบุเวลา";
@@ -523,7 +475,6 @@
             groupedByRound[r].push(item);
         });
 
-        // 3. Loop สร้างรายการรถ (ไม่ต้องแสดงวันที่ในนี้แล้ว)
         for (const [roundTime, cars] of Object.entries(groupedByRound)) {
             msg += `🕒 รอบโหลด ${roundTime} น.\n`;
             
@@ -542,7 +493,6 @@
         copyToClipboard(msg, "ตารางงาน");
     }
 	
-// --- [UPDATED] Update Status Share Logic (เพิ่ม น.) ---
     function copyUpdateText(shiftType) {
         const dayData = {{ line_data_day | tojson | safe }};
         const nightData = {{ line_data_night | tojson | safe }};
@@ -560,28 +510,22 @@
             return;
         }
 
-        // Header
         let msg = `อัพเดท รอบโหลด (${shiftLabel})\n`;
         msg += `🚛 LMT PO.${poDateFormatted}\n\n`;
 
-        // Grouping
         let groupedByRound = {};
         dataList.forEach(item => {
             let r = item.round || "ไม่ระบุ";
-            r = r.replace(':', '.'); // เปลี่ยน : เป็น .
+            r = r.replace(':', '.'); 
             if (!groupedByRound[r]) groupedByRound[r] = [];
             groupedByRound[r].push(item);
         });
 
-        // Loop Content
         for (const [roundTime, cars] of Object.entries(groupedByRound)) {
-            msg += `🕒 รอบโหลด : ${roundTime} น.\n`; // เพิ่ม น. ที่หัวข้อรอบด้วย
+            msg += `🕒 รอบโหลด : ${roundTime} น.\n`; 
             
             cars.forEach(car => {
-                // แก้ไขตรงนี้: เติม " น." เข้าไปในวงเล็บปิดของสถานะ
-                // ตัวอย่างเดิม: "ถึงสาขา 1 (05:37)" -> ใหม่: "ถึงสาขา 1 (05:37 น.)"
                 let statusShow = car.latest_status.replace(')', ' น.)');
-                
                 msg += `คันที่ ${car.car_no} ${car.plate} = ${statusShow}\n`;
             });
             

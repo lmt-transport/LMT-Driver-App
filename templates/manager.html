@@ -542,7 +542,7 @@
         copyToClipboard(msg, "ตารางงาน");
     }
 	
-// --- [UPDATED] Update Status Share Logic ---
+// --- [UPDATED] Update Status Share Logic (เพิ่ม น.) ---
     function copyUpdateText(shiftType) {
         const dayData = {{ line_data_day | tojson | safe }};
         const nightData = {{ line_data_night | tojson | safe }};
@@ -568,18 +568,21 @@
         let groupedByRound = {};
         dataList.forEach(item => {
             let r = item.round || "ไม่ระบุ";
-            r = r.replace(':', '.'); // เปลี่ยน 00:30 เป็น 00.30 ตามตัวอย่าง
+            r = r.replace(':', '.'); // เปลี่ยน : เป็น .
             if (!groupedByRound[r]) groupedByRound[r] = [];
             groupedByRound[r].push(item);
         });
 
         // Loop Content
         for (const [roundTime, cars] of Object.entries(groupedByRound)) {
-            msg += `🕒 รอบโหลด : ${roundTime}\n`;
+            msg += `🕒 รอบโหลด : ${roundTime} น.\n`; // เพิ่ม น. ที่หัวข้อรอบด้วย
             
             cars.forEach(car => {
-                // รูปแบบ: คันที่ 88 ถอ 4110 กทม. = ถึงสาขา 1 (05:37)
-                msg += `คันที่ ${car.car_no} ${car.plate} = ${car.latest_status}\n`;
+                // แก้ไขตรงนี้: เติม " น." เข้าไปในวงเล็บปิดของสถานะ
+                // ตัวอย่างเดิม: "ถึงสาขา 1 (05:37)" -> ใหม่: "ถึงสาขา 1 (05:37 น.)"
+                let statusShow = car.latest_status.replace(')', ' น.)');
+                
+                msg += `คันที่ ${car.car_no} ${car.plate} = ${statusShow}\n`;
             });
             
             msg += `\n`; 

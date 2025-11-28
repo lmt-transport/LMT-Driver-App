@@ -2,7 +2,7 @@
 {% block content %}
 
 <style>
-    body, h1, h2, h3, h4, h5, h6, p, span, div, table, input, select, button {
+    body, h1, h2, h3, h4, h5, h6, p, span, div, table, input, select, button, textarea {
         font-family: 'Kanit', sans-serif !important;
     }
     .table-data { font-size: 0.8rem; } 
@@ -22,6 +22,15 @@
     }
     .custom-scrollbar::-webkit-scrollbar-thumb:hover {
         background: #94a3b8; 
+    }
+    
+    /* Modal Styles */
+    .modal {
+        transition: opacity 0.25s ease;
+    }
+    body.modal-active {
+        overflow-x: hidden;
+        overflow-y: visible !important;
     }
 </style>
 
@@ -61,7 +70,6 @@
     </div>
 
     <div id="tab-monitor" class="tab-content">
-        
         <div class="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
             <div class="p-4 border-b flex flex-wrap justify-between items-center bg-gray-50 gap-3">
                 <h3 class="font-bold text-gray-700 flex items-center gap-2 text-lg">
@@ -95,6 +103,18 @@
                         {% if jobs|length == 0 %}
                             <tr><td colspan="9" class="p-10 text-center text-gray-400">ไม่พบข้อมูลงานในวันที่เลือก</td></tr>
                         {% endif %}
+                        
+                        <script>
+                            const driverData = {};
+                            {% for d in drivers %}
+                                driverData["{{ d.Name }}"] = {
+                                    plate: "{{ d.Plate_License }}",
+                                    id_card: "{{ d.get('ID_Card', '-') }}",
+                                    phone: "{{ d.get('Phone', '-') }}"
+                                };
+                            {% endfor %}
+                        </script>
+
                         {% for job in jobs %}
                             {% if loop.first or (loop.previtem.Car_No != job.Car_No or loop.previtem.PO_Date != job.PO_Date or loop.previtem.Round != job.Round) %}
                                 {% set trip_key_tuple = (job.PO_Date|string, job.Car_No|string, job.Round|string) %}
@@ -109,7 +129,14 @@
                                     {% set status_badge = '<span class="inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-1 rounded-full border border-indigo-200"><i class="fa-solid fa-warehouse"></i> ถึงคลังแล้ว</span>' %}
                                 {% endif %}
                                 
-                                <tr class="hover:bg-indigo-50/30 transition">
+                                {% set trip_branches = [] %}
+                                {% for j in jobs %}
+                                    {% if j.PO_Date == job.PO_Date and j.Car_No == job.Car_No and j.Round == job.Round %}
+                                        {% set _ = trip_branches.append(j.Branch_Name) %}
+                                    {% endif %}
+                                {% endfor %}
+                                
+                                <tr class="hover:bg-indigo-50/30 transition group/row">
                                     <td class="px-4 py-3 text-center">{{ status_badge | safe }}</td>
                                     <td class="px-4 py-3 whitespace-nowrap">
                                         <div class="font-bold text-gray-800">{{ job.PO_Date | thai_date }}</div>
@@ -127,10 +154,22 @@
                                     <td class="px-4 py-3 text-center">{% if job.T1_Enter %}<span class="text-indigo-600 font-bold">{{ job.T1_Enter }}</span>{% else %}<span class="text-gray-300">-</span>{% endif %}</td>
                                     <td class="px-4 py-3 text-center">{% if job.T6_Exit %}<span class="text-blue-600 font-bold">{{ job.T6_Exit }}</span>{% else %}<span class="text-gray-300">-</span>{% endif %}</td>
                                     <td class="px-4 py-3 text-center">{% if last_end_time %}<span class="text-green-600 font-bold">{{ last_end_time }}</span>{% else %}<span class="text-gray-300">-</span>{% endif %}</td>
-                                    <td class="px-4 py-3 text-center flex justify-center gap-2">
+                                    <td class="px-4 py-3 text-center flex justify-center gap-2 items-center">
                                         {% if job.L1_Loc %}
                                             <a href="https://www.google.com/maps/search/?api=1&query={{ job.L1_Loc }}" target="_blank" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800 transition shadow-sm" title="ดูพิกัด"><i class="fa-solid fa-location-dot"></i></a>
                                         {% endif %}
+                                        
+                                        <button onclick="openChangeDriverModal({
+                                            carNo: '{{ job.Car_No }}',
+                                            loadDate: '{{ show_load | thai_date }}',
+                                            roundTime: '{{ job.Round }}',
+                                            branches: {{ trip_branches | tojson }},
+                                            oldDriver: '{{ job.Driver }}',
+                                            oldPlate: '{{ job.Plate }}'
+                                        })" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-50 text-orange-500 hover:bg-orange-100 hover:text-orange-700 transition shadow-sm" title="แจ้งเปลี่ยนคนขับ/ทะเบียน">
+                                            <i class="fa-solid fa-right-left"></i>
+                                        </button>
+
                                         <form action="/delete_job" method="POST" onsubmit="return confirm('⚠️ ยืนยันการลบเที่ยววิ่งนี้?');">
                                             <input type="hidden" name="po_date" value="{{ job.PO_Date }}">
                                             <input type="hidden" name="round_time" value="{{ job.Round }}">
@@ -151,7 +190,6 @@
          <div class="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-8 border border-gray-100">
             <h3 class="text-xl font-bold text-gray-800 mb-6 border-b pb-2 flex items-center gap-2"><i class="fa-solid fa-pen-to-square text-indigo-600"></i> สร้างใบงานใหม่</h3>
             <form action="/create_job" method="POST" class="space-y-5">
-                
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">วันที่เอกสาร (PO Date)</label>
@@ -166,12 +204,10 @@
                                class="w-full rounded-lg border-indigo-200 shadow-sm p-2.5 border bg-indigo-50/30 focus:ring-indigo-500 focus:border-indigo-500">
                     </div>
                 </div>
-
                 <div class="grid grid-cols-2 gap-4">
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">รอบโหลด (เวลา)</label><input type="time" name="round_time" required class="w-full rounded-lg border-gray-300 shadow-sm p-2.5 border bg-gray-50"></div>
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">ลำดับคันที่</label><input type="number" name="car_no" placeholder="1" required class="w-full rounded-lg border-gray-300 p-2.5 border bg-gray-50"></div>
                 </div>
-
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">คนขับ</label>
                     <select id="driver_select" name="driver_name" onchange="updatePlate()" required class="w-full rounded-lg border-gray-300 p-2.5 border">
@@ -181,10 +217,8 @@
                         {% endfor %}
                     </select>
                 </div>
-                
                 <div class="bg-gray-100 p-3 rounded-lg flex items-center gap-2 text-sm text-gray-600 border border-gray-200"><i class="fa-solid fa-car-side"></i> ทะเบียนรถ: <input type="text" id="plate_input" name="plate_license" readonly class="bg-transparent font-bold text-gray-800 w-full focus:outline-none"></div>
                 <hr class="border-gray-100">
-                
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">สาขาปลายทาง</label>
                     <div id="branch-container" class="space-y-3">
@@ -322,7 +356,86 @@
     </div>
 </div>
 
+<div id="changeDriverModal" class="modal opacity-0 pointer-events-none fixed w-full h-full top-0 left-0 flex items-center justify-center z-50">
+    <div class="modal-overlay absolute w-full h-full bg-gray-900 opacity-50" onclick="closeChangeDriverModal()"></div>
+    
+    <div class="modal-container bg-white w-11/12 md:max-w-4xl mx-auto rounded-xl shadow-2xl z-50 overflow-y-auto max-h-[90vh]">
+        <div class="modal-content py-4 text-left px-6">
+            <div class="flex justify-between items-center pb-3 border-b">
+                <p class="text-xl font-bold text-gray-800"><i class="fa-solid fa-right-left text-orange-500"></i> แจ้งเปลี่ยนทะเบียนรถ/คนขับ</p>
+                <div class="cursor-pointer z-50" onclick="closeChangeDriverModal()">
+                    <i class="fa-solid fa-xmark text-2xl text-gray-500 hover:text-gray-700"></i>
+                </div>
+            </div>
+
+            <div class="my-5 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <h4 class="font-bold text-gray-600 mb-3 border-b pb-1">ข้อมูลเดิม (Current)</h4>
+                    <div class="space-y-2 text-sm text-gray-700">
+                        <p><span class="font-bold">คันที่:</span> <span id="md_carNo" class="text-indigo-600 font-bold"></span></p>
+                        <p><span class="font-bold">โหลดงาน:</span> <span id="md_loadDate"></span></p>
+                        <p><span class="font-bold">รอบโหลด:</span> <span id="md_roundTime"></span></p>
+                        <div class="mt-2">
+                            <span class="font-bold">สาขา:</span>
+                            <ul id="md_branches" class="list-disc pl-5 text-xs text-gray-600 mt-1"></ul>
+                        </div>
+                        <hr class="my-2 border-gray-200">
+                        <p><span class="font-bold">ทะเบียน:</span> <span id="md_oldPlate"></span></p>
+                        <p><span class="font-bold">คนขับ:</span> <span id="md_oldDriver"></span></p>
+                        <p><span class="font-bold">เลขบัตร:</span> <span id="md_oldID" class="text-gray-500">-</span></p>
+                        <p><span class="font-bold">เบอร์โทร:</span> <span id="md_oldPhone" class="text-gray-500">-</span></p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-lg border-2 border-orange-100 shadow-inner">
+                    <h4 class="font-bold text-orange-600 mb-3 border-b pb-1">ข้อมูลใหม่ (New)</h4>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">เลือกคนขับใหม่</label>
+                            <select id="md_newDriverSelect" onchange="updateNewDriverInfo()" class="w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 p-2 border">
+                                <option value="">-- เลือก --</option>
+                                {% for driver in drivers %}
+                                <option value="{{ driver.Name }}">{{ driver.Name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3 bg-orange-50 p-3 rounded text-sm">
+                            <div>
+                                <span class="block text-xs text-gray-500">ทะเบียนใหม่</span>
+                                <span id="md_newPlate" class="font-bold text-gray-800">-</span>
+                            </div>
+                            <div>
+                                <span class="block text-xs text-gray-500">เบอร์โทร</span>
+                                <span id="md_newPhone" class="font-bold text-gray-800">-</span>
+                            </div>
+                            <div class="col-span-2">
+                                <span class="block text-xs text-gray-500">เลขบัตรประชาชน</span>
+                                <span id="md_newID" class="font-bold text-gray-800">-</span>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">เนื่องจากสาเหตุ</label>
+                            <textarea id="md_reason" rows="2" class="w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 p-2 border" placeholder="เช่น รถเสีย, คนขับลาป่วย..."></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end pt-2 gap-3">
+                <button onclick="closeChangeDriverModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium">ปิด</button>
+                <button onclick="copyChangeDriverText()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold shadow flex items-center gap-2">
+                    <i class="fa-regular fa-copy"></i> คัดลอกข้อความ
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+    // --- Existing Scripts ---
     document.addEventListener("DOMContentLoaded", function() {
         const urlParams = new URLSearchParams(window.location.search);
         const tabParam = urlParams.get('tab');
@@ -442,31 +555,19 @@
     function shareLine(shiftType) {
         const dayData = {{ line_data_day | tojson | safe }};
         const nightData = {{ line_data_night | tojson | safe }};
-        
         const dataList = (shiftType === 'day') ? dayData : nightData;
         const shiftName = (shiftType === 'day') ? 'รอบโหลดกลางวัน' : 'รอบโหลดกลางคืน';
         const shiftEmoji = (shiftType === 'day') ? '☀️' : '🌙';
-        
         const poDateVal = getFilterDate(); 
-        if (!poDateVal) {
-            alert("กรุณาเลือกวันที่ก่อนแชร์");
-            return;
-        }
-
+        if (!poDateVal) { alert("กรุณาเลือกวันที่ก่อนแชร์"); return; }
         const [py, pm, pd] = poDateVal.split('-').map(Number);
         const yearThaiShort = (py + 543).toString().slice(2);
         const poDateThai = `${pd.toString().padStart(2,'0')}.${pm.toString().padStart(2,'0')}.${yearThaiShort}`; 
 
-        if (!dataList || dataList.length === 0) {
-            alert(`⚠️ ไม่พบข้อมูลงานสำหรับ ${shiftName}`);
-            return;
-        }
+        if (!dataList || dataList.length === 0) { alert(`⚠️ ไม่พบข้อมูลงานสำหรับ ${shiftName}`); return; }
 
         let msg = `📄 LMT PO ${poDateThai} (${shiftEmoji} ${shiftName})\n`;
-
-        if (dataList.length > 0) {
-            msg += `📅 โหลดวันที่: ${dataList[0].load_date}\n\n`;
-        }
+        if (dataList.length > 0) msg += `📅 โหลดวันที่: ${dataList[0].load_date}\n\n`;
 
         let groupedByRound = {};
         dataList.forEach(item => {
@@ -477,38 +578,27 @@
 
         for (const [roundTime, cars] of Object.entries(groupedByRound)) {
             msg += `🕒 รอบโหลด ${roundTime} น.\n`;
-            
             cars.forEach(car => {
                 msg += `🚛 คันที่ ${car.car_no} ${car.plate}\n`; 
                 msg += `👨‍✈️ ${car.driver}\n`; 
-                
-                car.branches.forEach(branch => {
-                    msg += `📍 ${branch}\n`;
-                });
-                
+                car.branches.forEach(branch => { msg += `📍 ${branch}\n`; });
                 msg += `\n`; 
             });
         }
-
         copyToClipboard(msg, "ตารางงาน");
     }
 	
     function copyUpdateText(shiftType) {
         const dayData = {{ line_data_day | tojson | safe }};
         const nightData = {{ line_data_night | tojson | safe }};
-        
         const dataList = (shiftType === 'day') ? dayData : nightData;
         const shiftLabel = (shiftType === 'day') ? 'รอบบ่าย' : 'รอบดึก';
-        
         const poDateVal = getFilterDate(); 
         if (!poDateVal) { alert("กรุณาเลือกวันที่ก่อน"); return; }
         const [py, pm, pd] = poDateVal.split('-').map(Number);
         const poDateFormatted = `${pd.toString().padStart(2,'0')}.${pm.toString().padStart(2,'0')}.${py + 543}`; 
 
-        if (!dataList || dataList.length === 0) {
-            alert(`⚠️ ไม่พบข้อมูลสำหรับ ${shiftLabel}`);
-            return;
-        }
+        if (!dataList || dataList.length === 0) { alert(`⚠️ ไม่พบข้อมูลสำหรับ ${shiftLabel}`); return; }
 
         let msg = `อัพเดท รอบโหลด (${shiftLabel})\n`;
         msg += `🚛 LMT PO.${poDateFormatted}\n\n`;
@@ -523,18 +613,112 @@
 
         for (const [roundTime, cars] of Object.entries(groupedByRound)) {
             msg += `🕒 รอบโหลด : ${roundTime} น.\n`; 
-            
             cars.forEach(car => {
                 let statusShow = car.latest_status.replace(')', ' น.)');
                 msg += `คันที่ ${car.car_no} ${car.plate} = ${statusShow}\n`;
             });
-            
             msg += `\n`; 
         }
-
         copyToClipboard(msg, "ข้อความอัพเดทสถานะ");
     }
-	
+
+    // --- NEW: Change Driver Logic ---
+    let currentModalData = {};
+
+    function openChangeDriverModal(data) {
+        currentModalData = data;
+        
+        // Populate Old Info
+        document.getElementById('md_carNo').innerText = '#' + data.carNo;
+        document.getElementById('md_loadDate').innerText = data.loadDate;
+        document.getElementById('md_roundTime').innerText = data.roundTime;
+        document.getElementById('md_oldPlate').innerText = data.oldPlate;
+        document.getElementById('md_oldDriver').innerText = data.oldDriver;
+        
+        // Lookup Driver DB for Old Driver
+        const oldDriverInfo = driverData[data.oldDriver] || {};
+        document.getElementById('md_oldID').innerText = oldDriverInfo.id_card || '-';
+        document.getElementById('md_oldPhone').innerText = oldDriverInfo.phone || '-';
+
+        // Branches
+        const list = document.getElementById('md_branches');
+        list.innerHTML = '';
+        data.branches.forEach(b => {
+            const li = document.createElement('li');
+            li.innerText = b;
+            list.appendChild(li);
+        });
+
+        // Reset Form
+        document.getElementById('md_newDriverSelect').value = "";
+        document.getElementById('md_newPlate').innerText = "-";
+        document.getElementById('md_newID').innerText = "-";
+        document.getElementById('md_newPhone').innerText = "-";
+        document.getElementById('md_reason').value = "";
+
+        // Show Modal
+        const modal = document.getElementById('changeDriverModal');
+        modal.classList.remove('opacity-0', 'pointer-events-none');
+        document.body.classList.add('modal-active');
+    }
+
+    function closeChangeDriverModal() {
+        const modal = document.getElementById('changeDriverModal');
+        modal.classList.add('opacity-0', 'pointer-events-none');
+        document.body.classList.remove('modal-active');
+    }
+
+    function updateNewDriverInfo() {
+        const name = document.getElementById('md_newDriverSelect').value;
+        if (name && driverData[name]) {
+            const info = driverData[name];
+            document.getElementById('md_newPlate').innerText = info.plate;
+            document.getElementById('md_newID').innerText = info.id_card;
+            document.getElementById('md_newPhone').innerText = info.phone;
+        } else {
+            document.getElementById('md_newPlate').innerText = "-";
+            document.getElementById('md_newID').innerText = "-";
+            document.getElementById('md_newPhone').innerText = "-";
+        }
+    }
+
+    function copyChangeDriverText() {
+        const newDriverName = document.getElementById('md_newDriverSelect').value;
+        if (!newDriverName) { alert('กรุณาเลือกคนขับใหม่'); return; }
+
+        const reason = document.getElementById('md_reason').value;
+        const oldInfo = driverData[currentModalData.oldDriver] || {};
+        const newInfo = driverData[newDriverName] || {};
+
+        let branchText = "";
+        currentModalData.branches.forEach(b => {
+            branchText += `📍 ${b}\n`;
+        });
+
+        const msg = `เรียน ผู้เกี่ยวข้อง
+แจ้งแก้ไขเปลี่ยนทะเบียนรถ/คนขับรับงาน
+🚛 คันที่ : ${currentModalData.carNo}
+
+🕒 รอบโหลด : ${currentModalData.roundTime}
+${branchText}
+โหลดงาน : ${currentModalData.loadDate}
+แผนเดิมทะเบียน : ${currentModalData.oldPlate}
+พนักงานขับรถ : ${currentModalData.oldDriver}
+เลขที่บัตรประชาชน :  ${oldInfo.id_card || '-'}
+เบอร์  : ${oldInfo.phone || '-'}
+
+เปลี่ยนเป็นทะเบียน : ${newInfo.plate || '-'}
+พนักงานขับรถ : ${newDriverName}
+เลขที่บัตรประชาชน :  ${newInfo.id_card || '-'}
+เบอร์ :  ${newInfo.phone || '-'}
+
+เนื่องจาก : ${reason}
+
+ขอบคุณครับ`;
+
+        copyToClipboard(msg, "ข้อความแจ้งเปลี่ยนงาน");
+        // closeChangeDriverModal(); // Optional: Close automatically
+    }
 </script>
 
 {% endblock %}

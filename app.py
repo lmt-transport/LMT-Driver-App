@@ -144,6 +144,30 @@ def manager_dashboard():
             
     if current_group: grouped_jobs_for_stats.append(current_group)
 
+    # --- [NEW] Driver Stats Calculation ---
+    driver_stats = {}
+    for group in grouped_jobs_for_stats:
+        first = group[0]
+        d_name = first['Driver']
+        if not d_name: continue
+
+        if d_name not in driver_stats:
+            driver_stats[d_name] = {'total_trips': 0, 'rounds': []}
+        
+        driver_stats[d_name]['total_trips'] += 1
+        driver_stats[d_name]['rounds'].append({
+            'round': first['Round'],
+            'car_no': first['Car_No'],
+            'plate': first['Plate'],
+            'branches': [j['Branch_Name'] for j in group],
+            'status': 'Done' if all(j['Status'] == 'Done' for j in group) else 'Pending'
+        })
+    
+    # Sort rounds by time for each driver
+    for d in driver_stats:
+        driver_stats[d]['rounds'].sort(key=lambda x: x['round'])
+    # --------------------------------------
+
     completed_trips = 0
     for trip_key, job_list in jobs_by_trip_key.items():
         if all(job['Status'] == 'Done' for job in job_list):
@@ -278,7 +302,8 @@ def manager_dashboard():
                            line_data_day=line_data_day,
                            line_data_night=line_data_night,
                            late_arrivals_by_po=late_arrivals_by_po,
-                           total_late_cars=total_late_cars
+                           total_late_cars=total_late_cars,
+                           driver_stats=driver_stats # ส่งข้อมูลไปหน้าเว็บ
                            )
 
 @app.route('/create_job', methods=['POST'])

@@ -24,14 +24,8 @@
         background: #94a3b8; 
     }
     
-    /* Modal Styles */
-    .modal {
-        transition: opacity 0.25s ease;
-    }
-    body.modal-active {
-        overflow-x: hidden;
-        overflow-y: visible !important;
-    }
+    .modal { transition: opacity 0.25s ease; }
+    body.modal-active { overflow-x: hidden; overflow-y: visible !important; }
 </style>
 
 <div class="w-full max-w-[99%] mx-auto pb-10">
@@ -65,6 +59,7 @@
 
     <div class="flex space-x-2 mb-6 overflow-x-auto no-scrollbar pb-1">
         <button onclick="switchTab('tab-monitor')" id="btn-monitor" class="tab-btn flex-1 py-3 px-4 bg-indigo-600 text-white rounded-lg shadow font-medium transition hover:bg-indigo-700 whitespace-nowrap text-sm"><i class="fa-solid fa-satellite-dish mr-2"></i> ติดตามงาน (Monitor)</button>
+        <button onclick="switchTab('tab-drivers')" id="btn-drivers" class="tab-btn flex-1 py-3 px-4 bg-white text-gray-600 rounded-lg shadow font-medium transition hover:bg-gray-100 whitespace-nowrap text-sm"><i class="fa-solid fa-id-card mr-2"></i> สรุปงานคนขับ (Dashboard)</button>
         <button onclick="switchTab('tab-create')" id="btn-create" class="tab-btn flex-1 py-3 px-4 bg-white text-gray-600 rounded-lg shadow font-medium transition hover:bg-gray-100 whitespace-nowrap text-sm"><i class="fa-solid fa-plus-circle mr-2"></i> สร้างงานใหม่</button>
         <button onclick="switchTab('tab-report')" id="btn-report" class="tab-btn flex-1 py-3 px-4 bg-white text-gray-600 rounded-lg shadow font-medium transition hover:bg-gray-100 whitespace-nowrap text-sm"><i class="fa-solid fa-table mr-2"></i> รายงาน (Excel Report)</button>
     </div>
@@ -158,7 +153,6 @@
                                         {% if job.L1_Loc %}
                                             <a href="https://www.google.com/maps/search/?api=1&query={{ job.L1_Loc }}" target="_blank" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800 transition shadow-sm" title="ดูพิกัด"><i class="fa-solid fa-location-dot"></i></a>
                                         {% endif %}
-                                        
                                         <button onclick="openChangeDriverModal({
                                             carNo: '{{ job.Car_No }}',
                                             loadDate: '{{ show_load | thai_date }}',
@@ -169,7 +163,6 @@
                                         })" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-50 text-orange-500 hover:bg-orange-100 hover:text-orange-700 transition shadow-sm" title="แจ้งเปลี่ยนคนขับ/ทะเบียน">
                                             <i class="fa-solid fa-right-left"></i>
                                         </button>
-
                                         <form action="/delete_job" method="POST" onsubmit="return confirm('⚠️ ยืนยันการลบเที่ยววิ่งนี้?');">
                                             <input type="hidden" name="po_date" value="{{ job.PO_Date }}">
                                             <input type="hidden" name="round_time" value="{{ job.Round }}">
@@ -183,6 +176,77 @@
                     </tbody>
                 </table>
             </div>
+        </div>
+    </div>
+
+    <div id="tab-drivers" class="tab-content hidden">
+        <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 md:p-6 shadow-inner">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="font-bold text-gray-800 text-xl flex items-center gap-2">
+                    <div class="bg-indigo-100 p-2 rounded text-indigo-700"><i class="fa-solid fa-users-viewfinder"></i></div> 
+                    สรุปงานรายบุคคล (PO: {{ current_filter_date | thai_date }})
+                </h3>
+            </div>
+
+            {% if driver_stats|length == 0 %}
+                <div class="text-center py-10 text-gray-400">
+                    <i class="fa-solid fa-user-slash text-4xl mb-3 opacity-50"></i>
+                    <p>ไม่พบข้อมูลงานคนขับในวันนี้</p>
+                </div>
+            {% else %}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {% for driver_name, stats in driver_stats.items() %}
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition duration-200">
+                        <div class="bg-gradient-to-r from-slate-700 to-slate-800 p-4 flex justify-between items-center text-white">
+                            <div class="flex items-center gap-3 overflow-hidden">
+                                <div class="bg-white/20 p-2 rounded-full backdrop-blur-sm">
+                                    <i class="fa-solid fa-user-astronaut text-lg"></i>
+                                </div>
+                                <div class="truncate font-bold text-sm">{{ driver_name }}</div>
+                            </div>
+                            <div class="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded-md shadow-sm">
+                                {{ stats.total_trips }} เที่ยว
+                            </div>
+                        </div>
+                        
+                        <div class="p-4 bg-white space-y-3 max-h-64 overflow-y-auto custom-scrollbar">
+                            {% for round in stats.rounds %}
+                            <div class="border border-gray-100 rounded-lg p-3 bg-gray-50 relative group">
+                                <div class="absolute top-2 right-2">
+                                    {% if round.status == 'Done' %}
+                                        <span class="text-green-500 text-[10px]"><i class="fa-solid fa-circle-check"></i> จบ</span>
+                                    {% else %}
+                                        <span class="text-gray-400 text-[10px]"><i class="fa-solid fa-clock"></i> รอ</span>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-0.5 rounded">
+                                        {{ round.round }} น.
+                                    </span>
+                                    <span class="text-xs text-gray-500 font-mono bg-white border px-1 rounded">
+                                        #{{ round.car_no }}
+                                    </span>
+                                </div>
+                                
+                                <div class="text-xs text-gray-600 mb-1">
+                                    <i class="fa-solid fa-truck"></i> {{ round.plate }}
+                                </div>
+                                
+                                <div class="text-xs text-gray-500 mt-2 border-t border-gray-200 pt-2">
+                                    {% for branch in round.branches %}
+                                    <div class="truncate flex items-start gap-1">
+                                        <i class="fa-solid fa-location-dot text-red-400 mt-0.5 text-[8px]"></i> {{ branch }}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
         </div>
     </div>
 
@@ -435,7 +499,6 @@
 </div>
 
 <script>
-    // --- Existing Scripts ---
     document.addEventListener("DOMContentLoaded", function() {
         const urlParams = new URLSearchParams(window.location.search);
         const tabParam = urlParams.get('tab');
@@ -622,25 +685,21 @@
         copyToClipboard(msg, "ข้อความอัพเดทสถานะ");
     }
 
-    // --- NEW: Change Driver Logic ---
     let currentModalData = {};
 
     function openChangeDriverModal(data) {
         currentModalData = data;
         
-        // Populate Old Info
         document.getElementById('md_carNo').innerText = '#' + data.carNo;
         document.getElementById('md_loadDate').innerText = data.loadDate;
         document.getElementById('md_roundTime').innerText = data.roundTime;
         document.getElementById('md_oldPlate').innerText = data.oldPlate;
         document.getElementById('md_oldDriver').innerText = data.oldDriver;
         
-        // Lookup Driver DB for Old Driver
         const oldDriverInfo = driverData[data.oldDriver] || {};
         document.getElementById('md_oldID').innerText = oldDriverInfo.id_card || '-';
         document.getElementById('md_oldPhone').innerText = oldDriverInfo.phone || '-';
 
-        // Branches
         const list = document.getElementById('md_branches');
         list.innerHTML = '';
         data.branches.forEach(b => {
@@ -649,14 +708,12 @@
             list.appendChild(li);
         });
 
-        // Reset Form
         document.getElementById('md_newDriverSelect').value = "";
         document.getElementById('md_newPlate').innerText = "-";
         document.getElementById('md_newID').innerText = "-";
         document.getElementById('md_newPhone').innerText = "-";
         document.getElementById('md_reason').value = "";
 
-        // Show Modal
         const modal = document.getElementById('changeDriverModal');
         modal.classList.remove('opacity-0', 'pointer-events-none');
         document.body.classList.add('modal-active');
@@ -697,11 +754,11 @@
 
         const msg = `เรียน ผู้เกี่ยวข้อง
 แจ้งแก้ไขเปลี่ยนทะเบียนรถ/คนขับรับงาน
-🚛 คันที่ : ${currentModalData.carNo}
+คันที่ : ${currentModalData.carNo}
 
-🕒 รอบโหลด : ${currentModalData.roundTime}
-${branchText}
+รอบโหลด : ${currentModalData.roundTime}
 โหลดงาน : ${currentModalData.loadDate}
+${branchText}
 แผนเดิมทะเบียน : ${currentModalData.oldPlate}
 พนักงานขับรถ : ${currentModalData.oldDriver}
 เลขที่บัตรประชาชน :  ${oldInfo.id_card || '-'}
@@ -717,7 +774,6 @@ ${branchText}
 ขอบคุณครับ`;
 
         copyToClipboard(msg, "ข้อความแจ้งเปลี่ยนงาน");
-        // closeChangeDriverModal(); // Optional: Close automatically
     }
 </script>
 

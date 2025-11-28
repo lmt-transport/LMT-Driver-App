@@ -118,10 +118,12 @@
                 ] %}
 
                 {% for step_id, label, grad, icon, val in factory_buttons %}
-                <form action="/update_status" method="POST" class="w-full" id="form-{{ factory_row_id }}-{{ step_id }}">
+                <form action="/update_status" method="POST" class="w-full relative" id="form-{{ factory_row_id }}-{{ step_id }}">
                     <input type="hidden" name="row_id" value="{{ factory_row_id }}">
                     <input type="hidden" name="driver_name" value="{{ name }}">
                     <input type="hidden" name="step" value="{{ step_id }}">
+                    <input type="hidden" name="mode" id="mode-{{ factory_row_id }}-{{ step_id }}" value="update">
+                    
                     <input type="hidden" name="lat" id="lat-{{ factory_row_id }}-{{ step_id }}">
                     <input type="hidden" name="long" id="long-{{ factory_row_id }}-{{ step_id }}">
                     
@@ -143,6 +145,14 @@
                             <span class="text-[9px] font-medium leading-tight text-center px-1">{{ label }}</span>
                         {% endif %}
                     </button>
+
+                    {% if val %}
+                    <div onclick="confirmReset('{{ factory_row_id }}', '{{ step_id }}', event)" 
+                         class="absolute top-0 left-0 bg-red-100/80 hover:bg-red-200 text-red-500 p-1.5 rounded-br-xl cursor-pointer z-10 transition-colors shadow-sm"
+                         title="ยกเลิก/กดใหม่">
+                        <i class="fa-solid fa-rotate-left text-xs"></i>
+                    </div>
+                    {% endif %}
                 </form>
                 {% endfor %}
             </div>
@@ -186,10 +196,12 @@
                                 ] %}
 
                                 {% for step_id, label, color, icon, val in branch_buttons %}
-                                <form action="/update_status" method="POST" class="w-full" id="form-{{ branch_job.row_id }}-{{ step_id }}">
+                                <form action="/update_status" method="POST" class="w-full relative" id="form-{{ branch_job.row_id }}-{{ step_id }}">
                                     <input type="hidden" name="row_id" value="{{ branch_job.row_id }}">
                                     <input type="hidden" name="driver_name" value="{{ name }}">
                                     <input type="hidden" name="step" value="{{ step_id }}">
+                                    <input type="hidden" name="mode" id="mode-{{ branch_job.row_id }}-{{ step_id }}" value="update">
+
                                     <input type="hidden" name="lat" id="lat-{{ branch_job.row_id }}-{{ step_id }}">
                                     <input type="hidden" name="long" id="long-{{ branch_job.row_id }}-{{ step_id }}">
                                     
@@ -208,6 +220,14 @@
                                             <i class="fa-solid {{ icon }}"></i> {{ label }}
                                         {% endif %}
                                     </button>
+
+                                    {% if val %}
+                                    <div onclick="confirmReset('{{ branch_job.row_id }}', '{{ step_id }}', event)" 
+                                         class="absolute top-0 right-0 bg-red-100 hover:bg-red-200 text-red-500 px-2 py-1 rounded-bl-lg rounded-tr-lg cursor-pointer z-10 transition-colors shadow-sm border-l border-b border-red-200"
+                                         title="ยกเลิก/กดใหม่">
+                                        <i class="fa-solid fa-rotate-left text-[10px]"></i> <span class="text-[9px]">แก้ไข</span>
+                                    </div>
+                                    {% endif %}
                                 </form>
                                 {% endfor %}
                             </div>
@@ -240,15 +260,31 @@
                     document.getElementById(`form-${rowId}-${stepId}`).submit();
                 },
                 function(error) {
-                    alert("⚠️ กรุณาเปิด GPS เพื่อบันทึกเวลา");
-                    btn.innerHTML = originalContent;
-                    btn.disabled = false;
-                    btn.classList.remove('opacity-70');
+                    // Fallback even if GPS fails
+                    document.getElementById(`form-${rowId}-${stepId}`).submit();
                 },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
             );
         } else {
-            alert("❌ อุปกรณ์ไม่รองรับ GPS");
+            document.getElementById(`form-${rowId}-${stepId}`).submit();
+        }
+    }
+
+    // [NEW] Function to handle cancellation
+    function confirmReset(rowId, stepId, event) {
+        // Prevent clicking the disabled button underneath
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (confirm("⚠️ คุณต้องการยกเลิกเวลาที่บันทึกไปแล้ว และกดใหม่ใช่หรือไม่?")) {
+            // Set mode to 'cancel'
+            document.getElementById(`mode-${rowId}-${stepId}`).value = 'cancel';
+            
+            // Show loading
+            const btn = document.querySelector(`#form-${rowId}-${stepId} button`);
+            btn.innerHTML = `<i class="fa-solid fa-trash-can fa-shake text-red-500"></i>`;
+            
+            // Submit form
             document.getElementById(`form-${rowId}-${stepId}`).submit();
         }
     }

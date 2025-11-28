@@ -1462,6 +1462,8 @@ def update_status():
     driver_name = request.form['driver_name']
     lat = request.form.get('lat', '')
     long = request.form.get('long', '')
+    mode = request.form.get('mode', 'update') # [NEW] รับค่า mode
+    
     location_str = f"{lat},{long}" if lat and long else ""
     current_time = (datetime.now() + timedelta(hours=7)).strftime("%H:%M")
     
@@ -1474,6 +1476,11 @@ def update_status():
     loc_col = loc_col_map.get(step)
     updates = []
 
+    # กำหนดค่าที่จะบันทึก (เวลาปัจจุบัน หรือ ลบเป็นค่าว่าง)
+    val_to_save = current_time if mode == 'update' else ""
+    loc_to_save = location_str if mode == 'update' else ""
+
+    # กรณี Step 1-6 (งานโรงงาน) อัปเดตทุกแถวใน Trip เดียวกัน
     if step in ['1', '2', '3', '4', '5', '6']:
         target_row_data = ws.row_values(row_id_target)
         if len(target_row_data) < 4: return redirect(url_for('driver_tasks', name=driver_name))
@@ -1486,24 +1493,29 @@ def update_status():
             current_row_id = i + 2 
             if (len(row) > 3 and row[0] == target_po and row[2] == target_round and row[3] == target_car):      
                 cell_coord_time = gspread.utils.rowcol_to_a1(current_row_id, time_col)
-                updates.append({'range': cell_coord_time, 'values': [[current_time]]})
-                if location_str:
+                updates.append({'range': cell_coord_time, 'values': [[val_to_save]]})
+                
+                # อัปเดตพิกัด (ถ้ามีค่า หรือถ้าจะลบ)
+                if location_str or mode == 'cancel':
                     cell_coord_loc = gspread.utils.rowcol_to_a1(current_row_id, loc_col)
-                    updates.append({'range': cell_coord_loc, 'values': [[location_str]]})
+                    updates.append({'range': cell_coord_loc, 'values': [[loc_to_save]]})
+        
         if updates: ws.batch_update(updates)
 
+    # กรณี Step 7-8 (งานสาขา) อัปเดตเฉพาะแถวเดียว
     elif step in ['7', '8']:
         cell_coord_time = gspread.utils.rowcol_to_a1(row_id_target, time_col)
-        updates.append({'range': cell_coord_time, 'values': [[current_time]]})
-        if location_str:
+        updates.append({'range': cell_coord_time, 'values': [[val_to_save]]})
+        if location_str or mode == 'cancel':
             cell_coord_loc = gspread.utils.rowcol_to_a1(row_id_target, loc_col)
-            updates.append({'range': cell_coord_loc, 'values': [[location_str]]})
+            updates.append({'range': cell_coord_loc, 'values': [[loc_to_save]]})
         if updates: ws.batch_update(updates)
 
+    # อัปเดตสถานะ Done หรือ ล้างสถานะ
     if step == '8': 
-        ws.update_cell(row_id_target, 16, "Done")
+        status_val = "Done" if mode == 'update' else ""
+        ws.update_cell(row_id_target, 16, status_val)
     
-    # [NEW] เคลียร์ Cache ทันทีที่มีการอัปเดตสถานะ
     invalidate_cache('Jobs')
         
     return redirect(url_for('driver_tasks', name=driver_name))

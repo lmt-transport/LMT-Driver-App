@@ -1507,6 +1507,67 @@ def update_status():
     invalidate_cache('Jobs')
         
     return redirect(url_for('driver_tasks', name=driver_name))
+    
+@app.route('/update_driver', methods=['POST'])
+def update_driver():
+    if 'user' not in session: 
+        return json.dumps({'status': 'error', 'message': 'Unauthorized'}), 401
+
+    try:
+        # รับข้อมูลจาก Frontend (JSON)
+        data = request.json
+        target_po = data.get('po_date')
+        target_round = data.get('round_time')
+        target_car = str(data.get('car_no'))
+        new_driver = data.get('new_driver')
+        new_plate = data.get('new_plate')
+
+        sheet = get_db()
+        ws = sheet.worksheet('Jobs')
+        
+        # ดึงข้อมูลทั้งหมดมาเช็ค (ใช้ get_all_values เพื่อความเร็วในการหา index)
+        all_values = ws.get_all_values()
+        
+        updates = []
+        
+        # วนลูปหาแถวที่ต้องแก้ (เริ่มที่ index 1 เพื่อข้าม Header)
+        # Column Index (A=0, B=1, ...):
+        # A(0)=PO, C(2)=Round, D(3)=CarNo, E(4)=Driver, F(5)=Plate
+        for i, row in enumerate(all_values):
+            if i == 0: continue # Skip header
+            
+            # ตรวจสอบว่าข้อมูลครบไหมป้องกัน Index Error
+            if len(row) < 6: continue
+
+            # เช็คเงื่อนไข (PO, Round, CarNo ตรงกัน)
+            if (row[0] == target_po and 
+                str(row[2]) == str(target_round) and 
+                str(row[3]) == target_car):
+                
+                # คำนวณตำแหน่ง Cell จริง (Row เริ่มที่ 1, Col เริ่มที่ 1)
+                row_num = i + 1
+                
+                # เตรียมข้อมูลสำหรับ update (Driver ที่ Col E(5), Plate ที่ Col F(6))
+                updates.append({
+                    'range': f'E{row_num}',
+                    'values': [[new_driver]]
+                })
+                updates.append({
+                    'range': f'F{row_num}',
+                    'values': [[new_plate]]
+                })
+
+        # บันทึกข้อมูลจริงลง Google Sheet
+        if updates:
+            ws.batch_update(updates)
+            invalidate_cache('Jobs') # ล้าง Cache เพื่อให้หน้าเว็บแสดงข้อมูลใหม่ทันที
+            return json.dumps({'status': 'success', 'count': len(updates)/2})
+        else:
+            return json.dumps({'status': 'error', 'message': 'ไม่พบรายการงานที่ตรงกัน'})
+
+    except Exception as e:
+        print(f"Error updating driver: {e}")
+        return json.dumps({'status': 'error', 'message': str(e)})
 
 @app.route('/')
 def index(): return render_template('index.html')

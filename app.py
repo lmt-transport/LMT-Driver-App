@@ -9,6 +9,7 @@ import io
 import os
 import gspread.utils 
 import json
+import time # [NEW] Import time for caching
 from openpyxl import load_workbook
 from openpyxl.styles import Font, Border, Side, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
@@ -16,6 +17,50 @@ from openpyxl.utils import get_column_letter
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'lmt_driver_app_secret_key_2024')
 CORS(app)
+
+# --- [NEW] Caching System ---
+# เก็บข้อมูลชั่วคราวเพื่อลดการเรียก Google API ถี่เกินไป (แก้ Error 429)
+cache_storage = {
+    'Jobs': {'data': None, 'timestamp': 0},
+    'Drivers': {'data': None, 'timestamp': 0},
+    'Users': {'data': None, 'timestamp': 0}
+}
+CACHE_DURATION = 60 # วินาที (เก็บค่าไว้ 1 นาที)
+
+def get_cached_records(sheet, worksheet_name):
+    """ฟังก์ชันดึงข้อมูลแบบมี Cache"""
+    current_time = time.time()
+    cache_entry = cache_storage.get(worksheet_name)
+    
+    # 1. ถ้ามี Cache และยังไม่หมดอายุ ให้ใช้ข้อมูลเดิม
+    if cache_entry and cache_entry['data'] is not None:
+        if current_time - cache_entry['timestamp'] < CACHE_DURATION:
+            # print(f"Using Cached Data for {worksheet_name}") # Debug
+            return cache_entry['data']
+    
+    # 2. ถ้าไม่มีหรือหมดอายุ ให้ดึงใหม่จาก Google Sheet
+    try:
+        data = sheet.worksheet(worksheet_name).get_all_records()
+        # บันทึกลง Cache
+        cache_storage[worksheet_name] = {
+            'data': data,
+            'timestamp': current_time
+        }
+        # print(f"Fetched New Data for {worksheet_name}") # Debug
+        return data
+    except gspread.exceptions.APIError as e:
+        # กรณีฉุกเฉิน: ถ้าดึงใหม่แล้วติด Quota Error (429) แต่มี Cache เก่าอยู่ ให้ส่งค่าเก่าไปก่อนกันเว็บล่ม
+        if "429" in str(e) and cache_entry and cache_entry['data'] is not None:
+            print(f"Quota exceeded for {worksheet_name}, returning stale cache.")
+            return cache_entry['data']
+        raise e
+
+def invalidate_cache(worksheet_name):
+    """ฟังก์ชันเคลียร์ Cache (ใช้เมื่อมีการ Update/Insert/Delete)"""
+    if worksheet_name in cache_storage:
+        cache_storage[worksheet_name] = {'data': None, 'timestamp': 0}
+
+# --------------------------------
 
 # --- Custom Filter ---
 def thai_date_filter(date_str):
@@ -52,7 +97,8 @@ def manager_login():
         password = request.form['password']
         try:
             sheet = get_db()
-            users = sheet.worksheet('Users').get_all_records()
+            # ใช้ Cache สำหรับ Users (Login ไม่บ่อย แต่ป้องกัน Spam)
+            users = get_cached_records(sheet, 'Users')
             for user in users:
                 if str(user['Username']) == username and str(user['Password']) == password:
                     session['user'] = username
@@ -66,8 +112,8 @@ def manager_dashboard():
     if 'user' not in session: return redirect(url_for('manager_login'))
     
     sheet = get_db()
-    raw_jobs = sheet.worksheet('Jobs').get_all_records()
-    drivers = sheet.worksheet('Drivers').get_all_records()
+    raw_jobs = get_cached_records(sheet, 'Jobs')
+    drivers = get_cached_records(sheet, 'Drivers')
 
     date_filter = request.args.get('date_filter')
     now_thai = datetime.now() + timedelta(hours=7)
@@ -96,7 +142,6 @@ def manager_dashboard():
     grouped_jobs_for_stats = []
     current_group = []
     prev_key = None
-    
     late_arrivals_by_po = {}
     total_late_cars = 0
 
@@ -120,31 +165,47 @@ def manager_dashboard():
             try:
                 load_date_str = job.get('Load_Date', job['PO_Date'])
                 round_str = str(job['Round']).strip()
-                
                 plan_dt_str = f"{load_date_str} {round_str}"
                 try: plan_dt = datetime.strptime(plan_dt_str, "%Y-%m-%d %H:%M")
                 except: plan_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
                 
                 if now_thai > plan_dt:
                     po_key = str(job['PO_Date'])
-                    if po_key not in late_arrivals_by_po:
-                        late_arrivals_by_po[po_key] = []
+                    if po_key not in late_arrivals_by_po: late_arrivals_by_po[po_key] = []
                     
                     diff = now_thai - plan_dt
                     hours = int(diff.total_seconds() // 3600)
                     mins = int((diff.total_seconds() % 3600) // 60)
-                    
                     job['late_duration'] = f"{hours} ชม. {mins} น."
                     
                     if not any(x['Car_No'] == job['Car_No'] for x in late_arrivals_by_po[po_key]):
                         late_arrivals_by_po[po_key].append(job)
                         total_late_cars += 1
-            except: 
-                pass
+            except: pass
             
     if current_group: grouped_jobs_for_stats.append(current_group)
 
-    # --- [NEW] Driver Stats Calculation ---
+    # --- [UPDATED LOGIC] แยกประเภทคนขับ 3 แบบ (Day / Night / Hybrid) ---
+    driver_history = {} 
+    
+    # 1. วนลูปประวัติงานทั้งหมดเพื่อดูพฤติกรรม
+    for j in raw_jobs:
+        d_name = j.get('Driver')
+        r_time = str(j.get('Round', '')).strip()
+        
+        if d_name and r_time:
+            if d_name not in driver_history:
+                driver_history[d_name] = {'day_count': 0, 'night_count': 0}
+            
+            try:
+                h = int(r_time.split(':')[0])
+                if 6 <= h <= 18:
+                    driver_history[d_name]['day_count'] += 1
+                else:
+                    driver_history[d_name]['night_count'] += 1
+            except: pass
+
+    # --- Driver Stats (Workload วันนี้) ---
     driver_stats = {}
     for group in grouped_jobs_for_stats:
         first = group[0]
@@ -163,11 +224,37 @@ def manager_dashboard():
             'status': 'Done' if all(j['Status'] == 'Done' for j in group) else 'Pending'
         })
     
-    # Sort rounds by time for each driver
+    # Sort rounds by Car No (Low -> High)
     for d in driver_stats:
-        driver_stats[d]['rounds'].sort(key=lambda x: x['round'])
-    # --------------------------------------
+        driver_stats[d]['rounds'].sort(key=lambda x: int(str(x['car_no']).strip()) if str(x['car_no']).strip().isdigit() else 9999)
 
+    # --- Calculate Idle Drivers (แบ่ง 4 กล่อง) ---
+    working_drivers_set = set(driver_stats.keys())
+    
+    idle_drivers_day = []    # เคยวิ่งแต่เช้า
+    idle_drivers_night = []  # เคยวิ่งแต่ดึก
+    idle_drivers_hybrid = [] # เคยวิ่งทั้งคู่
+    idle_drivers_new = []    # ไม่เคยมีประวัติ
+
+    for d in drivers:
+        d_name = d.get('Name')
+        if d_name and d_name not in working_drivers_set:
+            history = driver_history.get(d_name)
+            
+            if history:
+                has_day = history['day_count'] > 0
+                has_night = history['night_count'] > 0
+                
+                if has_day and has_night:
+                    idle_drivers_hybrid.append(d) # ประเภท 3: วิ่งทั้งคู่
+                elif has_day:
+                    idle_drivers_day.append(d)    # ประเภท 1: วิ่งเช้าอย่างเดียว
+                else:
+                    idle_drivers_night.append(d)  # ประเภท 2: วิ่งดึกอย่างเดียว
+            else:
+                idle_drivers_new.append(d)        # ไม่เคยมีประวัติ
+
+    # --- Final Stats ---
     completed_trips = 0
     for trip_key, job_list in jobs_by_trip_key.items():
         if all(job['Status'] == 'Done' for job in job_list):
@@ -212,18 +299,15 @@ def manager_dashboard():
         else:
             latest_branch_txt = ""
             latest_branch_time = ""
-            
             for idx, j in enumerate(group, 1):
                 t8 = j.get('T8_EndJob')
                 t7 = j.get('T7_ArriveBranch')
-                
                 if t8:
                     latest_branch_txt = f"จบงานสาขา {idx}"
                     latest_branch_time = t8
                 elif t7:
                     latest_branch_txt = f"ถึงสาขา {idx}"
                     latest_branch_time = t7
-            
             if latest_branch_txt:
                 status_txt = latest_branch_txt
                 status_time = latest_branch_time
@@ -303,7 +387,12 @@ def manager_dashboard():
                            line_data_night=line_data_night,
                            late_arrivals_by_po=late_arrivals_by_po,
                            total_late_cars=total_late_cars,
-                           driver_stats=driver_stats # ส่งข้อมูลไปหน้าเว็บ
+                           driver_stats=driver_stats,
+                           # ส่งข้อมูล 4 กลุ่ม
+                           idle_drivers_day=idle_drivers_day,
+                           idle_drivers_night=idle_drivers_night,
+                           idle_drivers_hybrid=idle_drivers_hybrid,
+                           idle_drivers_new=idle_drivers_new
                            )
 
 @app.route('/create_job', methods=['POST'])
@@ -333,7 +422,10 @@ def create_job():
             row = [po_date, load_date, round_time, car_no, driver_name, plate, branch, "", "", "", "", "", "", "", "", "New", "", "", "", "", "", "", "", "", ""]
             new_rows.append(row)
     
-    if new_rows: ws.append_rows(new_rows)
+    if new_rows: 
+        ws.append_rows(new_rows)
+        invalidate_cache('Jobs') # [NEW] เคลียร์ Cache ทันทีที่มีการเพิ่มงาน
+    
     return redirect(url_for('manager_dashboard'))
 
 @app.route('/delete_job', methods=['POST'])
@@ -359,6 +451,8 @@ def delete_job():
                     
         for row_idx in sorted(rows_to_delete, reverse=True):
             ws.delete_rows(row_idx)
+        
+        invalidate_cache('Jobs') # [NEW] เคลียร์ Cache ทันทีที่มีการลบงาน
             
         return redirect(url_for('manager_dashboard'))
     except Exception as e: return f"Error: {e}"
@@ -366,7 +460,8 @@ def delete_job():
 @app.route('/export_excel')
 def export_excel():
     sheet = get_db()
-    raw_jobs = sheet.worksheet('Jobs').get_all_records()
+    # [CHANGED] ใช้ Cache
+    raw_jobs = get_cached_records(sheet, 'Jobs')
     
     date_filter = request.args.get('date_filter')
     if date_filter:
@@ -559,11 +654,9 @@ def export_excel():
         if first_job.get('T5_RecvDoc'): target['t5'] += 1
         if first_job.get('T6_Exit'): target['t6'] += 1
         
-        # [FIXED LOGIC] ใช้ any() สำหรับการถึงสาขา (อย่างน้อย 1 สาขาถึง)
         if any(str(j.get('T7_ArriveBranch', '')).strip() != '' for j in group): 
             target['t7'] += 1
             
-        # [FIXED LOGIC] ใช้ all() สำหรับการจบงาน (ต้องจบทุกสาขาในเที่ยวรถนั้น)
         if all(str(j.get('T8_EndJob', '')).strip() != '' for j in group): 
             target['t8'] += 1
 
@@ -624,7 +717,8 @@ def export_excel():
 @app.route('/export_pdf')
 def export_pdf():
     sheet = get_db()
-    raw_jobs = sheet.worksheet('Jobs').get_all_records()
+    # [CHANGED] ใช้ Cache
+    raw_jobs = get_cached_records(sheet, 'Jobs')
     
     date_filter = request.args.get('date_filter')
     if date_filter:
@@ -698,7 +792,6 @@ def export_pdf():
         if first_job.get('T3_EndLoad'): target_sum['t3'] += 1
         if first_job.get('T6_Exit'): target_sum['t6'] += 1
         
-        # [FIXED LOGIC] สำหรับ PDF ก็ใช้ลอจิกเดียวกัน: T7(any), T8(all)
         if any(str(j.get('T7_ArriveBranch', '')).strip() != '' for j in group): target_sum['t7'] += 1
         if all(str(j.get('T8_EndJob', '')).strip() != '' for j in group): target_sum['t8'] += 1
 
@@ -922,7 +1015,8 @@ def export_pdf():
 @app.route('/export_pdf_summary')
 def export_pdf_summary():
     sheet = get_db()
-    raw_jobs = sheet.worksheet('Jobs').get_all_records()
+    # [CHANGED] ใช้ Cache
+    raw_jobs = get_cached_records(sheet, 'Jobs')
     
     date_filter = request.args.get('date_filter')
     if date_filter:
@@ -990,7 +1084,6 @@ def export_pdf_summary():
         if first_job.get('T5_RecvDoc'): target['t5'] += 1
         if first_job.get('T6_Exit'): target['t6'] += 1
         
-        # [FIXED LOGIC] Summary PDF ก็แก้เป็น all() เช่นกัน
         if any(str(j.get('T7_ArriveBranch', '')).strip() != '' for j in group): target['t7'] += 1 
         if all(str(j.get('T8_EndJob', '')).strip() != '' for j in group): target['t8'] += 1       
 
@@ -1155,7 +1248,9 @@ def export_pdf_summary():
 @app.route('/tracking')
 def customer_view():
     sheet = get_db()
-    raw_jobs = sheet.worksheet('Jobs').get_all_records()
+    # [CHANGED] ใช้ Cache
+    raw_jobs = get_cached_records(sheet, 'Jobs')
+    
     all_dates = sorted(list(set([str(j['PO_Date']).strip() for j in raw_jobs])), reverse=True)
     
     date_filter = request.args.get('date_filter')
@@ -1232,7 +1327,8 @@ def customer_view():
 def driver_select():
     sheet = get_db()
     drivers = sheet.worksheet('Drivers').col_values(1)[1:]
-    all_jobs = sheet.worksheet('Jobs').get_all_records() 
+    # [CHANGED] ใช้ Cache
+    all_jobs = get_cached_records(sheet, 'Jobs')
     now_thai = datetime.now() + timedelta(hours=7)
     
     driver_info = {} 
@@ -1293,7 +1389,8 @@ def driver_tasks():
     if not driver_name: return redirect(url_for('driver_select'))
         
     sheet = get_db()
-    raw_data = sheet.worksheet('Jobs').get_all_records()
+    # [CHANGED] ใช้ Cache
+    raw_data = get_cached_records(sheet, 'Jobs')
     my_jobs = []
     
     for i, job in enumerate(raw_data): 
@@ -1405,6 +1502,9 @@ def update_status():
 
     if step == '8': 
         ws.update_cell(row_id_target, 16, "Done")
+    
+    # [NEW] เคลียร์ Cache ทันทีที่มีการอัปเดตสถานะ
+    invalidate_cache('Jobs')
         
     return redirect(url_for('driver_tasks', name=driver_name))
 

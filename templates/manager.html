@@ -153,16 +153,22 @@
                                         {% if job.L1_Loc %}
                                             <a href="https://www.google.com/maps/search/?api=1&query={{ job.L1_Loc }}" target="_blank" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800 transition shadow-sm" title="ดูพิกัด"><i class="fa-solid fa-location-dot"></i></a>
                                         {% endif %}
-                                        <button onclick="openChangeDriverModal({
-                                            carNo: '{{ job.Car_No }}',
-                                            loadDate: '{{ show_load | thai_date }}',
-                                            roundTime: '{{ job.Round }}',
-                                            branches: {{ trip_branches | tojson }},
-                                            oldDriver: '{{ job.Driver }}',
-                                            oldPlate: '{{ job.Plate }}'
-                                        })" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-50 text-orange-500 hover:bg-orange-100 hover:text-orange-700 transition shadow-sm" title="แจ้งเปลี่ยนคนขับ/ทะเบียน">
+                                        
+                                        {% set modal_info = {
+                                            'carNo': job.Car_No,
+                                            'loadDate': show_load | thai_date,
+                                            'roundTime': job.Round,
+                                            'branches': trip_branches,
+                                            'oldDriver': job.Driver,
+                                            'oldPlate': job.Plate
+                                        } %}
+                                        <button 
+                                            data-info='{{ modal_info | tojson | forceescape }}'
+                                            onclick="openChangeDriverModal(this)"
+                                            class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-50 text-orange-500 hover:bg-orange-100 hover:text-orange-700 transition shadow-sm" title="แจ้งเปลี่ยนคนขับ/ทะเบียน">
                                             <i class="fa-solid fa-right-left"></i>
                                         </button>
+
                                         <form action="/delete_job" method="POST" onsubmit="return confirm('⚠️ ยืนยันการลบเที่ยววิ่งนี้?');">
                                             <input type="hidden" name="po_date" value="{{ job.PO_Date }}">
                                             <input type="hidden" name="round_time" value="{{ job.Round }}">
@@ -186,6 +192,76 @@
                     <div class="bg-indigo-100 p-2 rounded text-indigo-700"><i class="fa-solid fa-users-viewfinder"></i></div> 
                     สรุปงานรายบุคคล (PO: {{ current_filter_date | thai_date }})
                 </h3>
+            </div>
+
+            <div class="mb-8 bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                <h4 class="font-bold text-gray-700 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-user-clock text-green-500"></i> พนักงานที่ว่างงาน (Available)
+                </h4>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    
+                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                        <div class="flex items-center gap-2 mb-2 border-b border-yellow-200 pb-2">
+                            <i class="fa-solid fa-sun text-yellow-500 text-lg"></i>
+                            <span class="font-bold text-yellow-800 text-sm">กะเช้า (Day Only)</span>
+                            <span class="ml-auto bg-white text-yellow-600 text-xs font-bold px-2 py-0.5 rounded-full border border-yellow-200">{{ idle_drivers_day|length }}</span>
+                        </div>
+                        <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto custom-scrollbar">
+                            {% for d in idle_drivers_day %}
+                                <span class="text-xs bg-white border border-yellow-200 text-gray-700 px-2 py-1 rounded shadow-sm">{{ d.Name }}</span>
+                            {% else %}
+                                <span class="text-xs text-gray-400 italic">- ว่าง -</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                        <div class="flex items-center gap-2 mb-2 border-b border-indigo-200 pb-2">
+                            <i class="fa-solid fa-moon text-indigo-500 text-lg"></i>
+                            <span class="font-bold text-indigo-800 text-sm">กะดึก (Night Only)</span>
+                            <span class="ml-auto bg-white text-indigo-600 text-xs font-bold px-2 py-0.5 rounded-full border border-indigo-200">{{ idle_drivers_night|length }}</span>
+                        </div>
+                        <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto custom-scrollbar">
+                            {% for d in idle_drivers_night %}
+                                <span class="text-xs bg-white border border-indigo-200 text-gray-700 px-2 py-1 rounded shadow-sm">{{ d.Name }}</span>
+                            {% else %}
+                                <span class="text-xs text-gray-400 italic">- ว่าง -</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                        <div class="flex items-center gap-2 mb-2 border-b border-purple-200 pb-2">
+                            <i class="fa-solid fa-repeat text-purple-500 text-lg"></i>
+                            <span class="font-bold text-purple-800 text-sm">วิ่งได้ทั้งวัน (Hybrid)</span>
+                            <span class="ml-auto bg-white text-purple-600 text-xs font-bold px-2 py-0.5 rounded-full border border-purple-200">{{ idle_drivers_hybrid|length }}</span>
+                        </div>
+                        <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto custom-scrollbar">
+                            {% for d in idle_drivers_hybrid %}
+                                <span class="text-xs bg-white border border-purple-200 text-gray-700 px-2 py-1 rounded shadow-sm">{{ d.Name }}</span>
+                            {% else %}
+                                <span class="text-xs text-gray-400 italic">- ว่าง -</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                        <div class="flex items-center gap-2 mb-2 border-b border-gray-200 pb-2">
+                            <i class="fa-solid fa-user-tag text-gray-400 text-lg"></i>
+                            <span class="font-bold text-gray-600 text-sm">พนักงานใหม่/ไม่ระบุ</span>
+                            <span class="ml-auto bg-white text-gray-500 text-xs font-bold px-2 py-0.5 rounded-full border border-gray-200">{{ idle_drivers_new|length }}</span>
+                        </div>
+                        <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto custom-scrollbar">
+                            {% for d in idle_drivers_new %}
+                                <span class="text-xs bg-white border border-gray-200 text-gray-500 px-2 py-1 rounded shadow-sm">{{ d.Name }}</span>
+                            {% else %}
+                                <span class="text-xs text-gray-400 italic">- ว่าง -</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                </div>
             </div>
 
             {% if driver_stats|length == 0 %}
@@ -221,11 +297,11 @@
                                 </div>
                                 
                                 <div class="flex items-center gap-2 mb-2">
-                                    <span class="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-0.5 rounded">
-                                        {{ round.round }} น.
+                                    <span class="bg-indigo-600 text-white text-xs font-bold px-2 py-0.5 rounded shadow-sm">
+                                        คันที่ #{{ round.car_no }}
                                     </span>
                                     <span class="text-xs text-gray-500 font-mono bg-white border px-1 rounded">
-                                        #{{ round.car_no }}
+                                        {{ round.round }} น.
                                     </span>
                                 </div>
                                 
@@ -685,9 +761,12 @@
         copyToClipboard(msg, "ข้อความอัพเดทสถานะ");
     }
 
+    // --- NEW: Change Driver Logic [FIXED SYNTAX ERROR] ---
     let currentModalData = {};
 
-    function openChangeDriverModal(data) {
+    function openChangeDriverModal(buttonEl) {
+        // ดึงข้อมูล JSON จาก attribute data-info ของปุ่ม
+        const data = JSON.parse(buttonEl.dataset.info);
         currentModalData = data;
         
         document.getElementById('md_carNo').innerText = '#' + data.carNo;

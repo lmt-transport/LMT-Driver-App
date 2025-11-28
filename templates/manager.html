@@ -156,7 +156,7 @@
                                         
                                         {% set modal_info = {
                                             'carNo': job.Car_No,
-                                            'loadDate': show_load | thai_date,
+                                            'loadDate': show_load | thai_date,  'loadDate': show_load | thai_date,
                                             'roundTime': job.Round,
                                             'branches': trip_branches,
                                             'oldDriver': job.Driver,
@@ -889,7 +889,7 @@
         });
     }
 
-    function copyChangeDriverText() {
+function copyChangeDriverText() {
         const newDriverName = document.getElementById('md_newDriverSelect').value;
         if (!newDriverName) { alert('กรุณาเลือกคนขับใหม่'); return; }
 
@@ -902,26 +902,31 @@
             branchText += `📍 ${b}\n`;
         });
 
+        // ตกแต่งข้อความด้วย Emoji
         const msg = `เรียน ผู้เกี่ยวข้อง
-แจ้งแก้ไขเปลี่ยนทะเบียนรถ/คนขับรับงาน
-คันที่ : ${currentModalData.carNo}
+📢 แจ้งแก้ไขเปลี่ยนทะเบียนรถ/คนขับรับงาน
 
-รอบโหลด : ${currentModalData.roundTime}
-โหลดงาน : ${currentModalData.loadDate}
+🚛 คันที่ : ${currentModalData.carNo}
+📅 PO Date : ${currentModalData.poDate}
+🗓️ โหลดงาน : ${currentModalData.loadDate}
+⏰ รอบโหลด : ${currentModalData.roundTime}
 ${branchText}
-แผนเดิมทะเบียน : ${currentModalData.oldPlate}
-พนักงานขับรถ : ${currentModalData.oldDriver}
-เลขที่บัตรประชาชน :  ${oldInfo.id_card || '-'}
-เบอร์  : ${oldInfo.phone || '-'}
+➖➖➖➖➖➖➖➖➖➖
+🔴 แผนเดิม
+ทะเบียน : ${currentModalData.oldPlate}
+คนขับ : ${currentModalData.oldDriver}
+🆔 : ${oldInfo.id_card || '-'}
+📞 : ${oldInfo.phone || '-'}
 
-เปลี่ยนเป็นทะเบียน : ${newInfo.plate || '-'}
-พนักงานขับรถ : ${newDriverName}
-เลขที่บัตรประชาชน :  ${newInfo.id_card || '-'}
-เบอร์ :  ${newInfo.phone || '-'}
+🟢 เปลี่ยนเป็น
+ทะเบียน : ${newInfo.plate || '-'}
+คนขับ : ${newDriverName}
+🆔 : ${newInfo.id_card || '-'}
+📞 : ${newInfo.phone || '-'}
 
-เนื่องจาก : ${reason}
+💬 เนื่องจาก : ${reason}
 
-ขอบคุณครับ`;
+ขอบคุณครับ 🙏`;
 
         copyToClipboard(msg, "ข้อความแจ้งเปลี่ยนงาน");
     }

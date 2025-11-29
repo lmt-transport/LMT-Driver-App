@@ -73,19 +73,28 @@
                     <div class="flex items-center gap-2 sm:gap-4">
                         
                         <div class="relative">
-                            {% set is_day_complete = shift_status.day.is_complete if shift_status and shift_status.day else False %}
-                            {% set is_night_complete = shift_status.night.is_complete if shift_status and shift_status.night else False %}
+                            {% set is_day_complete = False %}
+                            {% set is_night_complete = False %}
+                            
+                            {% if shift_status is defined and shift_status %}
+                                {% if shift_status.day and shift_status.day.is_complete %}
+                                    {% set is_day_complete = True %}
+                                {% endif %}
+                                {% if shift_status.night and shift_status.night.is_complete %}
+                                    {% set is_night_complete = True %}
+                                {% endif %}
+                            {% endif %}
                             
                             <button onclick="toggleNotifications()" class="relative p-2 transition-colors rounded-full hover:bg-gray-100 focus:outline-none 
-                                {% if is_day_complete or is_night_complete %} text-green-600 {% else %} text-gray-400 hover:text-indigo-600 {% endif %}">
+                                {% if is_day_complete or is_night_complete %} text-green-600 bg-green-50 {% else %} text-gray-400 hover:text-indigo-600 {% endif %}">
                                 
                                 {% if is_day_complete or is_night_complete %}
-                                    <i class="fa-solid fa-bell-ring text-xl animate-pulse"></i>
+                                    <i class="fa-solid fa-bell text-xl animate-pulse"></i>
                                 {% else %}
                                     <i class="fa-solid fa-bell text-xl"></i>
                                 {% endif %}
 
-                                {% if total_late_cars and total_late_cars > 0 %}
+                                {% if total_late_cars is defined and total_late_cars and total_late_cars > 0 %}
                                     <span class="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-white animate-bounce">
                                         {{ total_late_cars }}
                                     </span>
@@ -132,7 +141,7 @@
                                     </div>
                                     {% endif %}
 
-                                    {% if total_late_cars and total_late_cars > 0 and late_arrivals_by_po %}
+                                    {% if late_arrivals_by_po is defined and late_arrivals_by_po %}
                                         {% for po_date, cars in late_arrivals_by_po.items() %}
                                             {% for car in cars %}
                                             <div class="px-4 py-3 hover:bg-red-50 flex gap-3 border-b border-gray-50 transition-colors cursor-pointer group relative">
@@ -176,7 +185,7 @@
                                 
                                 <div class="bg-gray-50 px-4 py-2 text-center border-t border-gray-100">
                                     <a href="/manager?tab=monitor" class="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center justify-center gap-1">
-                                        ดูรายการทั้งหมด <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                                        ดูรายการรถสายทั้งหมด <i class="fa-solid fa-chevron-right text-[10px]"></i>
                                     </a>
                                 </div>
                             </div>

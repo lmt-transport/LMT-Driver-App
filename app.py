@@ -24,6 +24,10 @@ CORS(app)
 # ==========================================
 DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1444236316404482139/UJc-I_NRT33p9UKCas5ATGgjAlqlrtxBuPhvKYKnI-Pz2_AyxAnOs_UFNl203_sqLsI5'
 
+# ตัวแปร Global สำหรับจำเวลาแจ้งเตือนล่าสุด (เพื่อป้องกัน Spam และทำ Loop 1 ชม.)
+last_late_alert_time = {'day': 0, 'night': 0}
+notify_flags = {} # จำสถานะว่าแจ้งเตือนกลุ่มไปหรือยัง
+
 def send_discord_msg(message):
     """ฟังก์ชันส่งข้อความเข้า Discord"""
     try:
@@ -32,12 +36,10 @@ def send_discord_msg(message):
 
         payload = {
             "content": message,
-            "username": "LMT Transport Bot",
+            "username": "LMT Smart Bot",
             "avatar_url": "https://cdn-icons-png.flaticon.com/512/2936/2936956.png"
         }
-        
         requests.post(DISCORD_WEBHOOK_URL, json=payload)
-            
     except Exception as e:
         print(f"Discord Notify Error: {e}")
 
@@ -73,69 +75,230 @@ def invalidate_cache(worksheet_name):
     if worksheet_name in cache_storage:
         cache_storage[worksheet_name] = {'data': None, 'timestamp': 0}
 
-def check_and_notify_shift_completion(sheet, target_po_date, target_round_time, step_trigger):
-    """ตรวจสอบว่ารถเข้าครบทุกคันหรือยัง (เช็คเฉพาะกะของคนขับที่กดอัปเดต)"""
+# --- Helper Functions for Notification ---
+
+def get_shift_info(round_time):
+    """ระบุกะ Day/Night จากเวลา"""
+    is_day = True
     try:
-        # 1. ระบุกะของผู้กด (Day หรือ Night)
-        target_is_day = True
-        try:
-            h_check = int(str(target_round_time).split(':')[0])
-            if h_check < 6 or h_check >= 19: target_is_day = False
-        except: return
+        h = int(str(round_time).split(':')[0])
+        if h < 6 or h >= 19: is_day = False
+    except: pass
+    return is_day, ("กลางวัน ☀️" if is_day else "กลางคืน 🌙")
 
-        shift_name = "รอบเช้า" if target_is_day else "รอบดึก"
-        shift_emoji = "☀️" if target_is_day else "🌙"
+def get_driver_details(sheet, driver_name):
+    """ดึงเลขบัตรและเบอร์โทรจาก Cache Drivers"""
+    try:
+        drivers = get_cached_records(sheet, 'Drivers')
+        for d in drivers:
+            if d.get('Name') == driver_name:
+                # ปรับ Key ให้ตรงกับ Header ใน Sheet Drivers ของคุณ
+                # สมมติว่าเป็น 'ID_Card' และ 'Phone' ถ้าไม่ใช่ให้แก้ตรงนี้ครับ
+                return d.get('ID_Card', '-'), d.get('Phone', '-')
+    except: pass
+    return '-', '-'
 
-        # 2. ดึงข้อมูลมานับยอด
-        raw_jobs = sheet.worksheet('Jobs').get_all_records()
+def get_notify_flag(key):
+    return notify_flags.get(key, False)
+
+def set_notify_flag(key):
+    notify_flags[key] = True
+
+# --- Notification Logic 1 & 2: รายคัน (Real-time) ---
+def notify_individual_movement(sheet, job_data, step):
+    """แจ้งเตือนเมื่อรถเข้า (Step 1) หรือ ออก (Step 6)"""
+    try:
+        id_card, phone = get_driver_details(sheet, job_data['Driver'])
+        is_day, shift_name = get_shift_info(job_data['Round'])
         
-        # กรองเฉพาะ PO Date เดียวกัน
+        action_txt = ""
+        icon = ""
+        color_bar = "" # Discord markdown doesn't support color bars natively, but we use icons
+        
+        if step == '1':
+            action_txt = "เข้าถึงโรงงาน"
+            icon = "🟩" 
+        elif step == '6':
+            action_txt = "ออกจากโรงงาน"
+            icon = "🚀" 
+        else:
+            return
+
+        msg = (
+            f"{icon} **แจ้งเตือน: รถ{action_txt}**\n"
+            f"📅 PO: `{job_data['PO_Date']}` | กะ: {shift_name}\n"
+            f"⏰ รอบโหลด: `{job_data['Round']}` | คันที่: `{job_data['Car_No']}`\n"
+            f"🚛 ทะเบียน: `{job_data['Plate']}`\n"
+            f"----------------------------------\n"
+            f"👤 คนขับ: **{job_data['Driver']}**\n"
+            f"🆔 บัตร: `{id_card}`\n"
+            f"📞 โทร: `{phone}`"
+        )
+        send_discord_msg(msg)
+    except Exception as e:
+        print(f"Individual Notify Error: {e}")
+
+# --- Notification Logic 3, 4, 5: กลุ่มครบ (Group Completion) ---
+def check_group_completion(sheet, target_po_date, target_round_time):
+    """ตรวจสอบยอดรวม: เข้าครบ / ออกครบ / จบครบ"""
+    try:
+        target_is_day, shift_name = get_shift_info(target_round_time)
+        
+        # ดึงข้อมูลใหม่สดๆ เพื่อความแม่นยำ
+        raw_jobs = sheet.worksheet('Jobs').get_all_records()
         target_jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(target_po_date).strip()]
 
-        stats = {'total': 0, 'action': 0}
+        stats = {'total': 0, 'in': 0, 'out': 0, 'done': 0}
         
-        unique_cars = {}
+        # จัดกลุ่ม Trip (Key = PO+Round+Car) เพื่อไม่ให้นับซ้ำราย Branch
+        trips = {}
         for job in target_jobs:
             if str(job.get('Status', '')).lower() == 'cancel': continue
             key = (str(job['PO_Date']), str(job['Round']), str(job['Car_No']))
-            if key not in unique_cars: unique_cars[key] = job
+            if key not in trips: trips[key] = []
+            trips[key].append(job)
 
-        for key, job in unique_cars.items():
-            r_time = str(job.get('Round', '')).strip()
-            is_day = True
-            try:
-                h = int(r_time.split(':')[0])
-                if h < 6 or h >= 19: is_day = False
-            except: pass
+        for key, job_list in trips.items():
+            first_job = job_list[0]
+            r_time = str(first_job.get('Round', '')).strip()
             
-            # นับเฉพาะกะที่ตรงกับคนกด
+            # เช็คว่าเป็นกะเดียวกับที่เรากำลังสนใจไหม
+            is_day, _ = get_shift_info(r_time)
+            
             if is_day == target_is_day:
                 stats['total'] += 1
                 
-                # เช็ค Step 1 (เข้าโรงงาน)
-                if step_trigger == '1':
-                    if str(job.get('T1_Enter', '')).strip() != '':
-                        stats['action'] += 1
+                # Check Step 1: เข้าโรงงาน (ดูที่งานแรกของ Trip ก็พอ)
+                if str(first_job.get('T1_Enter', '')).strip() != '':
+                    stats['in'] += 1
                 
-                # เช็ค Step 6 (ออกโรงงาน)
-                elif step_trigger == '6':
-                    if str(job.get('T6_Exit', '')).strip() != '':
-                        stats['action'] += 1
+                # Check Step 6: ออกโรงงาน
+                if str(first_job.get('T6_Exit', '')).strip() != '':
+                    stats['out'] += 1
+                
+                # Check Done: จบงานครบทุก Branch ใน Trip
+                if all(j['Status'] == 'Done' for j in job_list):
+                    stats['done'] += 1
 
-        # 3. ส่งแจ้งเตือนถ้าครบ
-        if stats['total'] > 0 and stats['total'] == stats['action']:
-            now_str = (datetime.now() + timedelta(hours=7)).strftime('%H:%M')
-            
-            if step_trigger == '1':
-                msg = f"{shift_emoji} **แจ้งเตือน: รถ{shift_name} เข้าโรงงาน ครบแล้ว!**\n✅ PO Date: {target_po_date}\n🚛 จำนวน: `{stats['total']}` คัน\n🕒 เวลา: `{now_str} น.`"
-                send_discord_msg(msg)
-            
-            elif step_trigger == '6':
-                msg = f"🚀 **แจ้งเตือน: รถ{shift_name} ออกจากโรงงาน ครบแล้ว!**\n✅ PO Date: {target_po_date}\n🚛 จำนวน: `{stats['total']}` คัน\n🕒 เวลา: `{now_str} น.`"
-                send_discord_msg(msg)
+        if stats['total'] == 0: return
+
+        now_str = (datetime.now() + timedelta(hours=7)).strftime('%H:%M')
+        base_msg = f"✅ PO: {target_po_date} ({shift_name})\n🚛 จำนวนทั้งหมด: `{stats['total']}` คัน\n🕒 เวลา: `{now_str} น.`"
+        shift_key = 'day' if target_is_day else 'night'
+
+        # Trigger 3: เข้าครบ
+        if stats['total'] == stats['in']:
+            cache_key = f"completed_in_{target_po_date}_{shift_key}"
+            if not get_notify_flag(cache_key):
+                send_discord_msg(f"🏁 **สรุป: รถเข้าโรงงาน ครบแล้ว!**\n{base_msg}")
+                set_notify_flag(cache_key)
+
+        # Trigger 4: ออกครบ
+        if stats['total'] == stats['out']:
+            cache_key = f"completed_out_{target_po_date}_{shift_key}"
+            if not get_notify_flag(cache_key):
+                send_discord_msg(f"🛫 **สรุป: รถออกจากโรงงาน ครบแล้ว!**\n{base_msg}")
+                set_notify_flag(cache_key)
+
+        # Trigger 5: จบงานครบ
+        if stats['total'] == stats['done']:
+            cache_key = f"completed_done_{target_po_date}_{shift_key}"
+            if not get_notify_flag(cache_key):
+                send_discord_msg(f"🎉 **สรุป: จบงานส่งของ ครบทุกคันแล้ว!**\n{base_msg}")
+                set_notify_flag(cache_key)
 
     except Exception as e:
-        print(f"Check Notify Error: {e}")
+        print(f"Group Notify Error: {e}")
+
+# --- Notification Logic 6: เตือนสาย (Late Alert) ---
+def check_late_and_notify(sheet):
+    """เช็ครถที่เข้าสายเกิน 1 ชม. (รองรับ Midnight Crossover)"""
+    global last_late_alert_time
+    try:
+        now_thai = datetime.now() + timedelta(hours=7)
+        current_ts = time.time()
+        
+        raw_jobs = get_cached_records(sheet, 'Jobs')
+        
+        unique_cars = {}
+        
+        # --- 1. กรองงานที่ "Active" (ยังไม่จบ/ไม่ยกเลิก/ยังไม่เข้า) ---
+        # ไม่เช็ค PO_Date == today_str แล้ว เพื่อรองรับงานข้ามคืน
+        active_jobs = [
+            j for j in raw_jobs 
+            if str(j.get('Status', '')).lower() != 'cancel' 
+            and str(j.get('Status', '')).lower() != 'done' 
+            and str(j.get('T1_Enter', '')).strip() == ''
+        ]
+
+        late_list = {'day': [], 'night': []}
+
+        for job in active_jobs:
+            try:
+                # สร้าง Key เพื่อไม่ให้แจ้งซ้ำคันเดิมในรอบเดียวกัน
+                key = (str(job['PO_Date']), str(job['Round']), str(job['Car_No']))
+                if key in unique_cars: continue
+                unique_cars[key] = True
+
+                # --- 2. สร้าง DateTime ของแผนงาน (Plan) ---
+                load_date_str = job.get('Load_Date', job['PO_Date']) # ใช้ Load Date ก่อนถ้ามี
+                round_str = str(job['Round']).strip()
+                
+                # แปลงเวลา
+                try:
+                    plan_dt = datetime.strptime(f"{load_date_str} {round_str}", "%Y-%m-%d %H:%M")
+                except ValueError:
+                    # กรณี Format ผิดพลาด ให้ข้ามไป
+                    continue
+
+                # --- 3. Logic Midnight Crossover (สำคัญ!) ---
+                # ถ้ารอบเวลาเป็น 00:00 - 05:59 และ Load_Date ยังเป็นวันเดียวกับ PO (ซึ่งมักจะเป็นวันก่อนหน้า)
+                # เราต้องบวกวันเพิ่มให้ Plan 1 วัน เพื่อให้เวลาถูกต้องตามความเป็นจริง
+                # (แต่ถ้าใน Excel คอลัมน์ Load_Date ลงวันที่วันใหม่อยู่แล้ว ก็ไม่ต้องบวก)
+                
+                # เช็คว่า Load_Date ใน Excel ตรงกับ PO ไหม (ถ้าตรงแสดงว่าอาจจะยังไม่ได้ปัดวัน)
+                if str(job.get('Load_Date', '')).strip() == '' or str(job.get('Load_Date')) == str(job['PO_Date']):
+                    h_plan = plan_dt.hour
+                    # ถ้ารอบโหลดเป็น ตีเที่ยงคืน ถึง ตีห้าครึ่ง
+                    if 0 <= h_plan < 6:
+                        # สมมติฐาน: งานรอบตี 2 ของ PO วันที่ 29 คือเหตุการณ์จริงวันที่ 30
+                        plan_dt = plan_dt + timedelta(days=1)
+
+                # --- 4. คำนวณความล่าช้า ---
+                # ตรวจสอบว่า plan_dt ต้องไม่เก่าเกินไป (เช่น งานค้างปี) สมมติไม่เกิน 48 ชม.
+                if now_thai > plan_dt and (now_thai - plan_dt).total_seconds() < 48 * 3600:
+                    diff = now_thai - plan_dt
+                    hours_late = diff.total_seconds() / 3600
+                    
+                    if hours_late >= 1:
+                        is_day, _ = get_shift_info(round_str)
+                        id_card, phone = get_driver_details(sheet, job['Driver'])
+                        minutes_late = int((diff.total_seconds() % 3600) // 60)
+                        
+                        info_txt = (f"• คันที่ {job['Car_No']} (นัด {round_str})\n"
+                                    f"   - ทะเบียน: {job['Plate']}\n"
+                                    f"   - คนขับ: {job['Driver']} ({phone})\n"
+                                    f"   - ⏳ สาย: {int(hours_late)} ชม. {minutes_late} นาที")
+                        
+                        if is_day: late_list['day'].append(info_txt)
+                        else: late_list['night'].append(info_txt)
+            except Exception as e: 
+                print(f"Error checking job {job.get('Car_No')}: {e}")
+                continue
+
+        # --- 5. ส่งแจ้งเตือน (Throttling 1 ชม.) ---
+        if late_list['day'] and (current_ts - last_late_alert_time['day'] > 3600):
+            msg = "⚠️ **เตือนภัย: รถเข้าช้าเกิน 1 ชม. (รอบเช้า)**\n" + "\n".join(late_list['day'])
+            send_discord_msg(msg)
+            last_late_alert_time['day'] = current_ts
+            
+        if late_list['night'] and (current_ts - last_late_alert_time['night'] > 3600):
+            msg = "⚠️ **เตือนภัย: รถเข้าช้าเกิน 1 ชม. (รอบดึก)**\n" + "\n".join(late_list['night'])
+            send_discord_msg(msg)
+            last_late_alert_time['night'] = current_ts
+
+    except Exception as e:
+        print(f"Late Check Error: {e}")
 
 # --- Custom Filter ---
 def thai_date_filter(date_str):
@@ -1593,8 +1756,9 @@ def update_status():
     val_to_save = current_time if mode == 'update' else ""
     loc_to_save = location_str if mode == 'update' else ""
 
+    target_row_data = ws.row_values(row_id_target)
+
     if step in ['1', '2', '3', '4', '5', '6']:
-        target_row_data = ws.row_values(row_id_target)
         if len(target_row_data) < 4: return redirect(url_for('driver_tasks', name=driver_name))
         target_po = target_row_data[0] 
         target_round = target_row_data[2]
@@ -1624,27 +1788,35 @@ def update_status():
         ws.update_cell(row_id_target, 16, status_val)
     
     invalidate_cache('Jobs')
-    
-    if step == '1' and mode == 'update':
-        try:
-            updated_row_data = ws.row_values(row_id_target)
-            if len(updated_row_data) > 2:
-                target_po_date = updated_row_data[0] # Col A
-                target_round_time = updated_row_data[2] # Col C
-                check_and_notify_shift_completion(sheet, target_po_date, target_round_time, step)
-        except Exception as e:
-            print(f"Error fetching row for notification: {e}")
-    
-    # [NEW] Notification for Step 6 (Exit Factory)
-    if step == '6' and mode == 'update':
-        try:
-            updated_row_data = ws.row_values(row_id_target)
-            if len(updated_row_data) > 2:
-                target_po_date = updated_row_data[0] # Col A
-                target_round_time = updated_row_data[2] # Col C
-                check_and_notify_shift_completion(sheet, target_po_date, target_round_time, step)
-        except Exception as e:
-            print(f"Error fetching row for notification: {e}")
+
+    # =========================================================================
+    # [NEW LOGIC START] Notification Triggers
+    # =========================================================================
+    if mode == 'update' and len(target_row_data) > 5:
+        # เตรียมข้อมูลสำหรับส่งแจ้งเตือน
+        # ตรวจสอบ index ให้แน่ใจว่าตรงกับ Sheet (Driver=Col E (idx 4), Plate=Col F (idx 5))
+        job_info_for_notify = {
+            'PO_Date': target_row_data[0],
+            'Round': target_row_data[2],
+            'Car_No': target_row_data[3],
+            'Driver': target_row_data[4],
+            'Plate': target_row_data[5]
+        }
+
+        # 1. แจ้งเตือนรายคัน (เข้า Step 1 / ออก Step 6)
+        if step == '1' or step == '6':
+            notify_individual_movement(sheet, job_info_for_notify, step)
+
+        # 2. ตรวจสอบกลุ่ม (เข้าครบ / ออกครบ / จบครบ)
+        # เช็คทุกครั้งที่มีการ update Step 1, 6 หรือ 8
+        if step in ['1', '6', '8']:
+            check_group_completion(sheet, target_row_data[0], target_row_data[2])
+            
+        # 3. เช็ค Late (ฝากเช็คทุกครั้งที่มีการกด Update)
+        check_late_and_notify(sheet)
+    # =========================================================================
+    # [NEW LOGIC END]
+    # =========================================================================
         
     return redirect(url_for('driver_tasks', name=driver_name))
 

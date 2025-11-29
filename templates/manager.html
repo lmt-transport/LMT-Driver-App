@@ -604,20 +604,27 @@
         }
     }
 
+    // --- [FIXED] Updated switchTab function to handle hover classes correctly ---
     function switchTab(tabId) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
         document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.classList.remove('bg-indigo-600', 'text-white', 'shadow');
-            btn.classList.add('bg-white', 'text-gray-600');
+            // Remove active classes
+            btn.classList.remove('bg-indigo-600', 'text-white', 'shadow', 'hover:bg-indigo-700');
+            // Add inactive classes
+            btn.classList.add('bg-white', 'text-gray-600', 'hover:bg-gray-100');
         });
+
         document.getElementById(tabId).classList.remove('hidden');
         let btn = document.getElementById(tabId.replace('tab-', 'btn-'));
         if (btn) {
-            btn.classList.remove('bg-white', 'text-gray-600');
-            btn.classList.add('bg-indigo-600', 'text-white', 'shadow');
+            // Remove inactive classes
+            btn.classList.remove('bg-white', 'text-gray-600', 'hover:bg-gray-100');
+            // Add active classes
+            btn.classList.add('bg-indigo-600', 'text-white', 'shadow', 'hover:bg-indigo-700');
         }
         localStorage.setItem('activeTab', tabId);
     }
+    // --------------------------------------------------------------------------
 
     function updatePlate() {
         const select = document.getElementById('driver_select');

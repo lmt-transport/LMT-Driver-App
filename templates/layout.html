@@ -70,7 +70,7 @@
 
                 <div>
                     {% if session.get('user') %}
-                    <div class="flex items-center gap-2 sm:gap-4">
+<div class="flex items-center gap-2 sm:gap-4">
                         
                         <div class="relative">
                             {% set is_day_enter = False %}
@@ -225,6 +225,17 @@
                                 </div>
                             </div>
                         </div>
+
+                        <div class="flex items-center gap-3 border-l border-gray-200 pl-4 ml-2">
+                            <div class="text-right hidden sm:block">
+                                <div class="text-xs text-gray-500">ผู้จัดการ</div>
+                                <div class="text-sm font-bold text-indigo-600 leading-none">{{ session['user'] }}</div>
+                            </div>
+                            <a href="/logout" class="flex items-center gap-2 text-xs font-bold bg-white border border-rose-100 text-rose-600 hover:bg-rose-50 px-3 py-1.5 rounded-full transition-all shadow-sm hover:shadow active:scale-95" title="ออกจากระบบ">
+                                <i class="fa-solid fa-power-off"></i> <span class="hidden xs:inline">ออก</span>
+                            </a>
+                        </div>
+                    </div>
 
                     <script>
                         function toggleNotifications() {

@@ -1824,7 +1824,11 @@ def update_status():
     if step == '8': 
         status_val = "Done" if mode == 'update' else ""
         ws.update_cell(row_id_target, 16, status_val) # Update Status Column (P)
-    
+        
+        # *** [การแก้ไข] เพิ่มหน่วงเวลา 1 วินาที ให้ Sheets API บันทึกเสร็จก่อน ***
+        if mode == 'update':
+            time.sleep(1) 
+            
     invalidate_cache('Jobs')
 
     # 2. Notification Triggers (only if mode is 'update')
@@ -1842,9 +1846,10 @@ def update_status():
         if step == '1' or step == '6':
             notify_individual_movement(sheet, job_info_for_notify, step)
             
-        # Trigger: รายคัน (จบงานครบทุกสาขา) <--- NEW LOGIC
+        # Trigger: รายคัน (จบงานครบทุกสาขา) 
         if step == '8':
-            if check_if_trip_is_done(sheet, target_row_data):
+            # ตอนนี้มั่นใจว่าการอ่านข้อมูลใน check_if_trip_is_done จะได้ค่า 'Done' ที่ถูกต้อง
+            if check_if_trip_is_done(sheet, target_row_data): 
                 send_individual_trip_done_notification(sheet, target_row_data)
 
         # Trigger 3, 4, 5: กลุ่ม (เข้าครบ / ออกครบ / จบครบ)
@@ -1855,7 +1860,7 @@ def update_status():
         check_late_and_notify(sheet)
         
     return redirect(url_for('driver_tasks', name=driver_name))
-
+    
 @app.route('/update_driver', methods=['POST'])
 def update_driver():
     if 'user' not in session: return json.dumps({'status': 'error', 'message': 'Unauthorized'}), 401

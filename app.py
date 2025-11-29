@@ -792,7 +792,9 @@ def export_excel():
             'เวลาโหลด': "" if is_same else job['Round'], 
             'คนขับ': "" if is_same else job['Driver'],
             'ปลายทาง (สาขา)': job['Branch_Name'],
-            'น้ำหนัก': job.get('Weight', ''), # เพิ่มน้ำหนัก
+            # [แก้ไข] แสดงน้ำหนักเฉพาะบรรทัดแรกของกลุ่ม
+            'น้ำหนัก': "" if is_same else job.get('Weight', ''),
+            # ------------------------------------
             'ทะเบียนรถ': "" if is_same else job['Plate'],
             'เข้าโรงงาน': "" if is_same else job['T1_Enter'],
             'เริ่มโหลด': "" if is_same else t2_display, 
@@ -1140,7 +1142,9 @@ def export_pdf():
             driver = str(job['Driver']) if is_first_row else ""
             round_t = str(job['Round']) if is_first_row else ""
             branch = str(job['Branch_Name'])
-            weight = str(job.get('Weight', ''))
+            # [แก้ไข] แสดงน้ำหนักเฉพาะบรรทัดแรก
+            weight = str(job.get('Weight', '')) if is_first_row else ""
+            # ---------------------------------
             t1 = str(job['T1_Enter']) if is_first_row else ""
             
             t2_text = ""

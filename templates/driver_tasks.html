@@ -60,10 +60,10 @@
                 <div class="text-xl font-bold {% if is_active %} text-yellow-400 {% else %} text-gray-200 {% endif %} font-mono leading-none">{{ first_job.Round }}</div>
                 
                 {% if first_job.get('Weight') %}
-                <div class="mt-1.5 inline-flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded text-[10px] text-white/90 font-medium border border-white/10">
-                    <i class="fa-solid fa-weight-hanging text-[9px]"></i> {{ first_job.Weight }}
-                </div>
-                {% endif %}
+				<div class="mt-1.5 inline-flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded text-[10px] text-white/90 font-medium border border-white/10">
+				<i class="fa-solid fa-weight-hanging text-[9px]"></i> {{ first_job.Weight | comma_format }}
+				</div>
+				{% endif %}
                 </div>
         </div>
 

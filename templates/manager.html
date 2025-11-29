@@ -510,7 +510,7 @@
 
                                     <td class="px-2 py-1 border-r border-gray-200 font-bold">{% if not is_same %}{{ job.Round }}{% endif %}</td>
                                     <td class="px-2 py-1 border-r border-gray-200 text-left pl-2 font-bold text-indigo-700 truncate max-w-[200px]" title="{{ job.Branch_Name }}">{{ job.Branch_Name }}</td>
-                                    <td class="px-2 py-1 border-r border-gray-200 text-center text-gray-600 font-medium">{% if not is_same %}{{ job.get('Weight', '-') }}{% endif %}</td>
+                                    <td class="px-2 py-1 border-r border-gray-200 text-center text-gray-600 font-medium">{% if not is_same %}{{ job.get('Weight', '-') | comma_format }}{% endif %}</td>
                                     <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %} {{ job.Plate }} {% endif %}</td>
                                     <td class="px-2 py-1 border-r border-gray-200 font-medium truncate max-w-[120px]" title="{{ job.Driver }}">{% if not is_same %} {{ job.Driver }} {% endif %}</td>
                                     <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T1_Enter, job.L1_Loc) }}{% endif %}</td>

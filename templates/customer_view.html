@@ -175,8 +175,8 @@
                             </td>
 
                             <td class="px-2 py-1 border-r border-gray-100 text-center font-medium text-gray-600">
-                                {% if not is_same %} {{ job.get('Weight', '-') }} {% endif %}
-                            </td>
+								{% if not is_same %} {{ job.get('Weight', '-') | comma_format }} {% endif %}
+							</td>
                             {% macro time_display(time_val, loc_val) %}
                                 {% if time_val %}
                                     {% if loc_val %}

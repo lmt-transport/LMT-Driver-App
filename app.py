@@ -91,6 +91,22 @@ def get_driver_details(sheet, driver_name):
                 return d.get('ID_Card', '-'), d.get('Phone', '-')
     except: pass
     return '-', '-'
+    
+def comma_format(value):
+    """แปลงตัวเลขให้มีเครื่องหมาย , (รองรับทั้ง int/float และ string)"""
+    if not value: return ""
+    if value == '-': return "-"
+    try:
+        # ลบ , เดิมออกก่อน (เผื่อมีมาแล้ว)
+        clean_val = str(value).replace(',', '')
+        num = float(clean_val)
+        if num.is_integer():
+            return "{:,.0f}".format(num)
+        return "{:,.2f}".format(num)
+    except:
+        return str(value)
+
+app.jinja_env.filters['comma_format'] = comma_format
 
 # ==========================================
 # [FIX for Vercel] ระบบจำค่าผ่าน Google Sheet
@@ -793,7 +809,7 @@ def export_excel():
             'คนขับ': "" if is_same else job['Driver'],
             'ปลายทาง (สาขา)': job['Branch_Name'],
             # [แก้ไข] แสดงน้ำหนักเฉพาะบรรทัดแรกของกลุ่ม
-            'น้ำหนัก': "" if is_same else job.get('Weight', ''),
+            'น้ำหนัก': "" if is_same else comma_format(job.get('Weight', '')),
             # ------------------------------------
             'ทะเบียนรถ': "" if is_same else job['Plate'],
             'เข้าโรงงาน': "" if is_same else job['T1_Enter'],
@@ -1143,7 +1159,7 @@ def export_pdf():
             round_t = str(job['Round']) if is_first_row else ""
             branch = str(job['Branch_Name'])
             # [แก้ไข] แสดงน้ำหนักเฉพาะบรรทัดแรก
-            weight = str(job.get('Weight', '')) if is_first_row else ""
+            weight = comma_format(job.get('Weight', '')) if is_first_row else ""
             # ---------------------------------
             t1 = str(job['T1_Enter']) if is_first_row else ""
             

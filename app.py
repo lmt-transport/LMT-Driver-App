@@ -22,7 +22,7 @@ CORS(app)
 # ==========================================
 # [CONFIG] ตั้งค่า Discord Webhook
 # ==========================================
-DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1444236316404482139/UJc-I_NRT33p9UKCas5ATGgjAlqlrtbBuPhvKYKnI-Pz2_AyxAnOs_UFNl203_sqLsI5'
+DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1444236316404482139/UJc-I_NRT33p9UKCas5ATGgjAlqlrtxBuPhvKYKnI-Pz2_AyxAnOs_UFNl203_sqLsI5'
 
 # ตัวแปร Global สำหรับจำเวลาแจ้งเตือนล่าสุด (เพื่อป้องกัน Spam และทำ Loop 1 ชม.)
 last_late_alert_time = {'day': 0, 'night': 0}
@@ -92,6 +92,8 @@ def get_driver_details(sheet, driver_name):
         drivers = get_cached_records(sheet, 'Drivers')
         for d in drivers:
             if d.get('Name') == driver_name:
+                # ปรับ Key ให้ตรงกับ Header ใน Sheet Drivers ของคุณ
+                # สมมติว่าเป็น 'ID_Card' และ 'Phone' ถ้าไม่ใช่ให้แก้ตรงนี้ครับ
                 return d.get('ID_Card', '-'), d.get('Phone', '-')
     except: pass
     return '-', '-'
@@ -102,7 +104,7 @@ def get_notify_flag(key):
 def set_notify_flag(key):
     notify_flags[key] = True
 
-# --- Notification Logic 1 & 2: รายคัน (เข้า/ออก โรงงาน) ---
+# --- Notification Logic 1 & 2: รายคัน (Real-time) ---
 def notify_individual_movement(sheet, job_data, step):
     """แจ้งเตือนเมื่อรถเข้า (Step 1) หรือ ออก (Step 6)"""
     try:
@@ -111,6 +113,7 @@ def notify_individual_movement(sheet, job_data, step):
         
         action_txt = ""
         icon = ""
+        color_bar = "" # Discord markdown doesn't support color bars natively, but we use icons
         
         if step == '1':
             action_txt = "เข้าถึงโรงงาน"
@@ -134,93 +137,45 @@ def notify_individual_movement(sheet, job_data, step):
         send_discord_msg(msg)
     except Exception as e:
         print(f"Individual Notify Error: {e}")
-
-# --- NEW Notification Logic: 5.1 รายคัน (จบงานครบทุกสาขา) ---
-def check_if_trip_is_done(sheet, row_data):
-    """ตรวจสอบว่า Trip จบงานครบทุกสาขาแล้วหรือไม่ (ใช้ get_all_values เพื่อความแม่นยำเรื่อง Type)"""
+        
+def notify_car_completion(sheet, job_data):
+    """แจ้งเตือนเมื่อรถคันหนึ่ง จบงานครบทุกสาขา (Status = Done ทั้งหมด)"""
     try:
-        # เตรียมข้อมูลเป้าหมาย (แปลงเป็น String และตัดช่องว่างออกให้หมด)
-        target_po = str(row_data[0]).strip()
-        target_round = str(row_data[2]).strip()
-        target_car = str(row_data[3]).strip()
+        # ดึงข้อมูลงานทั้งหมดเพื่อมาเช็คสถานะของคันนี้
+        # จำเป็นต้องดึงสดๆ เพราะเพิ่งมีการ Update Status ไป
+        all_jobs = sheet.worksheet('Jobs').get_all_records()
         
-        # สาขาปัจจุบันที่กำลังกดจบงาน
-        current_branch = str(row_data[6]).strip() if len(row_data) > 6 else ""
+        # กรองเฉพาะงานของ Trip นี้ (PO + Round + Car)
+        my_trip = [
+            j for j in all_jobs
+            if str(j['PO_Date']) == str(job_data['PO_Date'])
+            and str(j['Round']) == str(job_data['Round'])
+            and str(j['Car_No']) == str(job_data['Car_No'])
+            and str(j.get('Status', '')).lower() != 'cancel'
+        ]
         
-        # ใช้ get_all_values() แทน get_all_records() เพื่อให้ได้ข้อมูลเป็น String ทั้งหมดเหมือนกัน
-        # (ป้องกันปัญหา "21" != 21 หรือ "12:00" != "12:00:00")
-        all_rows = sheet.worksheet('Jobs').get_all_values()
-        
-        # ตัด Header แถวแรกออก
-        data_rows = all_rows[1:]
-        
-        trip_statuses = []
-        
-        for row in data_rows:
-            # ป้องกันแถวว่าง หรือข้อมูลไม่ครบ
-            if len(row) < 16: continue
-            
-            # ดึงข้อมูลจากแถว (Column A=0, C=2, D=3)
-            r_po = str(row[0]).strip()
-            r_round = str(row[2]).strip()
-            r_car = str(row[3]).strip()
-            
-            # เปรียบเทียบ: ต้องตรงกันทั้ง PO, รอบ, และคันรถ
-            if r_po == target_po and r_round == target_round and r_car == target_car:
-                r_branch = str(row[6]).strip()
-                r_status = str(row[15]).strip() # Column P (Status) คือ index 15
-                
-                # Logic สำคัญ: ถ้าเป็นสาขาที่เราเพิ่งกดจบงาน ให้ถือว่าเป็น 'Done' ทันที
-                # (Overrule ข้อมูลเก่าใน Sheet)
-                if r_branch == current_branch:
-                    r_status = 'Done'
-                
-                trip_statuses.append(r_status)
-        
-        # ถ้าไม่เจอ Trip นี้เลย (เป็นไปไม่ได้ แต่กันไว้ก่อน)
-        if not trip_statuses: return False
-        
-        # ตรวจสอบว่า "ทุกงาน" ใน Trip นี้ต้องเป็น Done
-        # (และต้องระวังไม่นับงานที่ Cancel แต่ในโค้ดนี้เราดูแค่ Status ที่เป็น Done)
-        is_all_done = all(s == 'Done' for s in trip_statuses)
-        
-        # Debug Print (ดูใน Terminal ได้ถ้ายากรู้ผล)
-        # print(f"Check Trip: {target_car} | Statuses: {trip_statuses} -> Result: {is_all_done}")
-        
-        return is_all_done
+        # ถ้าไม่มีงาน หรือ มีบางงานที่ยังไม่ Done ให้จบฟังก์ชัน (ยังไม่แจ้งเตือน)
+        if not my_trip: return
+        if not all(j['Status'] == 'Done' for j in my_trip): return
 
-    except Exception as e:
-        print(f"Check Trip Done Error: {e}")
-        return False
-
-def send_individual_trip_done_notification(sheet, row_data):
-    """แจ้งเตือนรายคันเมื่อจบงานครบทุกสาขา"""
-    try:
-        # row_data คือข้อมูลของแถวที่ถูกอัปเดต (index 0=PO, 2=Round, 3=Car, 4=Driver, 5=Plate)
-        po_date = row_data[0]
-        round_t = row_data[2]
-        car_no = row_data[3]
-        driver_name = row_data[4]
-        plate = row_data[5]
-
-        id_card, phone = get_driver_details(sheet, driver_name)
-        is_day, shift_name = get_shift_info(round_t)
-        now_str = (datetime.now() + timedelta(hours=7)).strftime('%H:%M')
-
+        # --- ถ้าครบเงื่อนไข (Done ทุกสาขา) ให้เตรียมข้อมูลแจ้งเตือน ---
+        id_card, phone = get_driver_details(sheet, job_data['Driver'])
+        is_day, shift_name = get_shift_info(job_data['Round'])
+        
         msg = (
-            f"🎉 **แจ้งเตือน: รถจบงานครบทุกสาขาแล้ว!**\n"
-            f"📅 PO: `{po_date}` | กะ: {shift_name}\n"
-            f"⏰ รอบโหลด: `{round_t}` | คันที่: `{car_no}`\n"
-            f"🚛 ทะเบียน: `{plate}`\n"
+            f"🏁 **แจ้งเตือน: รถจบงานครบทุกสาขา**\n"
+            f"📅 PO: `{job_data['PO_Date']}` | กะ: {shift_name}\n"
+            f"⏰ รอบโหลด: `{job_data['Round']}` | คันที่: `{job_data['Car_No']}`\n"
+            f"🚛 ทะเบียน: `{job_data['Plate']}`\n"
             f"----------------------------------\n"
-            f"👤 คนขับ: **{driver_name}**\n"
+            f"👤 คนขับ: **{job_data['Driver']}**\n"
             f"🆔 บัตร: `{id_card}`\n"
-            f"📞 โทร: `{phone}`\n"
-            f"🕒 เวลาจบ: `{now_str} น.`"
+            f"📞 โทร: `{phone}`"
         )
         send_discord_msg(msg)
+
     except Exception as e:
-        print(f"Individual Trip Done Notify Error: {e}")
+        print(f"Car Completion Notify Error: {e}")
 
 # --- Notification Logic 3, 4, 5: กลุ่มครบ (Group Completion) ---
 def check_group_completion(sheet, target_po_date, target_round_time):
@@ -228,7 +183,7 @@ def check_group_completion(sheet, target_po_date, target_round_time):
     try:
         target_is_day, shift_name = get_shift_info(target_round_time)
         
-        # ดึงข้อมูลใหม่สดๆ
+        # ดึงข้อมูลใหม่สดๆ เพื่อความแม่นยำ
         raw_jobs = sheet.worksheet('Jobs').get_all_records()
         target_jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(target_po_date).strip()]
 
@@ -260,7 +215,7 @@ def check_group_completion(sheet, target_po_date, target_round_time):
                 if str(first_job.get('T6_Exit', '')).strip() != '':
                     stats['out'] += 1
                 
-                # Check Done: จบงาน (ต้อง Done ทุกงานใน Trip)
+                # Check Done: จบงานครบทุก Branch ใน Trip
                 if all(j['Status'] == 'Done' for j in job_list):
                     stats['done'] += 1
 
@@ -296,7 +251,7 @@ def check_group_completion(sheet, target_po_date, target_round_time):
 
 # --- Notification Logic 6: เตือนสาย (Late Alert) ---
 def check_late_and_notify(sheet):
-    """เช็ครถที่เข้าสายเกิน 1 ชม. แจ้งเตือนทุกๆ 1 ชั่วโมง (รองรับ Midnight Crossover)"""
+    """เช็ครถที่เข้าสายเกิน 1 ชม. (รองรับ Midnight Crossover)"""
     global last_late_alert_time
     try:
         now_thai = datetime.now() + timedelta(hours=7)
@@ -306,7 +261,8 @@ def check_late_and_notify(sheet):
         
         unique_cars = {}
         
-        # กรองงานที่ "Active" (ยังไม่จบ/ไม่ยกเลิก/ยังไม่เข้า)
+        # --- 1. กรองงานที่ "Active" (ยังไม่จบ/ไม่ยกเลิก/ยังไม่เข้า) ---
+        # ไม่เช็ค PO_Date == today_str แล้ว เพื่อรองรับงานข้ามคืน
         active_jobs = [
             j for j in raw_jobs 
             if str(j.get('Status', '')).lower() != 'cancel' 
@@ -323,22 +279,32 @@ def check_late_and_notify(sheet):
                 if key in unique_cars: continue
                 unique_cars[key] = True
 
-                # สร้าง DateTime ของแผนงาน (Plan)
-                load_date_str = job.get('Load_Date', job['PO_Date']) 
+                # --- 2. สร้าง DateTime ของแผนงาน (Plan) ---
+                load_date_str = job.get('Load_Date', job['PO_Date']) # ใช้ Load Date ก่อนถ้ามี
                 round_str = str(job['Round']).strip()
                 
+                # แปลงเวลา
                 try:
                     plan_dt = datetime.strptime(f"{load_date_str} {round_str}", "%Y-%m-%d %H:%M")
                 except ValueError:
+                    # กรณี Format ผิดพลาด ให้ข้ามไป
                     continue
 
-                # Logic Midnight Crossover: ถ้ารอบเวลาเป็น 00:00 - 05:59 และ Load_Date ยังเป็นวันเดียวกับ PO
+                # --- 3. Logic Midnight Crossover (สำคัญ!) ---
+                # ถ้ารอบเวลาเป็น 00:00 - 05:59 และ Load_Date ยังเป็นวันเดียวกับ PO (ซึ่งมักจะเป็นวันก่อนหน้า)
+                # เราต้องบวกวันเพิ่มให้ Plan 1 วัน เพื่อให้เวลาถูกต้องตามความเป็นจริง
+                # (แต่ถ้าใน Excel คอลัมน์ Load_Date ลงวันที่วันใหม่อยู่แล้ว ก็ไม่ต้องบวก)
+                
+                # เช็คว่า Load_Date ใน Excel ตรงกับ PO ไหม (ถ้าตรงแสดงว่าอาจจะยังไม่ได้ปัดวัน)
                 if str(job.get('Load_Date', '')).strip() == '' or str(job.get('Load_Date')) == str(job['PO_Date']):
                     h_plan = plan_dt.hour
+                    # ถ้ารอบโหลดเป็น ตีเที่ยงคืน ถึง ตีห้าครึ่ง
                     if 0 <= h_plan < 6:
+                        # สมมติฐาน: งานรอบตี 2 ของ PO วันที่ 29 คือเหตุการณ์จริงวันที่ 30
                         plan_dt = plan_dt + timedelta(days=1)
 
-                # คำนวณความล่าช้า: ต้องเป็นเวลาที่เลยกำหนดมาแล้ว และไม่เก่าเกิน 48 ชม.
+                # --- 4. คำนวณความล่าช้า ---
+                # ตรวจสอบว่า plan_dt ต้องไม่เก่าเกินไป (เช่น งานค้างปี) สมมติไม่เกิน 48 ชม.
                 if now_thai > plan_dt and (now_thai - plan_dt).total_seconds() < 48 * 3600:
                     diff = now_thai - plan_dt
                     hours_late = diff.total_seconds() / 3600
@@ -359,7 +325,7 @@ def check_late_and_notify(sheet):
                 print(f"Error checking job {job.get('Car_No')}: {e}")
                 continue
 
-        # ส่งแจ้งเตือน (Throttling 1 ชม.)
+        # --- 5. ส่งแจ้งเตือน (Throttling 1 ชม.) ---
         if late_list['day'] and (current_ts - last_late_alert_time['day'] > 3600):
             msg = "⚠️ **เตือนภัย: รถเข้าช้าเกิน 1 ชม. (รอบเช้า)**\n" + "\n".join(late_list['day'])
             send_discord_msg(msg)
@@ -588,7 +554,12 @@ def manager_dashboard():
 
     completed_trips = 0
     for trip_key, job_list in jobs_by_trip_key.items():
-        if all(job['Status'] == 'Done' for job in job_list): completed_trips += 1
+        if all(job['Status'] == 'Done' for job in job_list):
+            completed_trips += 1
+            last_end_time = max([j['T8_EndJob'] for j in job_list if j['T8_EndJob']], default="")
+            trip_last_end_time[trip_key] = last_end_time
+        else:
+            trip_last_end_time[trip_key] = ""
             
     total_trips = len(jobs_by_trip_key)
     total_running_jobs = total_branches - total_done_jobs
@@ -1826,7 +1797,6 @@ def update_status():
 
     target_row_data = ws.row_values(row_id_target)
 
-    # 1. Update Sheet (Batch update for Factory steps or single update for Branch steps)
     if step in ['1', '2', '3', '4', '5', '6']:
         if len(target_row_data) < 4: return redirect(url_for('driver_tasks', name=driver_name))
         target_po = target_row_data[0] 
@@ -1854,17 +1824,16 @@ def update_status():
 
     if step == '8': 
         status_val = "Done" if mode == 'update' else ""
-        ws.update_cell(row_id_target, 16, status_val) # Update Status Column (P)
-        
-        # *** [การแก้ไข] เพิ่มหน่วงเวลา 1 วินาที ให้ Sheets API บันทึกเสร็จก่อน ***
-        if mode == 'update':
-            time.sleep(1) 
-            
+        ws.update_cell(row_id_target, 16, status_val)
+    
     invalidate_cache('Jobs')
 
-    # 2. Notification Triggers (only if mode is 'update')
+    # =========================================================================
+    # [NEW LOGIC START] Notification Triggers
+    # =========================================================================
     if mode == 'update' and len(target_row_data) > 5:
-        
+        # เตรียมข้อมูลสำหรับส่งแจ้งเตือน
+        # ตรวจสอบ index ให้แน่ใจว่าตรงกับ Sheet (Driver=Col E (idx 4), Plate=Col F (idx 5))
         job_info_for_notify = {
             'PO_Date': target_row_data[0],
             'Round': target_row_data[2],
@@ -1873,25 +1842,25 @@ def update_status():
             'Plate': target_row_data[5]
         }
 
-        # Trigger 1 & 2: รายคัน (เข้า/ออก โรงงาน)
+        # 1. แจ้งเตือนรายคัน (เข้า Step 1 / ออก Step 6)
         if step == '1' or step == '6':
             notify_individual_movement(sheet, job_info_for_notify, step)
-            
-        # Trigger: รายคัน (จบงานครบทุกสาขา) 
+        # [NEW] แจ้งเตือนรายคัน (จบงานครบทุกสาขา Step 8)
         if step == '8':
-            # ตอนนี้มั่นใจว่าการอ่านข้อมูลใน check_if_trip_is_done จะได้ค่า 'Done' ที่ถูกต้อง
-            if check_if_trip_is_done(sheet, target_row_data): 
-                send_individual_trip_done_notification(sheet, target_row_data)
-
-        # Trigger 3, 4, 5: กลุ่ม (เข้าครบ / ออกครบ / จบครบ)
+            notify_car_completion(sheet, job_info_for_notify)
+        # 2. ตรวจสอบกลุ่ม (เข้าครบ / ออกครบ / จบครบ)
+        # เช็คทุกครั้งที่มีการ update Step 1, 6 หรือ 8
         if step in ['1', '6', '8']:
             check_group_completion(sheet, target_row_data[0], target_row_data[2])
             
-        # Trigger 6: เช็ค Late (ฝากเช็คทุกครั้งที่มีการกด Update)
+        # 3. เช็ค Late (ฝากเช็คทุกครั้งที่มีการกด Update)
         check_late_and_notify(sheet)
+    # =========================================================================
+    # [NEW LOGIC END]
+    # =========================================================================
         
     return redirect(url_for('driver_tasks', name=driver_name))
-    
+
 @app.route('/update_driver', methods=['POST'])
 def update_driver():
     if 'user' not in session: return json.dumps({'status': 'error', 'message': 'Unauthorized'}), 401

@@ -22,13 +22,13 @@ CORS(app)
 # ==========================================
 # [CONFIG] ตั้งค่า Discord Webhook ตรงนี้
 # ==========================================
-DISCORD_WEBHOOK_URL = 'วาง_WEBHOOK_URL_ของ_Discord_ที่นี่'
+DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1444236316404482139/UJc-I_NRT33p9UKCas5ATGgjAlqlrtxBuPhvKYKnI-Pz2_AyxAnOs_UFNl203_sqLsI5'
 
 def send_discord_msg(message):
     """ฟังก์ชันส่งข้อความเข้า Discord"""
     try:
         if 'วาง_' in DISCORD_WEBHOOK_URL or not DISCORD_WEBHOOK_URL:
-            print("https://discord.com/api/webhooks/1444236316404482139/UJc-I_NRT33p9UKCas5ATGgjAlqlrtxBuPhvKYKnI-Pz2_AyxAnOs_UFNl203_sqLsI5")
+            print("ยังไม่ได้ตั้งค่า Discord Webhook")
             return
 
         payload = {

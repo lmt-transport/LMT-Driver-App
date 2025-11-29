@@ -433,8 +433,10 @@ def manager_dashboard():
     if not date_filter:
         date_filter = today_date
 
+    # กรองงานตามวันที่เลือก
     filtered_jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
 
+    # ฟังก์ชันเรียงลำดับ (PO -> Car -> Round)
     def sort_key_func(job):
         po_date = str(job['PO_Date'])
         car_no_str = str(job['Car_No']).strip()
@@ -445,6 +447,7 @@ def manager_dashboard():
 
     filtered_jobs = sorted(filtered_jobs, key=sort_key_func)
     
+    # ตัวแปรสำหรับคำนวณ Stats ต่างๆ
     jobs_by_trip_key = {}
     total_done_jobs = 0
     total_branches = len(filtered_jobs)
@@ -453,10 +456,14 @@ def manager_dashboard():
     grouped_jobs_for_stats = []
     current_group = []
     prev_key = None
+    
+    # ตัวแปรสำหรับแจ้งเตือนรถสาย (Late Arrivals)
     late_arrivals_by_po = {}
     total_late_cars = 0
 
+    # Loop หลัก: จัดกลุ่มงานและคำนวณเบื้องต้น
     for job in filtered_jobs:
+        # Group สำหรับการแสดงผล Line Data (Driver Dashboard)
         curr_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
         if curr_key != prev_key and prev_key is not None:
             grouped_jobs_for_stats.append(current_group)
@@ -464,6 +471,7 @@ def manager_dashboard():
         current_group.append(job)
         prev_key = curr_key
         
+        # Group สำหรับ Trip (ไม่สน Driver ใช้เช็คจบงาน)
         trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']))
         if trip_key not in jobs_by_trip_key:
             jobs_by_trip_key[trip_key] = []
@@ -472,6 +480,7 @@ def manager_dashboard():
         if job['Status'] == 'Done':
             total_done_jobs += 1
             
+        # เช็ค Late (รถยังไม่เข้า และเลยเวลานัด)
         if not job.get('T1_Enter') and job['Status'] != 'Done':
             try:
                 load_date_str = job.get('Load_Date', job['PO_Date'])
@@ -480,14 +489,18 @@ def manager_dashboard():
                 try: plan_dt = datetime.strptime(plan_dt_str, "%Y-%m-%d %H:%M")
                 except: plan_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
                 
+                # ถ้าเวลาปัจจุบัน เลยเวลานัดแล้ว
                 if now_thai > plan_dt:
                     po_key = str(job['PO_Date'])
                     if po_key not in late_arrivals_by_po: late_arrivals_by_po[po_key] = []
+                    
+                    # คำนวณระยะเวลาสาย
                     diff = now_thai - plan_dt
                     hours = int(diff.total_seconds() // 3600)
                     mins = int((diff.total_seconds() % 3600) // 60)
                     job['late_duration'] = f"{hours} ชม. {mins} น."
                     
+                    # เพิ่มลง List (เช็คซ้ำคันเดิมใน PO เดียวกัน)
                     if not any(x['Car_No'] == job['Car_No'] for x in late_arrivals_by_po[po_key]):
                         late_arrivals_by_po[po_key].append(job)
                         total_late_cars += 1
@@ -495,7 +508,7 @@ def manager_dashboard():
             
     if current_group: grouped_jobs_for_stats.append(current_group)
 
-    # --- Driver History ---
+    # --- Driver History (ประวัติการวิ่งเพื่อแบ่งประเภทคนขับ) ---
     driver_history = {} 
     for j in raw_jobs:
         d_name = j.get('Driver')
@@ -509,7 +522,7 @@ def manager_dashboard():
                 else: driver_history[d_name]['night_count'] += 1
             except: pass
 
-    # --- Driver Stats ---
+    # --- Driver Stats (สถานะคนขับวันนี้) ---
     driver_stats = {}
     for group in grouped_jobs_for_stats:
         first = group[0]
@@ -528,10 +541,11 @@ def manager_dashboard():
             'status': 'Done' if all(j['Status'] == 'Done' for j in group) else 'Pending'
         })
     
+    # เรียงลำดับงานของคนขับตามคันที่
     for d in driver_stats:
         driver_stats[d]['rounds'].sort(key=lambda x: int(str(x['car_no']).strip()) if str(x['car_no']).strip().isdigit() else 9999)
 
-    # --- Idle Drivers ---
+    # --- Idle Drivers Logic (หาคนว่างงาน) ---
     working_drivers_set = set(driver_stats.keys())
     idle_drivers_day = []
     idle_drivers_night = []
@@ -547,29 +561,28 @@ def manager_dashboard():
                 has_day = history['day_count'] > 0
                 has_night = history['night_count'] > 0
                 
-                if has_day and has_night:
-                    idle_drivers_hybrid.append(d)
-                elif has_day:
-                    idle_drivers_day.append(d)
-                else:
-                    idle_drivers_night.append(d)
+                if has_day and has_night: idle_drivers_hybrid.append(d)
+                elif has_day: idle_drivers_day.append(d)
+                else: idle_drivers_night.append(d)
             else:
                 idle_drivers_new.append(d)
 
-    # --- Shift Status (For Bell Icon) ---
+    # --- Shift Status (Updated for Bell Icon Notification) ---
+    # [แก้ไขล่าสุด] เพิ่ม finished, is_job_complete เพื่อแจ้งเตือนจบงานครบ
     shift_status = {
-        'day': {'total': 0, 'entered': 0, 'is_complete': False},
-        'night': {'total': 0, 'entered': 0, 'is_complete': False}
+        'day': {'total': 0, 'entered': 0, 'finished': 0, 'is_enter_complete': False, 'is_job_complete': False},
+        'night': {'total': 0, 'entered': 0, 'finished': 0, 'is_enter_complete': False, 'is_job_complete': False}
     }
     
-    unique_trips_check = {}
-    for job in filtered_jobs:
-        if str(job.get('Status', '')).lower() == 'cancel': continue
-        t_key = (str(job['PO_Date']), str(job['Round']), str(job['Car_No']))
-        if t_key not in unique_trips_check: unique_trips_check[t_key] = job
-
-    for t_key, job in unique_trips_check.items():
-        r_time = str(job.get('Round', '')).strip()
+    for trip_key, job_list in jobs_by_trip_key.items():
+        # กรองงาน Cancel ออกก่อนนับ
+        active_jobs = [j for j in job_list if str(j.get('Status', '')).lower() != 'cancel']
+        if not active_jobs: continue
+        
+        first_job = active_jobs[0]
+        r_time = str(first_job.get('Round', '')).strip()
+        
+        # เช็คกะ
         is_day_shift = True
         try:
             h = int(r_time.split(':')[0])
@@ -577,16 +590,26 @@ def manager_dashboard():
         except: pass
 
         target = shift_status['day'] if is_day_shift else shift_status['night']
-        target['total'] += 1
-        if str(job.get('T1_Enter', '')).strip() != '':
-            target['entered'] += 1
-
-    if shift_status['day']['total'] > 0 and shift_status['day']['total'] == shift_status['day']['entered']:
-        shift_status['day']['is_complete'] = True
         
-    if shift_status['night']['total'] > 0 and shift_status['night']['total'] == shift_status['night']['entered']:
-        shift_status['night']['is_complete'] = True
+        # นับจำนวนเที่ยว
+        target['total'] += 1
+        
+        # เช็คเข้าโรงงาน (Step 1)
+        if str(first_job.get('T1_Enter', '')).strip() != '':
+            target['entered'] += 1
+            
+        # เช็คจบงาน (Status = Done ทุกสาขา)
+        if all(j['Status'] == 'Done' for j in active_jobs):
+            target['finished'] += 1
 
+    # ประมวลผล Flag แจ้งเตือน
+    for key in ['day', 'night']:
+        s = shift_status[key]
+        if s['total'] > 0:
+            if s['total'] == s['entered']: s['is_enter_complete'] = True
+            if s['total'] == s['finished']: s['is_job_complete'] = True
+
+    # คำนวณ Trip ที่จบแล้วเพื่อแสดงใน Monitor Tab
     completed_trips = 0
     for trip_key, job_list in jobs_by_trip_key.items():
         if all(job['Status'] == 'Done' for job in job_list):
@@ -599,6 +622,7 @@ def manager_dashboard():
     total_trips = len(jobs_by_trip_key)
     total_running_jobs = total_branches - total_done_jobs
 
+    # --- Line Data (สำหรับกราฟ/Timeline ใน Dashboard) ---
     line_data_day = []
     line_data_night = []
 
@@ -606,6 +630,8 @@ def manager_dashboard():
         first = group[0]
         round_str = str(first['Round']).strip()
         load_date_raw = str(first.get('Load_Date', first['PO_Date'])).strip()
+        
+        # จัดรูปแบบวันที่
         show_date_str = load_date_raw
         try:
             ld_obj = datetime.strptime(load_date_raw, "%Y-%m-%d")
@@ -613,12 +639,14 @@ def manager_dashboard():
             show_date_str = ld_obj.strftime(f"%d/%m/{str(thai_year)[2:]}")
         except: pass
 
+        # เช็คกะ
         is_day = True
         try:
             h = int(round_str.split(':')[0])
             if h < 6 or h >= 19: is_day = False
         except: pass
 
+        # หาสถานะล่าสุดเพื่อแสดงผล
         status_txt = "ยังไม่ถึงคลัง"
         status_time = ""
         found_branch_activity = False
@@ -668,6 +696,7 @@ def manager_dashboard():
         if is_day: line_data_day.append(trip_data)
         else: line_data_night.append(trip_data)
     
+    # เรียงลำดับ Line Data
     line_data_day.sort(key=lambda x: x['round'])
     def night_sort(item):
         try:
@@ -676,6 +705,7 @@ def manager_dashboard():
         except: return 99999
     line_data_night.sort(key=night_sort)
 
+    # เช็คว่ามีรถคันไหนเริ่มโหลดช้ากว่าแผนหรือไม่ (สำหรับไฮไลท์ในตาราง)
     for job in filtered_jobs:
         job['is_start_late'] = False
         t_plan_str = str(job.get('Round', '')).strip()
@@ -690,6 +720,7 @@ def manager_dashboard():
                 if t_act > t_plan: job['is_start_late'] = True
             except: pass
 
+    # วันที่สำหรับการนำทาง (Prev/Next)
     try:
         current_date_obj = datetime.strptime(date_filter, "%Y-%m-%d")
         prev_date = (current_date_obj - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -723,7 +754,7 @@ def manager_dashboard():
                            idle_drivers_night=idle_drivers_night,
                            idle_drivers_hybrid=idle_drivers_hybrid,
                            idle_drivers_new=idle_drivers_new,
-                           shift_status=shift_status
+                           shift_status=shift_status # ส่งสถานะ Shift ล่าสุดไป
                            )
 
 @app.route('/create_job', methods=['POST'])

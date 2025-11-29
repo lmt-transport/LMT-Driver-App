@@ -73,22 +73,24 @@
                     <div class="flex items-center gap-2 sm:gap-4">
                         
                         <div class="relative">
-                            {% set is_day_complete = False %}
-                            {% set is_night_complete = False %}
+                            {% set is_day_enter = False %}
+                            {% set is_night_enter = False %}
+                            {% set is_day_done = False %}
+                            {% set is_night_done = False %}
                             
                             {% if shift_status is defined and shift_status %}
-                                {% if shift_status.day and shift_status.day.is_complete %}
-                                    {% set is_day_complete = True %}
-                                {% endif %}
-                                {% if shift_status.night and shift_status.night.is_complete %}
-                                    {% set is_night_complete = True %}
-                                {% endif %}
+                                {% if shift_status.day.is_enter_complete %} {% set is_day_enter = True %} {% endif %}
+                                {% if shift_status.night.is_enter_complete %} {% set is_night_enter = True %} {% endif %}
+                                {% if shift_status.day.is_job_complete %} {% set is_day_done = True %} {% endif %}
+                                {% if shift_status.night.is_job_complete %} {% set is_night_done = True %} {% endif %}
                             {% endif %}
                             
+                            {% set has_any_alert = is_day_enter or is_night_enter or is_day_done or is_night_done %}
+                            
                             <button onclick="toggleNotifications()" class="relative p-2 transition-colors rounded-full hover:bg-gray-100 focus:outline-none 
-                                {% if is_day_complete or is_night_complete %} text-green-600 bg-green-50 {% else %} text-gray-400 hover:text-indigo-600 {% endif %}">
+                                {% if has_any_alert %} text-green-600 bg-green-50 {% else %} text-gray-400 hover:text-indigo-600 {% endif %}">
                                 
-                                {% if is_day_complete or is_night_complete %}
+                                {% if has_any_alert %}
                                     <i class="fa-solid fa-bell text-xl animate-pulse"></i>
                                 {% else %}
                                     <i class="fa-solid fa-bell text-xl"></i>
@@ -98,7 +100,7 @@
                                     <span class="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-white animate-bounce">
                                         {{ total_late_cars }}
                                     </span>
-                                {% elif is_day_complete or is_night_complete %}
+                                {% elif has_any_alert %}
                                     <span class="absolute top-1 right-2 h-3 w-3 rounded-full bg-green-500 ring-2 ring-white"></span>
                                 {% endif %}
                             </button>
@@ -111,7 +113,39 @@
 
                                 <div class="max-h-[400px] overflow-y-auto custom-scrollbar bg-white">
                                     
-                                    {% if is_day_complete %}
+                                    {# --- แจ้งเตือนจบงาน (สำคัญสุด ขึ้นก่อน) --- #}
+                                    {% if is_day_done %}
+                                    <div class="px-4 py-3 hover:bg-emerald-50 flex gap-3 border-b border-gray-50 transition-colors cursor-pointer bg-emerald-50/30">
+                                        <div class="flex-shrink-0">
+                                            <div class="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
+                                                <i class="fa-solid fa-flag-checkered text-lg"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-sm font-bold text-gray-800">รถรอบกลางวัน จบงานครบแล้ว!</p>
+                                            <p class="text-xs text-gray-600 mt-0.5">จำนวน {{ shift_status.day.total }} คัน ส่งสินค้าเสร็จสิ้น</p>
+                                        </div>
+                                        <div class="flex-shrink-0 self-center"><i class="fa-solid fa-circle-check text-emerald-500 text-lg"></i></div>
+                                    </div>
+                                    {% endif %}
+
+                                    {% if is_night_done %}
+                                    <div class="px-4 py-3 hover:bg-emerald-50 flex gap-3 border-b border-gray-50 transition-colors cursor-pointer bg-emerald-50/30">
+                                        <div class="flex-shrink-0">
+                                            <div class="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
+                                                <i class="fa-solid fa-flag-checkered text-lg"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-sm font-bold text-gray-800">รถรอบกลางคืน จบงานครบแล้ว!</p>
+                                            <p class="text-xs text-gray-600 mt-0.5">จำนวน {{ shift_status.night.total }} คัน ส่งสินค้าเสร็จสิ้น</p>
+                                        </div>
+                                        <div class="flex-shrink-0 self-center"><i class="fa-solid fa-circle-check text-emerald-500 text-lg"></i></div>
+                                    </div>
+                                    {% endif %}
+
+                                    {# --- แจ้งเตือนเข้าโรงงาน --- #}
+                                    {% if is_day_enter %}
                                     <div class="px-4 py-3 hover:bg-green-50 flex gap-3 border-b border-gray-50 transition-colors cursor-pointer">
                                         <div class="flex-shrink-0">
                                             <div class="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-green-600">
@@ -126,7 +160,7 @@
                                     </div>
                                     {% endif %}
 
-                                    {% if is_night_complete %}
+                                    {% if is_night_enter %}
                                     <div class="px-4 py-3 hover:bg-indigo-50 flex gap-3 border-b border-gray-50 transition-colors cursor-pointer">
                                         <div class="flex-shrink-0">
                                             <div class="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
@@ -140,7 +174,8 @@
                                         <div class="flex-shrink-0 self-center"><i class="fa-solid fa-circle-check text-indigo-500"></i></div>
                                     </div>
                                     {% endif %}
-
+                                    
+                                    {# --- แจ้งเตือนรถสาย (คงเดิม) --- #}
                                     {% if late_arrivals_by_po is defined and late_arrivals_by_po %}
                                         {% for po_date, cars in late_arrivals_by_po.items() %}
                                             {% for car in cars %}
@@ -172,7 +207,7 @@
                                         {% endfor %}
                                     {% endif %}
 
-                                    {% if not is_day_complete and not is_night_complete and (not total_late_cars or total_late_cars == 0) %}
+                                    {% if not has_any_alert and (not total_late_cars or total_late_cars == 0) %}
                                         <div class="px-4 py-12 text-center text-gray-400 flex flex-col items-center">
                                             <div class="bg-gray-50 p-4 rounded-full mb-3">
                                                 <i class="fa-regular fa-bell-slash text-2xl opacity-50"></i>
@@ -190,17 +225,6 @@
                                 </div>
                             </div>
                         </div>
-
-                        <div class="flex items-center gap-3 border-l border-gray-200 pl-4 ml-2">
-                            <div class="text-right hidden sm:block">
-                                <div class="text-xs text-gray-500">ผู้จัดการ</div>
-                                <div class="text-sm font-bold text-indigo-600 leading-none">{{ session['user'] }}</div>
-                            </div>
-                            <a href="/logout" class="flex items-center gap-2 text-xs font-bold bg-white border border-rose-100 text-rose-600 hover:bg-rose-50 px-3 py-1.5 rounded-full transition-all shadow-sm hover:shadow active:scale-95" title="ออกจากระบบ">
-                                <i class="fa-solid fa-power-off"></i> <span class="hidden xs:inline">ออก</span>
-                            </a>
-                        </div>
-                    </div>
 
                     <script>
                         function toggleNotifications() {

@@ -1391,45 +1391,112 @@ def driver_tasks():
     sheet = get_db()
     # ใช้ Cache เพื่อความเร็ว
     raw_data = get_cached_records(sheet, 'Jobs')
-    my_jobs = []
     
-    # วันที่ปัจจุบัน (เอาไว้เช็คว่างานไหนเพิ่งจบไป)
+    # 1. ดึงงานทั้งหมดของคนขับคนนี้ (ไม่สนใจ Status)
+    driver_jobs_all = [j for j in raw_data if j['Driver'] == driver_name]
+    
+    # 2. จัดกลุ่มงาน (Group by Trip: PO + Round + CarNo)
+    trips = {}
+    for job in driver_jobs_all:
+        # Key สำหรับจัดกลุ่ม
+        trip_key = (str(job['PO_Date']), str(job['Round']), str(job['Car_No']))
+        
+        if trip_key not in trips:
+            trips[trip_key] = []
+        trips[trip_key].append(job)
+        
+    # 3. คัดแยกว่า Trip ไหน Active (ยังไม่เสร็จ) / Trip ไหน History (เสร็จหมดแล้ว)
+    my_jobs = [] # รายการงานที่จะส่งไปหน้าเว็บ (Flatten list)
+    
+    # วันที่ปัจจุบัน (เอาไว้เช็ค History ว่าควรโชว์ไหม)
     now_thai = datetime.now() + timedelta(hours=7)
     today_date = now_thai.date()
+
+    # วนลูปเช็คแต่ละ Trip
+    for key, job_list in trips.items():
+        is_trip_done = all(j['Status'] == 'Done' for j in job_list)
+        
+        should_show = False
+        
+        if not is_trip_done:
+            # ถ้ายังไม่เสร็จ (มีอย่างน้อย 1 สาขาเป็น New/Doing) -> แสดงแน่นอน (เป็น Active Job)
+            should_show = True
+        else:
+            # ถ้าเสร็จหมดแล้ว -> เช็ควันที่ ว่าเป็นงานเก่าเกินไปไหม
+            try:
+                # ใช้วันที่จากงานแรกในกลุ่ม
+                job_po_date = datetime.strptime(job_list[0]['PO_Date'], "%Y-%m-%d").date()
+                # ถ้าเป็นงานตั้งแต่วันนี้เป็นต้นไป หรือเมื่อวาน (เผื่อดูย้อนหลังนิดหน่อย) ให้แสดงใน History
+                # ปรับตามต้องการ: อันนี้ให้โชว์งานของวันนี้เท่านั้น ถ้าเสร็จแล้ว
+                if job_po_date >= today_date:
+                    should_show = True
+            except:
+                should_show = True # กันเหนียว
+        
+        if should_show:
+            # เพิ่ม Row ID ให้แต่ละงาน (เพื่อใช้กับปุ่มกด)
+            # ต้องหา index จริงจาก raw_data เพื่อให้ตรงกับ Google Sheet
+            # วิธีนี้อาจช้านิดหน่อย แต่แม่นยำกว่า
+            # (หรือถ้าใน raw_data มี index มาแล้วจะดีมาก แต่ gspread get_all_records ไม่มี index)
+            # เพื่อความชัวร์และเร็ว เราจะใช้ row_id ที่คำนวณจาก loop แรกสุดไม่ได้ เพราะเรา filter มาแล้ว
+            
+            # ดังนั้น ต้อง Hack นิดนึง: กลับไปหา row_id จาก raw_data
+            # แต่เพื่อประหยัดเวลา เราจะใช้เทคนิค enumerate ตอนดึง raw_data ตั้งแต่ต้น
+            pass 
+            # *หมายเหตุ: โค้ดข้างบน `raw_data = get_cached_records` คืนค่าเป็น List of Dict
+            # เราต้องรู้ index เดิม. ดังนั้นขอปรับวิธีดึงนิดนึงข้างล่างนี้ครับ *
+
+    # --- [RE-WRITE LOGIC ใหม่แบบ Clean] ---
     
-    for i, job in enumerate(raw_data): 
-        # เงื่อนไข: เป็นงานของคนขับคนนี้
+    # 1. ดึงงานทั้งหมดพร้อม Row ID ดั้งเดิม
+    driver_jobs_with_id = []
+    for idx, job in enumerate(raw_data):
         if job['Driver'] == driver_name:
+            # สร้าง copy เพื่อไม่กระทบ cache และเติม row_id (Index ใน Sheet คือ idx + 2 เพราะมี Header)
+            job_copy = job.copy()
+            job_copy['row_id'] = idx + 2
+            driver_jobs_with_id.append(job_copy)
+
+    # 2. จัดกลุ่ม Trip
+    trips = {}
+    for job in driver_jobs_with_id:
+        trip_key = (str(job['PO_Date']), str(job['Round']), str(job['Car_No']))
+        if trip_key not in trips: trips[trip_key] = []
+        trips[trip_key].append(job)
+
+    # 3. คัดเลือก Trip ที่จะแสดง
+    final_jobs_list = []
+    
+    for key, job_list in trips.items():
+        # เช็คว่าเสร็จครบทุกสาขายัง?
+        is_trip_fully_done = all(j['Status'] == 'Done' for j in job_list)
+        
+        show_this_trip = False
+        
+        if not is_trip_fully_done:
+            # ยังไม่เสร็จ -> โชว์แน่นอน
+            show_this_trip = True
+        else:
+            # เสร็จแล้ว -> โชว์เฉพาะของวันนี้ (History)
+            try:
+                pd = datetime.strptime(job_list[0]['PO_Date'], "%Y-%m-%d").date()
+                if pd >= today_date:
+                    show_this_trip = True
+            except: pass
             
-            is_show = False
-            
-            # 1. ถ้างานยังไม่จบ -> แสดงแน่นอน
-            if job['Status'] != 'Done':
-                is_show = True
-            
-            # 2. ถ้างานจบแล้ว -> เช็คว่าเป็นงานเร็วๆ นี้ไหม (วันนี้ หรือ อนาคต)
-            else:
-                try:
-                    # แปลง PO_Date เป็น object วันที่
-                    job_po_date = datetime.strptime(job['PO_Date'], "%Y-%m-%d").date()
-                    # ถ้าเป็นงานตั้งแต่วันนี้เป็นต้นไป ให้แสดง (เผื่อกดผิดจะได้แก้ได้)
-                    if job_po_date >= today_date:
-                        is_show = True
-                except:
-                    # ถ้าวันที่ผิดพลาด ให้แสดงไว้ก่อนกันเหนียว
-                    is_show = True
-            
-            if is_show:
-                job['row_id'] = i + 2
-                my_jobs.append(job)
-            
+        if show_this_trip:
+            final_jobs_list.extend(job_list)
+
+    # 4. Sort and Decorate
     def sort_key_func(job):
         return (str(job['PO_Date']), str(job.get('Load_Date', '')), str(job['Round']))
-    my_jobs = sorted(my_jobs, key=sort_key_func)
     
+    my_jobs = sorted(final_jobs_list, key=sort_key_func)
     today_date_str = now_thai.strftime("%Y-%m-%d")
 
-    # ... (ส่วน Logic การตกแต่งการ์ด Smart Title คงเดิม) ...
+    # Decorate (Smart Title / Color)
+    # *ต้องระวัง: Logic สีเขียว "งานเสร็จแล้ว" ต้องเช็คระดับ Job ไม่ใช่ Trip 
+    # แต่เดี๋ยว UI (driver_tasks.html) จะไปเช็คระดับ Trip อีกที ดังนั้นตรงนี้เตรียมข้อมูลให้ครบก็พอ
     for job in my_jobs:
         try:
             load_date_str = job.get('Load_Date', job['PO_Date'])
@@ -1444,12 +1511,12 @@ def driver_tasks():
             real_date_str = f"{job_dt.day}/{job_dt.month}/{str(th_year)[2:]}"
             h = job_dt.hour
 
-            if job['Status'] == 'Done': # [NEW] ถ้าจบงานแล้ว ให้ขึ้นสีเขียว
-                job['smart_title'] = "✅ งานเสร็จแล้ว"
-                job['smart_detail'] = f"ส่งครบเรียบร้อย ({real_date_str})"
-                job['ui_class'] = {'bg': 'bg-green-50 border-green-200', 'text': 'text-green-600', 'icon': 'fa-circle-check'}
-            
-            elif hours_diff <= 0:
+            # Default Style
+            job['smart_title'] = f"เวลา {round_str}"
+            job['smart_detail'] = f"วันที่ {real_date_str}"
+            job['ui_class'] = {'bg': 'bg-gray-50', 'text': 'text-gray-500', 'icon': 'fa-clock'}
+
+            if hours_diff <= 0:
                 if hours_diff > -12:
                     job['smart_title'] = f"❗ เข้าโหลดงานตอนนี้"
                     job['ui_class'] = {'bg': 'bg-red-50 border-red-100 ring-2 ring-red-200 animate-pulse', 'text': 'text-red-600', 'icon': 'fa-truck-ramp-box'}
@@ -1479,11 +1546,7 @@ def driver_tasks():
             po_d = datetime.strptime(job['PO_Date'], "%Y-%m-%d")
             po_th = f"{po_d.day}/{po_d.month}/{str(po_d.year+543)[2:]}"
             job['po_label'] = f"(เอกสาร PO วันที่ {po_th})"
-        except Exception as e:
-            job['smart_title'] = f"เวลา {job['Round']}"
-            job['smart_detail'] = job['PO_Date']
-            job['ui_class'] = {'bg': 'bg-gray-50', 'text': 'text-gray-500', 'icon': 'fa-clock'}
-            job['po_label'] = ""
+        except Exception as e: pass
 
     return render_template('driver_tasks.html', name=driver_name, jobs=my_jobs, today_date=today_date_str)
 

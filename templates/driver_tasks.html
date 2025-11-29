@@ -39,38 +39,40 @@
 </form>
 {% endmacro %}
 
-{% macro render_job_card(job, driver_name, is_active) %}
-    <div class="bg-white rounded-2xl shadow-lg border border-indigo-100 overflow-hidden relative ring-1 ring-indigo-50">
+{% macro render_trip_card(trip_group, driver_name, is_active) %}
+    {% set first_job = trip_group[0] %}
+    {% set row_id = first_job.row_id %}
+    
+    <div class="bg-white rounded-2xl shadow-lg border border-indigo-100 overflow-hidden relative ring-1 ring-indigo-50 mb-6">
+        
         <div class="{% if is_active %} bg-gradient-to-r from-slate-800 to-slate-700 {% else %} bg-gray-600 {% endif %} px-4 py-3 flex justify-between items-center text-white">
             <div class="flex items-center gap-3">
-                <div class="{% if is_active %} bg-yellow-400 text-slate-900 border-slate-600 {% else %} bg-gray-400 text-white border-gray-500 {% endif %} w-8 h-8 rounded-lg flex items-center justify-center font-extrabold text-lg shadow-lg border-2">
-                    {{ job.Car_No }}
+                <div class="{% if is_active %} bg-yellow-400 text-slate-900 border-slate-600 {% else %} bg-gray-400 text-white border-gray-500 {% endif %} w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-xl shadow-lg border-2">
+                    {{ first_job.Car_No }}
                 </div>
                 <div>
-                    <div class="text-[10px] text-slate-300 font-medium uppercase tracking-wide opacity-80">ทะเบียน</div>
-                    <div class="text-sm font-bold font-mono tracking-wider">{{ job.Plate }}</div>
+                    <div class="text-[10px] text-slate-300 font-medium uppercase tracking-wide opacity-80">ทะเบียนรถ</div>
+                    <div class="text-base font-bold font-mono tracking-wider">{{ first_job.Plate }}</div>
                 </div>
             </div>
             <div class="text-right">
                 <div class="text-[10px] text-slate-300 font-medium uppercase opacity-80">เวลาโหลด</div>
-                <div class="text-lg font-bold {% if is_active %} text-yellow-400 {% else %} text-gray-200 {% endif %} font-mono leading-none">{{ job.Round }}</div>
+                <div class="text-xl font-bold {% if is_active %} text-yellow-400 {% else %} text-gray-200 {% endif %} font-mono leading-none">{{ first_job.Round }}</div>
             </div>
         </div>
 
-        {% set row_id = job.row_id %}
-        
         <div class="p-4 border-b border-gray-100">
             <div class="flex items-center gap-2 mb-3 text-xs font-bold text-gray-500 uppercase tracking-wider">
                 <i class="fa-solid fa-industry"></i> โรงงาน
             </div>
             <div class="grid grid-cols-3 gap-2">
                 {% set factory_buttons = [
-                    ('1', 'เข้าโรงงาน', 'from-blue-500 to-blue-600', 'fa-door-open', job.T1_Enter),
-                    ('2', 'เริ่มโหลด', 'from-indigo-500 to-indigo-600', 'fa-dolly', job.T2_StartLoad),
-                    ('3', 'โหลดเสร็จ', 'from-cyan-500 to-cyan-600', 'fa-clipboard-check', job.T3_EndLoad),
-                    ('4', 'ยื่นเอกสาร', 'from-amber-500 to-amber-600', 'fa-file-export', job.T4_SubmitDoc),
-                    ('5', 'รับเอกสาร', 'from-orange-500 to-orange-600', 'fa-file-invoice', job.T5_RecvDoc),
-                    ('6', 'ออกโรงงาน', 'from-purple-500 to-purple-600', 'fa-truck-fast', job.T6_Exit)
+                    ('1', 'เข้าโรงงาน', 'from-blue-500 to-blue-600', 'fa-door-open', first_job.T1_Enter),
+                    ('2', 'เริ่มโหลด', 'from-indigo-500 to-indigo-600', 'fa-dolly', first_job.T2_StartLoad),
+                    ('3', 'โหลดเสร็จ', 'from-cyan-500 to-cyan-600', 'fa-clipboard-check', first_job.T3_EndLoad),
+                    ('4', 'ยื่นเอกสาร', 'from-amber-500 to-amber-600', 'fa-file-export', first_job.T4_SubmitDoc),
+                    ('5', 'รับเอกสาร', 'from-orange-500 to-orange-600', 'fa-file-invoice', first_job.T5_RecvDoc),
+                    ('6', 'ออกโรงงาน', 'from-purple-500 to-purple-600', 'fa-truck-fast', first_job.T6_Exit)
                 ] %}
                 {% for step_id, label, grad, icon, val in factory_buttons %}
                     {{ render_step_button(row_id, driver_name, step_id, label, grad, icon, val) }}
@@ -78,25 +80,33 @@
             </div>
         </div>
 
-        <div class="p-4 bg-gray-50/50">
-            <div class="flex justify-between items-start mb-3">
-                <div class="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    <i class="fa-solid fa-map-location-dot"></i> ปลายทาง
-                </div>
-                <div class="text-xs font-bold text-gray-800 bg-white px-2 py-1 rounded border border-gray-200 shadow-sm max-w-[200px] truncate">
-                    {{ job.Branch_Name }}
-                </div>
+        <div class="p-4 bg-gray-50/50 space-y-5">
+            <div class="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                <i class="fa-solid fa-map-location-dot"></i> จุดส่งสินค้า ({{ trip_group|length }} สาขา)
             </div>
             
-            <div class="grid grid-cols-2 gap-3">
-                {% set branch_buttons = [
-                    ('7', 'ถึงสาขา', 'bg-emerald-500', 'fa-location-dot', job.T7_ArriveBranch),
-                    ('8', 'จบงาน', 'bg-rose-600', 'fa-flag-checkered', job.T8_EndJob)
-                ] %}
-                {% for step_id, label, color, icon, val in branch_buttons %}
-                    {{ render_step_button(row_id, driver_name, step_id, label, color, icon, val) }}
-                {% endfor %}
-            </div>
+            {% for job in trip_group %}
+                <div class="relative pl-3 border-l-2 {% if job.Status == 'Done' %} border-green-400 {% else %} border-indigo-200 {% endif %}">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="text-sm font-bold text-gray-800 leading-tight">
+                            {{ loop.index }}. {{ job.Branch_Name }}
+                        </div>
+                        {% if job.Status == 'Done' %}
+                            <div class="text-green-500"><i class="fa-solid fa-circle-check"></i></div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3">
+                        {% set branch_buttons = [
+                            ('7', 'ถึงสาขา', 'bg-emerald-500', 'fa-location-dot', job.T7_ArriveBranch),
+                            ('8', 'จบงาน', 'bg-rose-600', 'fa-flag-checkered', job.T8_EndJob)
+                        ] %}
+                        {% for step_id, label, color, icon, val in branch_buttons %}
+                            {{ render_step_button(job.row_id, driver_name, step_id, label, color, icon, val) }}
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
         </div>
     </div>
 {% endmacro %}
@@ -130,21 +140,46 @@
     </div>
 {% else %}
 
-    {% set history_jobs = [] %}
-    {% set active_jobs = [] %}
+    {% set trips = {} %}
+    {% set trip_keys = [] %}
     
     {% for job in jobs %}
-        {% if job.Status == 'Done' %}
-            {% set _ = history_jobs.append(job) %}
+        {# สร้าง Key สำหรับ Grouping #}
+        {% set key = job.PO_Date ~ '|' ~ job.Round ~ '|' ~ job.Car_No %}
+        
+        {% if key not in trips %}
+            {% set _ = trips.update({key: []}) %}
+            {% set _ = trip_keys.append(key) %}
+        {% endif %}
+        {% set _ = trips[key].append(job) %}
+    {% endfor %}
+
+    {% set active_trips = [] %}
+    {% set history_trips = [] %}
+    
+    {% for key in trip_keys %}
+        {% set trip_group = trips[key] %}
+        
+        {# ตรวจสอบว่างานใน Group นี้เสร็จหมดหรือยัง #}
+        {% set ns = namespace(is_done=true) %}
+        {% for j in trip_group %}
+            {% if j.Status != 'Done' %}
+                {% set ns.is_done = false %}
+            {% endif %}
+        {% endfor %}
+        
+        {% if ns.is_done %}
+            {% set _ = history_trips.append(trip_group) %}
         {% else %}
-            {% set _ = active_jobs.append(job) %}
+            {% set _ = active_trips.append(trip_group) %}
         {% endif %}
     {% endfor %}
 
-    {% if active_jobs|length > 0 %}
-        {% set current_job = active_jobs[0] %}
+    {% if active_trips|length > 0 %}
+        {% set current_group = active_trips[0] %}
+        {% set current_job_head = current_group[0] %}
         
-        {% if active_jobs|length > 1 %}
+        {% if active_trips|length > 1 %}
             <div class="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-4 flex items-center justify-between shadow-sm animate-pulse">
                 <div class="flex items-center gap-3">
                     <div class="bg-blue-100 text-blue-600 w-8 h-8 rounded-lg flex items-center justify-center">
@@ -152,26 +187,26 @@
                     </div>
                     <div>
                         <div class="text-xs text-blue-500 font-bold uppercase">คิวงานถัดไป</div>
-                        <div class="text-sm font-bold text-blue-800">มีงานรออีก {{ active_jobs|length - 1 }} เที่ยว</div>
+                        <div class="text-sm font-bold text-blue-800">มีงานรออีก {{ active_trips|length - 1 }} เที่ยว</div>
                     </div>
                 </div>
             </div>
         {% endif %}
 
-        <div class="mb-4 rounded-2xl border p-4 shadow-sm {{ current_job.ui_class.bg }}">
+        <div class="mb-4 rounded-2xl border p-4 shadow-sm {{ current_job_head.ui_class.bg }}">
             <div class="flex items-center gap-4">
-                <div class="bg-white p-3 rounded-2xl shadow-sm text-2xl {{ current_job.ui_class.text }} flex items-center justify-center w-14 h-14 border border-gray-100 flex-shrink-0">
-                    <i class="fa-solid {{ current_job.ui_class.icon }}"></i>
+                <div class="bg-white p-3 rounded-2xl shadow-sm text-2xl {{ current_job_head.ui_class.text }} flex items-center justify-center w-14 h-14 border border-gray-100 flex-shrink-0">
+                    <i class="fa-solid {{ current_job_head.ui_class.icon }}"></i>
                 </div>
                 <div class="flex-1 min-w-0">
-                    <h3 class="text-lg font-bold text-gray-800 leading-tight truncate">{{ current_job.smart_title }}</h3>
-                    <div class="text-sm text-gray-600 font-medium mt-1 truncate">{{ current_job.smart_detail }}</div>
-                    <div class="text-[11px] text-gray-400 font-light mt-0.5 truncate"><i class="fa-solid fa-file-invoice"></i> {{ current_job.po_label }}</div>
+                    <h3 class="text-lg font-bold text-gray-800 leading-tight truncate">{{ current_job_head.smart_title }}</h3>
+                    <div class="text-sm text-gray-600 font-medium mt-1 truncate">{{ current_job_head.smart_detail }}</div>
+                    <div class="text-[11px] text-gray-400 font-light mt-0.5 truncate"><i class="fa-solid fa-file-invoice"></i> {{ current_job_head.po_label }}</div>
                 </div>
             </div>
         </div>
 
-        {{ render_job_card(current_job, name, True) }}
+        {{ render_trip_card(current_group, name, True) }}
 
     {% else %}
         <div class="flex flex-col items-center justify-center py-10 text-center">
@@ -184,25 +219,25 @@
     {% endif %}
 
 
-    {% if history_jobs|length > 0 %}
+    {% if history_trips|length > 0 %}
         <div class="mt-8 pt-6 border-t border-gray-100">
             <button onclick="toggleHistory()" class="w-full flex items-center justify-between bg-gray-50 hover:bg-gray-100 p-3 rounded-xl transition text-gray-500 border border-gray-200">
                 <div class="flex items-center gap-2">
                     <i class="fa-solid fa-clock-rotate-left"></i>
                     <span class="text-sm font-bold">ประวัติงานที่ส่งแล้ว (วันนี้)</span>
-                    <span class="bg-gray-200 text-gray-600 text-[10px] px-2 py-0.5 rounded-full">{{ history_jobs|length }}</span>
+                    <span class="bg-gray-200 text-gray-600 text-[10px] px-2 py-0.5 rounded-full">{{ history_trips|length }}</span>
                 </div>
                 <i id="history-arrow" class="fa-solid fa-chevron-down transition-transform duration-300"></i>
             </button>
 
             <div id="history-container" class="hidden mt-4 space-y-6">
-                {% for job in history_jobs %}
+                {% for group in history_trips %}
                     <div class="relative opacity-90 hover:opacity-100 transition">
                         <div class="flex justify-between items-center mb-2 px-1">
                             <span class="text-xs font-bold text-green-600"><i class="fa-solid fa-check-circle"></i> ส่งเรียบร้อย</span>
-                            <span class="text-[10px] text-gray-400">#{{ job.Car_No }} | {{ job.Round }} น.</span>
+                            <span class="text-[10px] text-gray-400">#{{ group[0].Car_No }} | {{ group[0].Round }} น.</span>
                         </div>
-                        {{ render_job_card(job, name, False) }}
+                        {{ render_trip_card(group, name, False) }}
                     </div>
                 {% endfor %}
                 <div class="text-center text-[10px] text-gray-400 pt-2">
@@ -212,7 +247,9 @@
         </div>
     {% endif %}
 
-{% endif %} </div>
+{% endif %}
+
+</div>
 
 <script>
     // ฟังก์ชันเปิด/ปิด ประวัติงาน
@@ -245,7 +282,7 @@
                     document.getElementById(`form-${rowId}-${stepId}`).submit();
                 },
                 function(error) {
-                    // ถ้า GPS มีปัญหา ให้บันทึกไปเลย
+                    // Fallback even if GPS fails
                     console.warn("GPS Error:", error);
                     document.getElementById(`form-${rowId}-${stepId}`).submit();
                 },
@@ -264,7 +301,6 @@
             document.getElementById(`mode-${rowId}-${stepId}`).value = 'cancel';
             
             const btn = document.querySelector(`#form-${rowId}-${stepId} button`);
-            // แสดงสถานะกำลังลบ
             btn.innerHTML = `<i class="fa-solid fa-trash-can fa-shake text-red-500"></i>`;
             
             document.getElementById(`form-${rowId}-${stepId}`).submit();

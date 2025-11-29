@@ -212,7 +212,7 @@
         </div>
     {% endif %}
 
-</div>
+{% endif %} </div>
 
 <script>
     // ฟังก์ชันเปิด/ปิด ประวัติงาน
@@ -231,10 +231,8 @@
 
     function getLocationAndSubmit(rowId, stepId) {
         const btn = document.querySelector(`#form-${rowId}-${stepId} button`);
-        // เก็บข้อความเดิมไว้เผื่อกรณี Error
         const originalContent = btn.innerHTML;
         
-        // แสดง Loading
         btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin text-lg"></i>`;
         btn.disabled = true;
         btn.classList.add('opacity-70');
@@ -247,7 +245,7 @@
                     document.getElementById(`form-${rowId}-${stepId}`).submit();
                 },
                 function(error) {
-                    // ถ้า GPS มีปัญหา ให้บันทึกไปเลย (ไม่บล็อกงาน)
+                    // ถ้า GPS มีปัญหา ให้บันทึกไปเลย
                     console.warn("GPS Error:", error);
                     document.getElementById(`form-${rowId}-${stepId}`).submit();
                 },

@@ -1,25 +1,176 @@
-from flask import Flask, render_template, request, redirect, url_for, session, send_file
+from flask import Flask, render_template, request, redirect, url_for, session, send_file, make_response
 from flask_cors import CORS
 from fpdf import FPDF
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 import pandas as pd
 import io
 import os
+import gspread.utils 
 import json
+import time
+import requests # จำเป็นสำหรับการส่ง Discord
 from openpyxl import load_workbook
 from openpyxl.styles import Font, Border, Side, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
-import gspread.utils 
-
-# Import ฟังก์ชันจาก utils.py
-from utils import get_db, get_cached_records, invalidate_cache, check_and_notify_shift_completion, thai_date_filter
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'lmt_driver_app_secret_key_2024')
 CORS(app)
 
-# Register Filter
+# ==========================================
+# [CONFIG] ตั้งค่า Discord Webhook
+# ==========================================
+DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1444236316404482139/UJc-I_NRT33p9UKCas5ATGgjAlqlrtxBuPhvKYKnI-Pz2_AyxAnOs_UFNl203_sqLsI5'
+
+def send_discord_msg(message):
+    """ฟังก์ชันส่งข้อความเข้า Discord"""
+    try:
+        if not DISCORD_WEBHOOK_URL or 'วาง_' in DISCORD_WEBHOOK_URL:
+            print("Error: Discord Webhook URL is invalid")
+            return
+
+        payload = {
+            "content": message,
+            "username": "LMT Transport Bot",
+            "avatar_url": "https://cdn-icons-png.flaticon.com/512/2936/2936956.png"
+        }
+        
+        response = requests.post(DISCORD_WEBHOOK_URL, json=payload)
+            
+    except Exception as e:
+        print(f"Discord Notify Error: {e}")
+
+# --- Caching System ---
+cache_storage = {
+    'Jobs': {'data': None, 'timestamp': 0},
+    'Drivers': {'data': None, 'timestamp': 0},
+    'Users': {'data': None, 'timestamp': 0}
+}
+CACHE_DURATION = 60 
+
+def get_cached_records(sheet, worksheet_name):
+    current_time = time.time()
+    cache_entry = cache_storage.get(worksheet_name)
+    
+    if cache_entry and cache_entry['data'] is not None:
+        if current_time - cache_entry['timestamp'] < CACHE_DURATION:
+            return cache_entry['data']
+    
+    try:
+        data = sheet.worksheet(worksheet_name).get_all_records()
+        cache_storage[worksheet_name] = {
+            'data': data,
+            'timestamp': current_time
+        }
+        return data
+    except gspread.exceptions.APIError as e:
+        if "429" in str(e) and cache_entry and cache_entry['data'] is not None:
+            return cache_entry['data']
+        raise e
+
+def invalidate_cache(worksheet_name):
+    if worksheet_name in cache_storage:
+        cache_storage[worksheet_name] = {'data': None, 'timestamp': 0}
+
+# [UPDATED] ฟังก์ชันแจ้งเตือนฉบับปรับปรุง (นับตาม PO จริง + เพิ่มแจ้งเตือนออกโรงงาน)
+def check_and_notify_shift_completion(sheet, target_po_date, target_round_time, step_trigger):
+    """
+    ตรวจสอบว่ารถ เข้า/ออก ครบทุกคันหรือยัง 
+    target_po_date: วันที่ของ PO ที่กำลังอัปเดต (ป้องกันการนับผิดวัน)
+    target_round_time: เวลารอบ (เพื่อหากะ เช้า/ดึก)
+    step_trigger: '1' (เข้าโรงงาน) หรือ '6' (ออกโรงงาน)
+    """
+    try:
+        # 1. ระบุกะของผู้กด (Day หรือ Night)
+        target_is_day = True
+        try:
+            h_check = int(str(target_round_time).split(':')[0])
+            if h_check < 6 or h_check >= 19: target_is_day = False
+        except: return
+
+        shift_name = "รอบเช้า" if target_is_day else "รอบดึก"
+        shift_emoji = "☀️" if target_is_day else "🌙"
+
+        # 2. ดึงข้อมูลมานับยอด (ดึงสด ไม่ใช้ Cache เพื่อความแม่นยำ)
+        raw_jobs = sheet.worksheet('Jobs').get_all_records()
+        
+        # 3. กรองงานเฉพาะ PO Date เดียวกัน (แก้ไขปัญหา Dashboard 6 คัน แต่นับได้ 5 คันเพราะคนละวัน)
+        target_jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(target_po_date).strip()]
+
+        # ตัวแปรนับยอด (นับเฉพาะกะที่เกี่ยวข้อง)
+        total_cars = 0
+        action_count = 0 # เข้า หรือ ออก ตาม step_trigger
+        
+        unique_cars = {}
+        for job in target_jobs:
+            if str(job.get('Status', '')).lower() == 'cancel': continue
+            key = (str(job['PO_Date']), str(job['Round']), str(job['Car_No']))
+            if key not in unique_cars: unique_cars[key] = job
+
+        for key, job in unique_cars.items():
+            r_time = str(job.get('Round', '')).strip()
+            is_day = True
+            try:
+                h = int(r_time.split(':')[0])
+                if h < 6 or h >= 19: is_day = False
+            except: pass
+            
+            # นับเฉพาะกะที่ตรงกับคนกด
+            if is_day == target_is_day:
+                total_cars += 1
+                
+                # เช็ค Step 1 (เข้าโรงงาน)
+                if step_trigger == '1':
+                    if str(job.get('T1_Enter', '')).strip() != '':
+                        action_count += 1
+                
+                # เช็ค Step 6 (ออกโรงงาน)
+                elif step_trigger == '6':
+                    if str(job.get('T6_Exit', '')).strip() != '':
+                        action_count += 1
+
+        # 4. ส่งแจ้งเตือนถ้าครบ (และต้องมีรถมากกว่า 0 คัน)
+        if total_cars > 0 and total_cars == action_count:
+            now_str = (datetime.now() + timedelta(hours=7)).strftime('%H:%M')
+            
+            if step_trigger == '1':
+                msg = f"{shift_emoji} **แจ้งเตือน: รถ{shift_name} เข้าโรงงาน ครบแล้ว!**\n✅ PO Date: {target_po_date}\n🚛 จำนวน: `{total_cars}` คัน\n🕒 เวลา: `{now_str} น.`"
+                send_discord_msg(msg)
+            
+            elif step_trigger == '6':
+                msg = f"🚀 **แจ้งเตือน: รถ{shift_name} ออกจากโรงงาน ครบแล้ว!**\n✅ PO Date: {target_po_date}\n🚛 จำนวน: `{total_cars}` คัน\n🕒 เวลา: `{now_str} น.`"
+                send_discord_msg(msg)
+
+    except Exception as e:
+        print(f"Check Notify Error: {e}")
+
+# --- Custom Filter ---
+def thai_date_filter(date_str):
+    if not date_str: return ""
+    try:
+        date_obj = datetime.strptime(str(date_str).strip(), "%Y-%m-%d")
+        thai_year = date_obj.year + 543
+        return date_obj.strftime(f"%d/%m/{thai_year}")
+    except ValueError: return date_str
+
 app.jinja_env.filters['thai_date'] = thai_date_filter
+
+# --- DB Connection ---
+def get_db():
+    scope = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets', "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
+    creds_json = os.environ.get('GSPREAD_CREDENTIALS')
+    
+    if not creds_json:
+        if os.path.exists("credentials.json"): return gspread.service_account(filename="credentials.json").open("DriverLogApp")
+        else: return None
+        
+    creds_dict = json.loads(creds_json)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    client = gspread.authorize(creds)
+    sheet = client.open("DriverLogApp") 
+    return sheet
 
 # --- Routes ---
 
@@ -116,7 +267,6 @@ def manager_dashboard():
             
     if current_group: grouped_jobs_for_stats.append(current_group)
 
-    # Driver History Logic
     driver_history = {} 
     for j in raw_jobs:
         d_name = j.get('Driver')
@@ -130,7 +280,6 @@ def manager_dashboard():
                 else: driver_history[d_name]['night_count'] += 1
             except: pass
 
-    # Driver Stats
     driver_stats = {}
     for group in grouped_jobs_for_stats:
         first = group[0]
@@ -146,7 +295,6 @@ def manager_dashboard():
     for d in driver_stats:
         driver_stats[d]['rounds'].sort(key=lambda x: int(str(x['car_no']).strip()) if str(x['car_no']).strip().isdigit() else 9999)
 
-    # Idle Drivers
     working_drivers_set = set(driver_stats.keys())
     idle_drivers_day = []
     idle_drivers_night = []
@@ -165,7 +313,6 @@ def manager_dashboard():
                 else: idle_drivers_night.append(d)
             else: idle_drivers_new.append(d)
 
-    # Shift Status Logic
     shift_status = {'day': {'total': 0, 'entered': 0, 'is_complete': False}, 'night': {'total': 0, 'entered': 0, 'is_complete': False}}
     unique_trips_check = {}
     for job in filtered_jobs:
@@ -312,164 +459,300 @@ def manager_dashboard():
                            shift_status=shift_status
                            )
 
-@app.route('/driver')
-def driver_select():
+@app.route('/create_job', methods=['POST'])
+def create_job():
+    if 'user' not in session: return redirect(url_for('manager_login'))
     sheet = get_db()
-    drivers = sheet.worksheet('Drivers').col_values(1)[1:]
-    all_jobs = get_cached_records(sheet, 'Jobs')
-    now_thai = datetime.now() + timedelta(hours=7)
+    ws = sheet.worksheet('Jobs')
     
-    driver_info = {} 
-    for name in drivers:
-        driver_info[name] = {
-            'pending_set': set(), 
-            'pending_count': 0, 
-            'urgent_msg': '', 'urgent_color': '', 'urgent_time': '', 'sort_weight': 999
-        }
-
-    for job in all_jobs:
-        d_name = job['Driver']
-        if d_name not in driver_info: continue
-        
-        if job['Status'] != 'Done':
-            trip_key = f"{job['PO_Date']}_{job['Round']}_{job['Car_No']}"
-            driver_info[d_name]['pending_set'].add(trip_key)
-            try:
-                load_date_str = job.get('Load_Date', job['PO_Date'])
-                round_str = str(job['Round']).strip()
-                job_dt_str = f"{load_date_str} {round_str}"
-                try: job_dt = datetime.strptime(job_dt_str, "%Y-%m-%d %H:%M")
-                except ValueError: job_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
-                
-                diff = job_dt - now_thai
-                hours_diff = diff.total_seconds() / 3600
-                h = job_dt.hour
-                m = job_dt.minute
-                
-                msg, color, weight = "", "", 999
-                if hours_diff <= 0:
-                    if hours_diff > -12: 
-                        msg, color, weight = "❗ โหลดตอนนี้", "bg-red-500 text-white border-red-600 animate-pulse shadow-red-200", 1
-                elif 0 < hours_diff <= 16:
-                    if 6 <= h <= 12:   msg, color = "☀️ โหลดเช้านี้", "bg-yellow-100 text-yellow-700 border-yellow-200"
-                    elif 13 <= h <= 18: msg, color = "⛅ โหลดบ่ายนี้", "bg-orange-100 text-orange-700 border-orange-200"
-                    else:               msg, color = "🌙 โหลดคืนนี้", "bg-indigo-100 text-indigo-700 border-indigo-200"
-                    weight = 2
-                elif 16 < hours_diff <= 40:
-                    period = "คืนพรุ่งนี้" if (h >= 19 or h <= 5) else "วันพรุ่งนี้"
-                    if driver_info[d_name]['sort_weight'] > 3:
-                        msg, color, weight = f"⏩ เตรียมโหลด{period}", "bg-gray-100 text-gray-500 border-gray-200", 3
-
-                if weight < driver_info[d_name]['sort_weight']:
-                    driver_info[d_name]['urgent_msg'] = msg
-                    driver_info[d_name]['urgent_color'] = color
-                    driver_info[d_name]['urgent_time'] = f"{h:02}:{m:02} น."
-                    driver_info[d_name]['sort_weight'] = weight
-            except Exception as e: pass
+    po_date = request.form['po_date']
+    load_date = request.form['load_date']
+    round_time = request.form['round_time']
+    car_no = request.form['car_no']
+    driver_name = request.form['driver_name']
+    branches = request.form.getlist('branches') 
     
-    for name in drivers:
-        driver_info[name]['pending_count'] = len(driver_info[name]['pending_set'])
-
-    return render_template('driver_select.html', drivers=drivers, driver_info=driver_info)
-
-@app.route('/driver/tasks', methods=['GET'])
-def driver_tasks():
-    driver_name = request.args.get('name')
-    if not driver_name: return redirect(url_for('driver_select'))
-        
-    sheet = get_db()
-    raw_data = get_cached_records(sheet, 'Jobs')
-    
-    driver_jobs_with_id = []
-    for idx, job in enumerate(raw_data):
-        if job['Driver'] == driver_name:
-            job_copy = job.copy()
-            job_copy['row_id'] = idx + 2
-            driver_jobs_with_id.append(job_copy)
-
-    trips = {}
-    for job in driver_jobs_with_id:
-        trip_key = (str(job['PO_Date']), str(job['Round']), str(job['Car_No']))
-        if trip_key not in trips: trips[trip_key] = []
-        trips[trip_key].append(job)
-
-    final_jobs_list = []
-    now_thai = datetime.now() + timedelta(hours=7)
-    today_date = now_thai.date()
-    
-    for key, job_list in trips.items():
-        is_trip_fully_done = all(j['Status'] == 'Done' for j in job_list)
-        show_this_trip = False
-        
-        if not is_trip_fully_done:
-            show_this_trip = True
-        else:
-            try:
-                job_date_str = job_list[0].get('Load_Date', job_list[0]['PO_Date'])
-                pd = datetime.strptime(job_date_str, "%Y-%m-%d").date()
-                if pd >= today_date:
-                    show_this_trip = True
-            except: 
-                show_this_trip = True
+    drivers_ws = sheet.worksheet('Drivers')
+    driver_list = drivers_ws.get_all_records()
+    plate = ""
+    for d in driver_list:
+        if d['Name'] == driver_name:
+            plate = d['Plate_License']
+            break
             
-        if show_this_trip:
-            final_jobs_list.extend(job_list)
+    new_rows = []
+    for branch in branches:
+        if branch.strip(): 
+            row = [po_date, load_date, round_time, car_no, driver_name, plate, branch, "", "", "", "", "", "", "", "", "New", "", "", "", "", "", "", "", "", ""]
+            new_rows.append(row)
+    
+    if new_rows: 
+        ws.append_rows(new_rows)
+        invalidate_cache('Jobs')
+    
+    return redirect(url_for('manager_dashboard'))
 
+@app.route('/delete_job', methods=['POST'])
+def delete_job():
+    if 'user' not in session: return redirect(url_for('manager_login'))
+    sheet = get_db()
+    ws = sheet.worksheet('Jobs')
+    
+    po_date = request.form['po_date']
+    round_time = request.form['round_time']
+    car_no = request.form['car_no']
+    
+    try:
+        all_values = ws.get_all_values()
+        rows_to_delete = []
+        for i, row in enumerate(all_values):
+            if i > 0: 
+                if (row[0] == po_date and str(row[2]) == str(round_time) and str(row[3]) == str(car_no)):        
+                    rows_to_delete.append(i + 1)
+        for row_idx in sorted(rows_to_delete, reverse=True):
+            ws.delete_rows(row_idx)
+        invalidate_cache('Jobs')
+        return redirect(url_for('manager_dashboard'))
+    except Exception as e: return f"Error: {e}"
+
+@app.route('/export_excel')
+def export_excel():
+    sheet = get_db()
+    raw_jobs = get_cached_records(sheet, 'Jobs')
+    date_filter = request.args.get('date_filter')
+    if date_filter:
+        jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
+    else:
+        jobs = raw_jobs
+        
     def sort_key_func(job):
-        return (str(job['PO_Date']), str(job.get('Load_Date', '')), str(job['Round']))
+        po_date = str(job['PO_Date'])
+        car_no_str = str(job['Car_No']).strip()
+        round_val = str(job['Round'])
+        try: car_no_int = int(car_no_str)
+        except ValueError: car_no_int = 99999 
+        return (po_date, car_no_int, round_val)
+
+    jobs = sorted(jobs, key=sort_key_func)
     
-    my_jobs = sorted(final_jobs_list, key=sort_key_func)
-    today_date_str = now_thai.strftime("%Y-%m-%d")
+    export_data = []
+    prev_trip_key = None
+    grouped_jobs_for_summary = []
+    current_group = []
+    
+    for job_index, job in enumerate(jobs):
+        current_trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
+        is_same = (current_trip_key == prev_trip_key)
+        if current_trip_key != prev_trip_key and prev_trip_key is not None:
+            grouped_jobs_for_summary.append(current_group)
+            current_group = []
+        current_group.append(job)
+        
+        t2_display = job['T2_StartLoad']
+        if not is_same and job['T2_StartLoad']: 
+            try:
+                plan_time_str = str(job['Round']).strip()
+                actual_time_str = str(job['T2_StartLoad']).strip()
+                if plan_time_str and actual_time_str:
+                    fmt = "%H:%M" if len(plan_time_str) <= 5 else "%H:%M:%S"
+                    fmt_act = "%H:%M" if len(actual_time_str) <= 5 else "%H:%M:%S"
+                    t_plan = datetime.strptime(plan_time_str, fmt)
+                    t_act = datetime.strptime(actual_time_str, fmt_act)
+                    if (t_plan - t_act).total_seconds() > 12 * 3600: t_act = t_act + timedelta(days=1)
+                    if t_act > t_plan:
+                        diff = t_act - t_plan
+                        total_seconds = diff.total_seconds()
+                        hours = int(total_seconds // 3600)
+                        minutes = int((total_seconds % 3600) // 60)
+                        delay_msg = f" (ล่าช้า {hours} ชม. {minutes} น.)"
+                        t2_display = f"{actual_time_str}{delay_msg}"
+            except: pass 
 
-    for job in my_jobs:
+        formatted_date = job['PO_Date']
         try:
-            load_date_str = job.get('Load_Date', job['PO_Date'])
-            round_str = str(job['Round']).strip()
-            job_dt_str = f"{load_date_str} {round_str}"
-            try: job_dt = datetime.strptime(job_dt_str, "%Y-%m-%d %H:%M")
-            except: job_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
+            date_obj = datetime.strptime(str(job['PO_Date']).strip(), "%Y-%m-%d")
+            formatted_date = date_obj.strftime("%d/%m/%Y")
+        except: pass
             
-            diff = job_dt - now_thai
-            hours_diff = diff.total_seconds() / 3600
-            th_year = job_dt.year + 543
-            real_date_str = f"{job_dt.day}/{job_dt.month}/{str(th_year)[2:]}"
-            h = job_dt.hour
+        row = {
+            'ลำดับรถ': "" if is_same else job['Car_No'],
+            'PO Date': "" if is_same else formatted_date,
+            'เวลาโหลด': "" if is_same else job['Round'], 
+            'คนขับ': "" if is_same else job['Driver'],
+            'ปลายทาง (สาขา)': job['Branch_Name'],
+            'ทะเบียนรถ': "" if is_same else job['Plate'],
+            'เข้าโรงงาน': "" if is_same else job['T1_Enter'],
+            'เริ่มโหลด': "" if is_same else t2_display, 
+            'โหลดเสร็จ': "" if is_same else job['T3_EndLoad'],
+            'ยื่นเอกสาร': "" if is_same else job['T4_SubmitDoc'],
+            'รับเอกสาร': "" if is_same else job['T5_RecvDoc'],
+            'ออกโรงงาน': "" if is_same else job['T6_Exit'],
+            'ถึงสาขา': job['T7_ArriveBranch'],
+            'จบงาน': job['T8_EndJob']
+        }
+        export_data.append(row)
+        prev_trip_key = current_trip_key
 
-            job['smart_title'] = f"เวลา {round_str}"
-            job['smart_detail'] = f"วันที่ {real_date_str}"
-            job['ui_class'] = {'bg': 'bg-gray-50', 'text': 'text-gray-500', 'icon': 'fa-clock'}
+    if current_group: grouped_jobs_for_summary.append(current_group)
 
-            if hours_diff <= 0:
-                if hours_diff > -12:
-                    job['smart_title'] = f"❗ เข้าโหลดงานตอนนี้"
-                    job['ui_class'] = {'bg': 'bg-red-50 border-red-100 ring-2 ring-red-200 animate-pulse', 'text': 'text-red-600', 'icon': 'fa-truck-ramp-box'}
-                else:
-                    job['smart_title'] = f"🔥 งานค้างส่ง"
-                    job['ui_class'] = {'bg': 'bg-red-50 border-red-100', 'text': 'text-red-500', 'icon': 'fa-triangle-exclamation'}
-                job['smart_detail'] = f"กำหนด: {round_str} น. ({real_date_str})"
-            elif 0 < hours_diff <= 16:
-                if 6 <= h <= 12:   p, i, t = "เช้านี้", "fa-sun", "yellow"
-                elif 13 <= h <= 18: p, i, t = "บ่ายนี้", "fa-cloud-sun", "orange"
-                else:               p, i, t = "คืนนี้", "fa-moon", "indigo"
-                job['smart_title'] = f"โหลดสินค้า{p}"
-                job['smart_detail'] = f"เวลา {round_str} น. ของวันที่ {real_date_str}"
-                job['ui_class'] = {'bg': f'bg-{t}-50 border-{t}-100 ring-1 ring-{t}-50', 'text': f'text-{t}-600', 'icon': i}
-            elif 16 < hours_diff <= 40:
-                period = "คืนพรุ่งนี้" if (h >= 19 or h <= 5) else "วันพรุ่งนี้"
-                job['smart_title'] = f"⏩ เตรียมโหลด{period}"
-                job['smart_detail'] = f"เวลา {round_str} น. ของวันที่ {real_date_str}"
-                job['ui_class'] = {'bg': 'bg-blue-50 border-blue-100', 'text': 'text-blue-600', 'icon': 'fa-calendar-day'}
+    df = pd.DataFrame(export_data)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Report')
+    
+    output.seek(0)
+    wb = load_workbook(output)
+    ws = wb.active
+    
+    font_header = Font(name='Cordia New', size=14, bold=True, color='FFFFFF') 
+    font_body = Font(name='Cordia New', size=14)
+    font_summary_head = Font(name='Cordia New', size=14, bold=True)
+    font_summary_body = Font(name='Cordia New', size=14)
+    side_thin = Side(border_style="thin", color="000000")
+    side_none = Side(border_style=None) 
+    border_all = Border(top=side_thin, bottom=side_thin, left=side_thin, right=side_thin)
+    border_header = Border(top=side_thin, bottom=side_thin, left=side_thin, right=side_thin)
+    align_center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    align_left = Alignment(horizontal='left', vertical='center', wrap_text=True)
+    fill_header = PatternFill(start_color='2E4053', end_color='2E4053', fill_type='solid')
+    fill_white = PatternFill(start_color='FFFFFF', end_color='FFFFFF', fill_type='solid')
+    fill_blue_light = PatternFill(start_color='EBF5FB', end_color='EBF5FB', fill_type='solid')
+    fill_green_branch = PatternFill(start_color='D5F5E3', end_color='D5F5E3', fill_type='solid')
+    fill_red_end = PatternFill(start_color='FADBD8', end_color='FADBD8', fill_type='solid')
+    fill_sum_head = PatternFill(start_color='D6EAF8', end_color='D6EAF8', fill_type='solid') 
+    fill_sum_total = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid') 
+
+    ws.freeze_panes = 'A2'
+    current_trip_id = None
+    is_zebra_active = False
+
+    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
+        ws.row_dimensions[row[0].row].height = 21
+        if row[0].row == 1:
+            for cell in row:
+                cell.font = font_header
+                cell.fill = fill_header
+                cell.alignment = align_center
+                cell.border = border_header
+            continue
+
+        job_index = row[0].row - 2
+        is_group_end = False
+        if 0 <= job_index < len(jobs):
+            job_data = jobs[job_index]
+            if job_index == len(jobs) - 1: is_group_end = True
             else:
-                job['smart_title'] = f"📅 งานล่วงหน้า"
-                job['smart_detail'] = f"วันที่ {real_date_str} เวลา {round_str} น."
-                job['ui_class'] = {'bg': 'bg-gray-50 border-gray-100', 'text': 'text-gray-500', 'icon': 'fa-calendar-days'}
-            
-            po_d = datetime.strptime(job['PO_Date'], "%Y-%m-%d")
-            po_th = f"{po_d.day}/{po_d.month}/{str(po_d.year+543)[2:]}"
-            job['po_label'] = f"(เอกสาร PO วันที่ {po_th})"
-        except Exception as e: pass
+                next_job = jobs[job_index + 1]
+                if (str(job_data['PO_Date']) != str(next_job['PO_Date'])) or (str(job_data['Car_No']) != str(next_job['Car_No'])) or (str(job_data['Round']) != str(next_job['Round'])):
+                    is_group_end = True
 
-    return render_template('driver_tasks.html', name=driver_name, jobs=my_jobs, today_date=today_date_str)
+            this_trip_key = (str(job_data['PO_Date']), str(job_data['Car_No']), str(job_data['Round']))
+            if this_trip_key != current_trip_id:
+                is_zebra_active = not is_zebra_active
+                current_trip_id = this_trip_key
+
+        row_fill = fill_blue_light if is_zebra_active else fill_white
+        current_border = Border(left=side_thin, right=side_thin, top=side_none, bottom=side_thin if is_group_end else side_none)
+
+        for cell in row:
+            col_name = ws.cell(row=1, column=cell.column).value
+            f_bold = False
+            f_color = '000000'
+            if col_name in ['ถึงสาขา', 'จบงาน', 'เริ่มโหลด']: f_bold = True
+            if col_name == 'เริ่มโหลด':
+                cell_val_str = str(cell.value) if cell.value else ""
+                if "(ล่าช้า" in cell_val_str: f_color = 'C0392B'
+                elif cell_val_str.strip() != "": f_color = '196F3D'
+
+            cell.font = Font(name='Cordia New', size=14, bold=f_bold, color=f_color)
+            cell.border = current_border 
+            cell.fill = row_fill
+            if col_name == 'ถึงสาขา': cell.fill = fill_green_branch
+            elif col_name == 'จบงาน': cell.fill = fill_red_end
+            if col_name in ['คนขับ', 'ปลายทาง (สาขา)', 'ทะเบียนรถ']: cell.alignment = align_left
+            else: cell.alignment = align_center
+
+    def create_counter(): return {'count':0, 't1':0, 't2':0, 't3':0, 't4':0, 't5':0, 't6':0, 't7':0, 't8':0}
+    sum_day = create_counter()
+    sum_night = create_counter()
+    
+    for group in grouped_jobs_for_summary:
+        if not group: continue
+        first_job = group[0]
+        round_time = str(first_job.get('Round', '')).strip()
+        is_day_shift = True
+        try:
+            hour = int(round_time.split(':')[0])
+            if not (6 <= hour <= 18): is_day_shift = False
+        except: pass
+
+        target = sum_day if is_day_shift else sum_night
+        target['count'] += 1 
+        if first_job.get('T1_Enter'): target['t1'] += 1
+        if first_job.get('T2_StartLoad'): target['t2'] += 1
+        if first_job.get('T3_EndLoad'): target['t3'] += 1
+        if first_job.get('T4_SubmitDoc'): target['t4'] += 1
+        if first_job.get('T5_RecvDoc'): target['t5'] += 1
+        if first_job.get('T6_Exit'): target['t6'] += 1
+        
+        if any(str(j.get('T7_ArriveBranch', '')).strip() != '' for j in group): target['t7'] += 1
+        if all(str(j.get('T8_EndJob', '')).strip() != '' for j in group): target['t8'] += 1
+
+    sum_total = create_counter()
+    for k in sum_total: sum_total[k] = sum_day[k] + sum_night[k]
+
+    start_row = ws.max_row + 2 
+    summary_headers = ['รอบโหลด', 'จำนวนรถ', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ยื่นเอกสาร', 'รับเอกสาร', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
+    col_map_idx = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14] 
+    
+    ws.cell(row=start_row, column=5, value="รอบโหลด")
+    for i, label in enumerate(summary_headers[1:]):
+        ws.cell(row=start_row, column=col_map_idx[i+1], value=label)
+
+    rows_to_write = [('กลางวัน', sum_day), ('กลางคืน', sum_night), ('รวม', sum_total)]
+    
+    for idx, (label, data) in enumerate(rows_to_write):
+        curr_r = start_row + 1 + idx
+        ws.row_dimensions[curr_r].height = 21
+        ws.cell(row=curr_r, column=5, value=label)
+        vals = [data['count'], data['t1'], data['t2'], data['t3'], data['t4'], data['t5'], data['t6'], data['t7'], data['t8']]
+        for i, val in enumerate(vals):
+            ws.cell(row=curr_r, column=col_map_idx[i+1], value=val)
+
+    for r in range(start_row, start_row + 4):
+        for c in range(5, 15): 
+            cell = ws.cell(row=r, column=c)
+            cell.border = border_all
+            cell.alignment = align_center
+            cell.font = font_summary_body
+            
+            if r == start_row:
+                cell.fill = fill_sum_head
+                cell.font = font_summary_head
+            elif r == start_row + 3:
+                cell.fill = fill_sum_total
+                cell.font = font_summary_head
+
+    # Column Width Adjustment
+    for column_cells in ws.columns:
+        col_letter = get_column_letter(column_cells[0].column)
+        col_header = column_cells[0].value
+        if col_header == 'เริ่มโหลด': ws.column_dimensions[col_letter].width = 22.00 
+        else:
+            length = 0
+            for cell in column_cells:
+                if cell.row < start_row: 
+                    val = str(cell.value) if cell.value else ""
+                    lines = val.split('\n')
+                    longest = max(len(line) for line in lines) if lines else 0
+                    if longest > length: length = longest
+            ws.column_dimensions[col_letter].width = min(length + 5, 50)
+
+    final_output = io.BytesIO()
+    wb.save(final_output)
+    final_output.seek(0)
+    filename = f"Report_{date_filter if date_filter else 'All'}.xlsx"
+    return send_file(final_output, download_name=filename, as_attachment=True)
 
 @app.route('/update_status', methods=['POST'])
 def update_status():
@@ -527,15 +810,30 @@ def update_status():
     
     invalidate_cache('Jobs')
     
+    # [NEW] Trigger notification checks
     if step == '1' and mode == 'update':
-        # Fetch row data to get round time for notification
+        # Fetch the updated row to determine round time
+        try:
+            # [IMPORTANT] We need to pass the PO date to the check function
+            # Re-fetch the target row to be sure
+            updated_row_data = ws.row_values(row_id_target)
+            if len(updated_row_data) > 2:
+                target_po_date = updated_row_data[0] # Col A
+                target_round_time = updated_row_data[2] # Col C
+                check_and_notify_shift_completion(sheet, target_po_date, target_round_time, step)
+        except Exception as e:
+            print(f"Error fetching row for notification: {e}")
+    
+    # [NEW] Trigger notification for Step 6 (Exit Factory)
+    if step == '6' and mode == 'update':
         try:
             updated_row_data = ws.row_values(row_id_target)
             if len(updated_row_data) > 2:
+                target_po_date = updated_row_data[0] # Col A
                 target_round_time = updated_row_data[2] # Col C
-                check_and_notify_shift_completion(sheet, target_round_time)
+                check_and_notify_shift_completion(sheet, target_po_date, target_round_time, step)
         except Exception as e:
-            print(f"Notify fetch error: {e}")
+            print(f"Error fetching row for notification: {e}")
         
     return redirect(url_for('driver_tasks', name=driver_name))
 

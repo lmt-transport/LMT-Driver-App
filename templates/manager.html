@@ -273,6 +273,19 @@
             {% else %}
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {% for driver_name, stats in driver_stats.items() %}
+                    
+                    {# --- Calculate Shift Flags for Header --- #}
+                    {% set ns = namespace(has_day=false, has_night=false) %}
+                    {% for r in stats.rounds %}
+                        {% set h = r.round.split(':')[0]|int %}
+                        {% if h >= 6 and h <= 18 %}
+                            {% set ns.has_day = true %}
+                        {% else %}
+                            {% set ns.has_night = true %}
+                        {% endif %}
+                    {% endfor %}
+                    {# ---------------------------------------- #}
+
                     <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition duration-200">
                         <div class="bg-gradient-to-r from-slate-700 to-slate-800 p-4 flex justify-between items-center text-white">
                             <div class="flex items-center gap-3 overflow-hidden">
@@ -281,13 +294,26 @@
                                 </div>
                                 <div class="truncate font-bold text-sm">{{ driver_name }}</div>
                             </div>
-                            <div class="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded-md shadow-sm">
-                                {{ stats.total_trips }} เที่ยว
+                            
+                            <div class="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded-md shadow-sm flex items-center gap-1.5">
+                                {% if ns.has_day %}
+                                    <i class="fa-solid fa-sun text-yellow-300"></i>
+                                {% endif %}
+                                {% if ns.has_night %}
+                                    <i class="fa-solid fa-moon text-indigo-100"></i>
+                                {% endif %}
+                                <span>{{ stats.total_trips }} เที่ยว</span>
                             </div>
                         </div>
                         
                         <div class="p-4 bg-white space-y-3 max-h-64 overflow-y-auto custom-scrollbar">
                             {% for round in stats.rounds %}
+                            
+                            {# --- Calculate Round Shift for Detail --- #}
+                            {% set h_round = round.round.split(':')[0]|int %}
+                            {% set is_day_round = (h_round >= 6 and h_round <= 18) %}
+                            {# ---------------------------------------- #}
+
                             <div class="border border-gray-100 rounded-lg p-3 bg-gray-50 relative group">
                                 <div class="absolute top-2 right-2">
                                     {% if round.status == 'Done' %}
@@ -301,8 +327,13 @@
                                     <span class="bg-indigo-600 text-white text-xs font-bold px-2 py-0.5 rounded shadow-sm">
                                         คันที่ #{{ round.car_no }}
                                     </span>
-                                    <span class="text-xs text-gray-500 font-mono bg-white border px-1 rounded">
+                                    <span class="text-xs text-gray-500 font-mono bg-white border px-1.5 py-0.5 rounded flex items-center gap-1">
                                         {{ round.round }} น.
+                                        {% if is_day_round %}
+                                            <i class="fa-solid fa-sun text-yellow-500"></i>
+                                        {% else %}
+                                            <i class="fa-solid fa-moon text-indigo-500"></i>
+                                        {% endif %}
                                     </span>
                                 </div>
                                 
@@ -604,27 +635,21 @@
         }
     }
 
-    // --- [FIXED] Updated switchTab function to handle hover classes correctly ---
     function switchTab(tabId) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
         document.querySelectorAll('.tab-btn').forEach(btn => {
-            // Remove active classes
             btn.classList.remove('bg-indigo-600', 'text-white', 'shadow', 'hover:bg-indigo-700');
-            // Add inactive classes
             btn.classList.add('bg-white', 'text-gray-600', 'hover:bg-gray-100');
         });
 
         document.getElementById(tabId).classList.remove('hidden');
         let btn = document.getElementById(tabId.replace('tab-', 'btn-'));
         if (btn) {
-            // Remove inactive classes
             btn.classList.remove('bg-white', 'text-gray-600', 'hover:bg-gray-100');
-            // Add active classes
             btn.classList.add('bg-indigo-600', 'text-white', 'shadow', 'hover:bg-indigo-700');
         }
         localStorage.setItem('activeTab', tabId);
     }
-    // --------------------------------------------------------------------------
 
     function updatePlate() {
         const select = document.getElementById('driver_select');
@@ -777,7 +802,6 @@
     let currentModalData = {};
 
     function openChangeDriverModal(buttonEl) {
-        // ดึงข้อมูล JSON จาก attribute data-info ของปุ่ม
         const data = JSON.parse(buttonEl.dataset.info);
         currentModalData = data;
         
@@ -871,7 +895,6 @@ ${branchText}
         copyToClipboard(msg, "ข้อความแจ้งเปลี่ยนงาน");
     }
 
-    // --- [NEW] Function บันทึกข้อมูลคนขับลงฐานข้อมูล ---
     function saveChangeDriverToDB() {
         const newDriverName = document.getElementById('md_newDriverSelect').value;
         const newPlate = document.getElementById('md_newPlate').innerText;
@@ -885,17 +908,14 @@ ${branchText}
             return;
         }
 
-        // แสดง Loading ที่ปุ่ม
         const btn = document.getElementById('btn-save-driver');
         const originalText = btn.innerHTML;
         btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> กำลังบันทึก...';
         btn.disabled = true;
         btn.classList.add('opacity-50');
 
-        // ใช้ PO Date จากหน้าจอหลัก
         const targetPO = document.querySelector('input[name="date_filter"]').value; 
 
-        // สร้าง Payload
         const payload = {
             po_date: targetPO, 
             round_time: currentModalData.roundTime,
@@ -915,7 +935,7 @@ ${branchText}
         .then(data => {
             if (data.status === 'success') {
                 alert(`✅ บันทึกเรียบร้อย! อัพเดทข้อมูลไป ${data.count} แถว`);
-                location.reload(); // รีโหลดหน้า
+                location.reload(); 
             } else {
                 alert('❌ เกิดข้อผิดพลาด: ' + data.message);
                 btn.innerHTML = originalText;

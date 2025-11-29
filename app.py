@@ -288,19 +288,18 @@ def check_group_completion(sheet, target_po_date, target_round_time, trigger_ste
         print(f"Group Notify Error: {e}")
 
 # --- Notification Logic 6: เตือนสาย (Late Alert) ---
+# --- Notification Logic 6: เตือนสาย (Late Alert) ---
 def check_late_and_notify(sheet):
-    """เช็ครถที่เข้าสายเกิน 1 ชม. (รองรับ Midnight Crossover)"""
-    global last_late_alert_time
+    """เช็ครถที่เข้าสายเกิน 2 ชม. และแจ้งเตือน (จำกัดการแจ้งเตือนชั่วโมงละ 1 ครั้ง ผ่าน Sheet)"""
     try:
         now_thai = datetime.now() + timedelta(hours=7)
-        current_ts = time.time()
         
+        # ดึงข้อมูลจาก Cache เพื่อความเร็ว
         raw_jobs = get_cached_records(sheet, 'Jobs')
         
         unique_cars = {}
         
-        # --- 1. กรองงานที่ "Active" (ยังไม่จบ/ไม่ยกเลิก/ยังไม่เข้า) ---
-        # ไม่เช็ค PO_Date == today_str แล้ว เพื่อรองรับงานข้ามคืน
+        # กรองงานที่ "Active" (ยังไม่จบ/ไม่ยกเลิก/ยังไม่เข้า)
         active_jobs = [
             j for j in raw_jobs 
             if str(j.get('Status', '')).lower() != 'cancel' 
@@ -312,42 +311,33 @@ def check_late_and_notify(sheet):
 
         for job in active_jobs:
             try:
-                # สร้าง Key เพื่อไม่ให้แจ้งซ้ำคันเดิมในรอบเดียวกัน
+                # สร้าง Key กันซ้ำ
                 key = (str(job['PO_Date']), str(job['Round']), str(job['Car_No']))
                 if key in unique_cars: continue
                 unique_cars[key] = True
 
-                # --- 2. สร้าง DateTime ของแผนงาน (Plan) ---
-                load_date_str = job.get('Load_Date', job['PO_Date']) # ใช้ Load Date ก่อนถ้ามี
+                # คำนวณเวลา Plan
+                load_date_str = job.get('Load_Date', job['PO_Date'])
                 round_str = str(job['Round']).strip()
                 
-                # แปลงเวลา
                 try:
                     plan_dt = datetime.strptime(f"{load_date_str} {round_str}", "%Y-%m-%d %H:%M")
                 except ValueError:
-                    # กรณี Format ผิดพลาด ให้ข้ามไป
                     continue
 
-                # --- 3. Logic Midnight Crossover (สำคัญ!) ---
-                # ถ้ารอบเวลาเป็น 00:00 - 05:59 และ Load_Date ยังเป็นวันเดียวกับ PO (ซึ่งมักจะเป็นวันก่อนหน้า)
-                # เราต้องบวกวันเพิ่มให้ Plan 1 วัน เพื่อให้เวลาถูกต้องตามความเป็นจริง
-                # (แต่ถ้าใน Excel คอลัมน์ Load_Date ลงวันที่วันใหม่อยู่แล้ว ก็ไม่ต้องบวก)
-                
-                # เช็คว่า Load_Date ใน Excel ตรงกับ PO ไหม (ถ้าตรงแสดงว่าอาจจะยังไม่ได้ปัดวัน)
+                # Logic Midnight Crossover (งานข้ามคืน)
                 if str(job.get('Load_Date', '')).strip() == '' or str(job.get('Load_Date')) == str(job['PO_Date']):
                     h_plan = plan_dt.hour
-                    # ถ้ารอบโหลดเป็น ตีเที่ยงคืน ถึง ตีห้าครึ่ง
                     if 0 <= h_plan < 6:
-                        # สมมติฐาน: งานรอบตี 2 ของ PO วันที่ 29 คือเหตุการณ์จริงวันที่ 30
                         plan_dt = plan_dt + timedelta(days=1)
 
-                # --- 4. คำนวณความล่าช้า ---
-                # ตรวจสอบว่า plan_dt ต้องไม่เก่าเกินไป (เช่น งานค้างปี) สมมติไม่เกิน 48 ชม.
+                # --- ตรวจสอบความล่าช้า ---
                 if now_thai > plan_dt and (now_thai - plan_dt).total_seconds() < 48 * 3600:
                     diff = now_thai - plan_dt
                     hours_late = diff.total_seconds() / 3600
                     
-                    if hours_late >= 1:
+                    # [แก้ไข] เปลี่ยนจาก 1 เป็น 2 ชม. ตามที่ขอ
+                    if hours_late >= 2:
                         is_day, _ = get_shift_info(round_str)
                         id_card, phone = get_driver_details(sheet, job['Driver'])
                         minutes_late = int((diff.total_seconds() % 3600) // 60)
@@ -363,16 +353,23 @@ def check_late_and_notify(sheet):
                 print(f"Error checking job {job.get('Car_No')}: {e}")
                 continue
 
-        # --- 5. ส่งแจ้งเตือน (Throttling 1 ชม.) ---
-        if late_list['day'] and (current_ts - last_late_alert_time['day'] > 3600):
-            msg = "⚠️ **เตือนภัย: รถเข้าช้าเกิน 1 ชม. (รอบเช้า)**\n" + "\n".join(late_list['day'])
-            send_discord_msg(msg)
-            last_late_alert_time['day'] = current_ts
+        # --- ส่งแจ้งเตือน (Logic ใหม่สำหรับ Vercel) ---
+        # สร้าง Key ประจำชั่วโมง (เช่น late_alert_day_2025-11-30_14)
+        # แปลว่าในชั่วโมงที่ 14 ของวันนี้ แจ้งไปแล้วหรือยัง?
+        current_hour_key = now_thai.strftime("%Y-%m-%d_%H")
+
+        if late_list['day']:
+            notify_key = f"late_alert_day_{current_hour_key}"
+            # ใช้ is_already_notified เช็คกับ Google Sheet
+            if not is_already_notified(sheet, notify_key):
+                msg = f"⚠️ **เตือนภัย: รถเข้าช้าเกิน 2 ชม. (รอบเช้า)**\n(แจ้งเตือนประจำชั่วโมงที่ {now_thai.hour}:00)\n" + "\n".join(late_list['day'])
+                send_discord_msg(msg)
             
-        if late_list['night'] and (current_ts - last_late_alert_time['night'] > 3600):
-            msg = "⚠️ **เตือนภัย: รถเข้าช้าเกิน 1 ชม. (รอบดึก)**\n" + "\n".join(late_list['night'])
-            send_discord_msg(msg)
-            last_late_alert_time['night'] = current_ts
+        if late_list['night']:
+            notify_key = f"late_alert_night_{current_hour_key}"
+            if not is_already_notified(sheet, notify_key):
+                msg = f"⚠️ **เตือนภัย: รถเข้าช้าเกิน 2 ชม. (รอบดึก)**\n(แจ้งเตือนประจำชั่วโมงที่ {now_thai.hour}:00)\n" + "\n".join(late_list['night'])
+                send_discord_msg(msg)
 
     except Exception as e:
         print(f"Late Check Error: {e}")

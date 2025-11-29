@@ -376,9 +376,11 @@
                                class="w-full rounded-lg border-indigo-200 shadow-sm p-2.5 border bg-indigo-50/30 focus:ring-indigo-500 focus:border-indigo-500">
                     </div>
                 </div>
-                <div class="grid grid-cols-2 gap-4">
+                
+                <div class="grid grid-cols-3 gap-4">
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">รอบโหลด (เวลา)</label><input type="time" name="round_time" required class="w-full rounded-lg border-gray-300 shadow-sm p-2.5 border bg-gray-50"></div>
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">ลำดับคันที่</label><input type="number" name="car_no" placeholder="1" required class="w-full rounded-lg border-gray-300 p-2.5 border bg-gray-50"></div>
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">น้ำหนัก (Kg)</label><input type="text" name="weight" placeholder="ระบุน้ำหนัก" class="w-full rounded-lg border-gray-300 p-2.5 border bg-gray-50"></div>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">คนขับ</label>
@@ -451,6 +453,7 @@
                             <th class="px-2 py-2 bg-blue-600 border-r border-blue-500">Load Date</th>
                             <th class="px-2 py-2 bg-green-600 border-r border-green-500">เวลา</th>
                             <th class="px-2 py-2 bg-green-600 border-r border-green-500 min-w-[150px]">ปลายทาง (สาขา)</th>
+                            <th class="px-2 py-2 bg-green-600 border-r border-green-500">น้ำหนัก</th>
                             <th class="px-2 py-2 bg-green-600 border-r border-green-500">ทะเบียน</th>
                             <th class="px-2 py-2 bg-green-600 border-r border-green-500">คนขับ</th>
                             <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">เข้าโรงงาน</th>
@@ -465,7 +468,7 @@
                     </thead>
                     <tbody class="text-gray-700 bg-white">
                         {% if jobs|length == 0 %}
-                            <tr><td colspan="15" class="p-10 text-center text-gray-400">กรุณาเลือกวันที่ หรือ ไม่พบข้อมูล</td></tr>
+                            <tr><td colspan="16" class="p-10 text-center text-gray-400">กรุณาเลือกวันที่ หรือ ไม่พบข้อมูล</td></tr>
                         {% else %}
                             {% macro report_time_cell(time_val, loc_val, text_class='') %}
                                 {% if time_val %}
@@ -507,6 +510,7 @@
 
                                     <td class="px-2 py-1 border-r border-gray-200 font-bold">{% if not is_same %}{{ job.Round }}{% endif %}</td>
                                     <td class="px-2 py-1 border-r border-gray-200 text-left pl-2 font-bold text-indigo-700 truncate max-w-[200px]" title="{{ job.Branch_Name }}">{{ job.Branch_Name }}</td>
+                                    <td class="px-2 py-1 border-r border-gray-200 text-center text-gray-600 font-medium">{% if not is_same %}{{ job.get('Weight', '-') }}{% endif %}</td>
                                     <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %} {{ job.Plate }} {% endif %}</td>
                                     <td class="px-2 py-1 border-r border-gray-200 font-medium truncate max-w-[120px]" title="{{ job.Driver }}">{% if not is_same %} {{ job.Driver }} {% endif %}</td>
                                     <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T1_Enter, job.L1_Loc) }}{% endif %}</td>

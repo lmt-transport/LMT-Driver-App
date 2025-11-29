@@ -1677,25 +1677,36 @@ def driver_select():
                 try: job_dt = datetime.strptime(job_dt_str, "%Y-%m-%d %H:%M")
                 except ValueError: job_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
                 
+                # --- [แก้ไข] คำนวณความต่างวัน ---
                 diff = job_dt - now_thai
                 hours_diff = diff.total_seconds() / 3600
+                delta_days = (job_dt.date() - now_thai.date()).days
+                # ------------------------------
+
                 h = job_dt.hour
                 m = job_dt.minute
                 
                 msg, color, weight = "", "", 999
+                
+                # 1. งานเร่งด่วน/ค้างส่ง (น้อยกว่า 0 ชม.)
                 if hours_diff <= 0:
                     if hours_diff > -12: 
                         msg, color, weight = "❗ โหลดตอนนี้", "bg-red-500 text-white border-red-600 animate-pulse shadow-red-200", 1
+                
+                # 2. งานภายใน 16 ชม. (โหลดวันนี้/คืนนี้)
                 elif 0 < hours_diff <= 16:
                     if 6 <= h <= 12:   msg, color = "☀️ โหลดเช้านี้", "bg-yellow-100 text-yellow-700 border-yellow-200"
                     elif 13 <= h <= 18: msg, color = "⛅ โหลดบ่ายนี้", "bg-orange-100 text-orange-700 border-orange-200"
                     else:               msg, color = "🌙 โหลดคืนนี้", "bg-indigo-100 text-indigo-700 border-indigo-200"
                     weight = 2
-                elif 16 < hours_diff <= 40:
+                
+                # 3. [แก้ไข] งานวันพรุ่งนี้ (เช็คจากปฏิทิน ไม่ใช่ชั่วโมงรวม)
+                elif delta_days == 1:
                     period = "คืนพรุ่งนี้" if (h >= 19 or h <= 5) else "วันพรุ่งนี้"
                     if driver_info[d_name]['sort_weight'] > 3:
                         msg, color, weight = f"⏩ เตรียมโหลด{period}", "bg-gray-100 text-gray-500 border-gray-200", 3
 
+                # อัปเดตข้อมูลถ้างานนี้สำคัญกว่า (weight น้อยกว่า)
                 if weight < driver_info[d_name]['sort_weight']:
                     driver_info[d_name]['urgent_msg'] = msg
                     driver_info[d_name]['urgent_color'] = color
@@ -1764,8 +1775,12 @@ def driver_tasks():
             try: job_dt = datetime.strptime(job_dt_str, "%Y-%m-%d %H:%M")
             except: job_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
             
+            # --- [แก้ไข] เพิ่มการคำนวณ delta_days ---
             diff = job_dt - now_thai
             hours_diff = diff.total_seconds() / 3600
+            delta_days = (job_dt.date() - now_thai.date()).days
+            # -------------------------------------
+
             th_year = job_dt.year + 543
             real_date_str = f"{job_dt.day}/{job_dt.month}/{str(th_year)[2:]}"
             h = job_dt.hour
@@ -1774,6 +1789,7 @@ def driver_tasks():
             job['smart_detail'] = f"วันที่ {real_date_str}"
             job['ui_class'] = {'bg': 'bg-gray-50', 'text': 'text-gray-500', 'icon': 'fa-clock'}
 
+            # 1. งานเร่งด่วน/ค้างส่ง (น้อยกว่า 0 ชม.)
             if hours_diff <= 0:
                 if hours_diff > -12:
                     job['smart_title'] = f"❗ เข้าโหลดงานตอนนี้"
@@ -1782,6 +1798,8 @@ def driver_tasks():
                     job['smart_title'] = f"🔥 งานค้างส่ง"
                     job['ui_class'] = {'bg': 'bg-red-50 border-red-100', 'text': 'text-red-500', 'icon': 'fa-triangle-exclamation'}
                 job['smart_detail'] = f"กำหนด: {round_str} น. ({real_date_str})"
+            
+            # 2. งานภายใน 16 ชม. (โหลดวันนี้/คืนนี้)
             elif 0 < hours_diff <= 16:
                 if 6 <= h <= 12:   p, i, t = "เช้านี้", "fa-sun", "yellow"
                 elif 13 <= h <= 18: p, i, t = "บ่ายนี้", "fa-cloud-sun", "orange"
@@ -1789,11 +1807,15 @@ def driver_tasks():
                 job['smart_title'] = f"โหลดสินค้า{p}"
                 job['smart_detail'] = f"เวลา {round_str} น. ของวันที่ {real_date_str}"
                 job['ui_class'] = {'bg': f'bg-{t}-50 border-{t}-100 ring-1 ring-{t}-50', 'text': f'text-{t}-600', 'icon': i}
-            elif 16 < hours_diff <= 40:
+            
+            # 3. [แก้ไข] งานวันพรุ่งนี้ (เช็ค delta_days == 1)
+            elif delta_days == 1:
                 period = "คืนพรุ่งนี้" if (h >= 19 or h <= 5) else "วันพรุ่งนี้"
                 job['smart_title'] = f"⏩ เตรียมโหลด{period}"
                 job['smart_detail'] = f"เวลา {round_str} น. ของวันที่ {real_date_str}"
                 job['ui_class'] = {'bg': 'bg-blue-50 border-blue-100', 'text': 'text-blue-600', 'icon': 'fa-calendar-day'}
+            
+            # 4. งานล่วงหน้า (มะรืนเป็นต้นไป)
             else:
                 job['smart_title'] = f"📅 งานล่วงหน้า"
                 job['smart_detail'] = f"วันที่ {real_date_str} เวลา {round_str} น."

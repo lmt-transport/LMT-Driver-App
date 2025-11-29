@@ -88,7 +88,7 @@
             {% for job in trip_group %}
                 <div class="relative pl-3 border-l-2 {% if job.Status == 'Done' %} border-green-400 {% else %} border-indigo-200 {% endif %}">
                     <div class="flex justify-between items-start mb-2">
-                        <div class="text-sm font-bold text-gray-800 leading-tight">
+                        <div class="text-sm font-bold leading-tight {% if '(ด่วน)' in job.Branch_Name %} text-red-600 animate-pulse {% else %} text-gray-800 {% endif %}">
                             {{ loop.index }}. {{ job.Branch_Name }}
                         </div>
                         {% if job.Status == 'Done' %}

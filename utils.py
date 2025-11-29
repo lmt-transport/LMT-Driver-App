@@ -7,7 +7,7 @@ import requests
 from datetime import datetime, timedelta
 
 # ==========================================
-# [CONFIG] ตั้งค่า Discord Webhook
+# [CONFIG] ตั้งค่า
 # ==========================================
 DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1444236316404482139/UJc-I_NRT33p9UKCas5ATGgjAlqlrtxBuPhvKYKnI-Pz2_AyxAnOs_UFNl203_sqLsI5'
 
@@ -85,32 +85,32 @@ def send_discord_msg(message):
     except Exception as e:
         print(f"Discord Notify Error: {e}")
 
-def check_and_notify_shift_completion(sheet, target_round_time):
-    """ตรวจสอบว่ารถเข้าครบทุกคันหรือยัง (เช็คเฉพาะกะของคนขับที่กดอัปเดต)"""
+def check_and_notify_shift_completion(sheet, target_po_date, target_round_time, step_trigger):
+    """ตรวจสอบว่ารถเข้าครบทุกคันหรือยัง"""
     try:
-        # 1. ระบุกะของผู้กด (Day หรือ Night)
+        # 1. ระบุกะของผู้กด
         target_is_day = True
         try:
             h_check = int(str(target_round_time).split(':')[0])
             if h_check < 6 or h_check >= 19: target_is_day = False
         except: 
-            print("Invalid round time, skipping check")
+            print("Invalid round time")
             return
 
-        # 2. ดึงข้อมูลมานับยอด (ดึงสด ไม่ใช้ Cache เพื่อความแม่นยำในการแจ้งเตือน)
+        shift_name = "รอบเช้า" if target_is_day else "รอบดึก"
+        shift_emoji = "☀️" if target_is_day else "🌙"
+
+        # 2. ดึงข้อมูลมานับยอด
         raw_jobs = sheet.worksheet('Jobs').get_all_records()
         
-        now_thai = datetime.now() + timedelta(hours=7)
-        today_str = now_thai.strftime("%Y-%m-%d")
-        todays_jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == today_str]
+        # 3. กรองงานเฉพาะ PO Date เดียวกัน
+        target_jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(target_po_date).strip()]
 
-        stats = {
-            'day': {'total': 0, 'entered': 0},
-            'night': {'total': 0, 'entered': 0}
-        }
+        total_cars = 0
+        action_count = 0 
         
         unique_cars = {}
-        for job in todays_jobs:
+        for job in target_jobs:
             if str(job.get('Status', '')).lower() == 'cancel': continue
             key = (str(job['PO_Date']), str(job['Round']), str(job['Car_No']))
             if key not in unique_cars: unique_cars[key] = job
@@ -123,20 +123,30 @@ def check_and_notify_shift_completion(sheet, target_round_time):
                 if h < 6 or h >= 19: is_day = False
             except: pass
             
-            target = stats['day'] if is_day else stats['night']
-            target['total'] += 1
-            
-            if str(job.get('T1_Enter', '')).strip() != '':
-                target['entered'] += 1
+            # นับเฉพาะกะที่ตรงกับคนกด
+            if is_day == target_is_day:
+                total_cars += 1
+                
+                # เช็ค Step 1 (เข้าโรงงาน)
+                if step_trigger == '1':
+                    if str(job.get('T1_Enter', '')).strip() != '':
+                        action_count += 1
+                
+                # เช็ค Step 6 (ออกโรงงาน)
+                elif step_trigger == '6':
+                    if str(job.get('T6_Exit', '')).strip() != '':
+                        action_count += 1
 
-        # 3. ส่งแจ้งเตือน (เฉพาะกะที่ตรงกับคนกด)
-        if target_is_day:
-            if stats['day']['total'] > 0 and stats['day']['total'] == stats['day']['entered']:
-                msg = f"☀️ **แจ้งเตือน: รถรอบเช้าเข้าโรงงาน ครบแล้ว!**\n✅ จำนวนทั้งหมด: `{stats['day']['total']}` คัน\n🕒 เวลา: `{now_thai.strftime('%H:%M')} น.`"
+        # 4. ส่งแจ้งเตือนถ้าครบ
+        if total_cars > 0 and total_cars == action_count:
+            now_str = (datetime.now() + timedelta(hours=7)).strftime('%H:%M')
+            
+            if step_trigger == '1':
+                msg = f"{shift_emoji} **แจ้งเตือน: รถ{shift_name} เข้าโรงงาน ครบแล้ว!**\n✅ PO Date: {target_po_date}\n🚛 จำนวน: `{total_cars}` คัน\n🕒 เวลา: `{now_str} น.`"
                 send_discord_msg(msg)
-        else:
-            if stats['night']['total'] > 0 and stats['night']['total'] == stats['night']['entered']:
-                msg = f"🌙 **แจ้งเตือน: รถรอบดึกเข้าโรงงาน ครบแล้ว!**\n✅ จำนวนทั้งหมด: `{stats['night']['total']}` คัน\n🕒 เวลา: `{now_thai.strftime('%H:%M')} น.`"
+            
+            elif step_trigger == '6':
+                msg = f"🚀 **แจ้งเตือน: รถ{shift_name} ออกจากโรงงาน ครบแล้ว!**\n✅ PO Date: {target_po_date}\n🚛 จำนวน: `{total_cars}` คัน\n🕒 เวลา: `{now_str} น.`"
                 send_discord_msg(msg)
 
     except Exception as e:

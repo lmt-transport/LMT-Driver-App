@@ -26,7 +26,6 @@ DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1444236316404482139/UJc-
 
 # ตัวแปร Global สำหรับจำเวลาแจ้งเตือนล่าสุด (เพื่อป้องกัน Spam และทำ Loop 1 ชม.)
 last_late_alert_time = {'day': 0, 'night': 0}
-notify_flags = {} # จำสถานะว่าแจ้งเตือนกลุ่มไปหรือยัง
 
 def send_discord_msg(message):
     """ฟังก์ชันส่งข้อความเข้า Discord"""
@@ -98,11 +97,40 @@ def get_driver_details(sheet, driver_name):
     except: pass
     return '-', '-'
 
-def get_notify_flag(key):
-    return notify_flags.get(key, False)
+# ==========================================
+# [FIX for Vercel] ระบบจำค่าผ่าน Google Sheet
+# ==========================================
+def is_already_notified(sheet, key):
+    """
+    เช็คว่าเคยแจ้งเตือน Key นี้ไปหรือยัง โดยดูจาก Sheet 'NotifyLogs'
+    ป้องกันปัญหา Vercel ลืมค่าตัวแปรเมื่อ Restart
+    """
+    try:
+        # 1. พยายามเชื่อมต่อกับ Sheet ชื่อ 'NotifyLogs'
+        try:
+            ws_log = sheet.worksheet('NotifyLogs')
+        except:
+            # ถ้ายังไม่มี Sheet นี้ ให้สร้างใหม่หัวข้อ Notify_Key, Timestamp
+            ws_log = sheet.add_worksheet(title="NotifyLogs", rows=1000, cols=2)
+            ws_log.append_row(['Notify_Key', 'Timestamp'])
+            return False
 
-def set_notify_flag(key):
-    notify_flags[key] = True
+        # 2. ดึงประวัติ Key ทั้งหมดที่เคยแจ้งไปแล้ว
+        # (ใช้ col_values(1) เพื่อดึงเฉพาะคอลัมน์แรกมาเช็ค)
+        existing_keys = ws_log.col_values(1)
+        
+        if key in existing_keys:
+            return True # เคยแจ้งไปแล้ว (ไม่ต้องส่งซ้ำ)
+        else:
+            # 3. ถ้ายังไม่เคยแจ้ง ให้บันทึกลง Sheet ทันที
+            timestamp = (datetime.now() + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S")
+            ws_log.append_row([key, timestamp])
+            return False # ยังไม่เคยแจ้ง (ส่งได้เลย)
+            
+    except Exception as e:
+        print(f"Log Sheet Error: {e}")
+        # ถ้า Error (เช่นติดต่อ Sheet ไม่ได้) ให้สมมติว่าเคยส่งแล้วไว้ก่อนเพื่อกัน Spam
+        return True
 
 # --- Notification Logic 1 & 2: รายคัน (Real-time) ---
 def notify_individual_movement(sheet, job_data, step):
@@ -225,26 +253,28 @@ def check_group_completion(sheet, target_po_date, target_round_time):
         base_msg = f"✅ PO: {target_po_date} ({shift_name})\n🚛 จำนวนทั้งหมด: `{stats['total']}` คัน\n🕒 เวลา: `{now_str} น.`"
         shift_key = 'day' if target_is_day else 'night'
 
+        # ====================================================
+        # [FIX] ใช้ is_already_notified แทนตัวแปรเดิม
+        # ====================================================
+
         # Trigger 3: เข้าครบ
-        if stats['total'] == stats['in']:
+        if stats['total'] == stats['in'] and stats['total'] > 0:
             cache_key = f"completed_in_{target_po_date}_{shift_key}"
-            if not get_notify_flag(cache_key):
-                send_discord_msg(f"🏁 **สรุป: รถเข้าโรงงาน ครบแล้ว!**\n{base_msg}")
-                set_notify_flag(cache_key)
+            # เช็คจาก Sheet ว่าเคยแจ้งรหัสนี้หรือยัง
+            if not is_already_notified(sheet, cache_key):
+                send_discord_msg(f"🏁 **สรุป: รถเข้าโรงงาน ครบทุกคันแล้ว!**\n{base_msg}")
 
         # Trigger 4: ออกครบ
-        if stats['total'] == stats['out']:
+        if stats['total'] == stats['out'] and stats['total'] > 0:
             cache_key = f"completed_out_{target_po_date}_{shift_key}"
-            if not get_notify_flag(cache_key):
-                send_discord_msg(f"🛫 **สรุป: รถออกจากโรงงาน ครบแล้ว!**\n{base_msg}")
-                set_notify_flag(cache_key)
+            if not is_already_notified(sheet, cache_key):
+                send_discord_msg(f"🛫 **สรุป: รถออกจากโรงงาน ครบทุกคันแล้ว!**\n{base_msg}")
 
         # Trigger 5: จบงานครบ
-        if stats['total'] == stats['done']:
+        if stats['total'] == stats['done'] and stats['total'] > 0:
             cache_key = f"completed_done_{target_po_date}_{shift_key}"
-            if not get_notify_flag(cache_key):
-                send_discord_msg(f"🎉 **สรุป: จบงานส่งของ ครบทุกคันแล้ว!**\n{base_msg}")
-                set_notify_flag(cache_key)
+            if not is_already_notified(sheet, cache_key):
+                send_discord_msg(f"🎉 **สรุป: จบงาน ครบทุกคันแล้ว!**\n{base_msg}")
 
     except Exception as e:
         print(f"Group Notify Error: {e}")

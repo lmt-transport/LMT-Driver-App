@@ -112,6 +112,7 @@ def manager_dashboard():
     if 'user' not in session: return redirect(url_for('manager_login'))
     
     sheet = get_db()
+    # ใช้ Cache เพื่อความเร็ว
     raw_jobs = get_cached_records(sheet, 'Jobs')
     drivers = get_cached_records(sheet, 'Drivers')
 
@@ -122,6 +123,7 @@ def manager_dashboard():
     if not date_filter:
         date_filter = today_date
 
+    # --- 1. กรองงานของวันที่เลือก ---
     filtered_jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
 
     def sort_key_func(job):
@@ -134,6 +136,7 @@ def manager_dashboard():
 
     filtered_jobs = sorted(filtered_jobs, key=sort_key_func)
     
+    # --- 2. เตรียมข้อมูล (Stats & Groups) ---
     jobs_by_trip_key = {}
     total_done_jobs = 0
     total_branches = len(filtered_jobs)
@@ -142,6 +145,7 @@ def manager_dashboard():
     grouped_jobs_for_stats = []
     current_group = []
     prev_key = None
+    
     late_arrivals_by_po = {}
     total_late_cars = 0
 
@@ -161,6 +165,7 @@ def manager_dashboard():
         if job['Status'] == 'Done':
             total_done_jobs += 1
             
+        # Late Arrival Logic
         if not job.get('T1_Enter') and job['Status'] != 'Done':
             try:
                 load_date_str = job.get('Load_Date', job['PO_Date'])
@@ -185,10 +190,10 @@ def manager_dashboard():
             
     if current_group: grouped_jobs_for_stats.append(current_group)
 
-    # --- [UPDATED LOGIC] แยกประเภทคนขับ 3 แบบ (Day / Night / Hybrid) ---
+    # --- [UPDATED LOGIC] แยกประเภทคนขับ 3 แบบ (Day / Night / Hybrid) จากประวัติทั้งหมด ---
     driver_history = {} 
     
-    # 1. วนลูปประวัติงานทั้งหมดเพื่อดูพฤติกรรม
+    # วนลูปประวัติงานทั้งหมดเพื่อดูพฤติกรรม
     for j in raw_jobs:
         d_name = j.get('Driver')
         r_time = str(j.get('Round', '')).strip()
@@ -254,6 +259,51 @@ def manager_dashboard():
             else:
                 idle_drivers_new.append(d)        # ไม่เคยมีประวัติ
 
+    # --- [UPDATED LOGIC] ตรวจสอบรถเข้าโรงงานครบ (นับเป็นรายคัน ตามตรรกะแผนงาน) ---
+    shift_status = {
+        'day': {'total': 0, 'entered': 0, 'is_complete': False},
+        'night': {'total': 0, 'entered': 0, 'is_complete': False}
+    }
+    
+    # จัดกลุ่มงานเป็นรายเที่ยว (Unique Trips) เพื่อไม่ให้นับรถซ้ำ
+    unique_trips_check = {}
+    for job in filtered_jobs:
+        # ข้ามงานที่ยกเลิก
+        if str(job.get('Status', '')).lower() == 'cancel': continue
+        
+        # Key สำหรับระบุคัน: PO + Round + CarNo
+        t_key = (str(job['PO_Date']), str(job['Round']), str(job['Car_No']))
+        
+        if t_key not in unique_trips_check:
+            # เก็บข้อมูลตัวแทนของเที่ยวนั้น (เอาไว้เช็คเวลา T1)
+            unique_trips_check[t_key] = job
+
+    # วนลูปนับยอด (แยกเช้า/ดึก)
+    for t_key, job in unique_trips_check.items():
+        # แยกกะตามตรรกะแผนงาน (06:00 - 18:59 = Day)
+        r_time = str(job.get('Round', '')).strip()
+        is_day_shift = True
+        try:
+            h = int(r_time.split(':')[0])
+            if h < 6 or h >= 19: is_day_shift = False
+        except: pass
+
+        target = shift_status['day'] if is_day_shift else shift_status['night']
+        
+        # เพิ่มยอดรวมรถ (Total Trips)
+        target['total'] += 1
+        
+        # เช็คว่ารถคันนี้เข้าโรงงานหรือยัง (ดู T1)
+        if str(job.get('T1_Enter', '')).strip() != '':
+            target['entered'] += 1
+
+    # สรุปผล (ต้องมีรถ > 0 และ เข้าครบ = ยอดรวม)
+    if shift_status['day']['total'] > 0 and shift_status['day']['total'] == shift_status['day']['entered']:
+        shift_status['day']['is_complete'] = True
+        
+    if shift_status['night']['total'] > 0 and shift_status['night']['total'] == shift_status['night']['entered']:
+        shift_status['night']['is_complete'] = True
+
     # --- Final Stats ---
     completed_trips = 0
     for trip_key, job_list in jobs_by_trip_key.items():
@@ -288,7 +338,7 @@ def manager_dashboard():
             if h < 6 or h >= 19: is_day = False
         except: pass
 
-        status_txt = "รอเข้า"
+        status_txt = "ยังไม่ถึงคลัง"
         status_time = ""
         found_branch_activity = False
 
@@ -388,11 +438,13 @@ def manager_dashboard():
                            late_arrivals_by_po=late_arrivals_by_po,
                            total_late_cars=total_late_cars,
                            driver_stats=driver_stats,
-                           # ส่งข้อมูล 4 กลุ่ม
+                           # ส่งข้อมูลคนว่างงาน 4 กลุ่ม
                            idle_drivers_day=idle_drivers_day,
                            idle_drivers_night=idle_drivers_night,
                            idle_drivers_hybrid=idle_drivers_hybrid,
-                           idle_drivers_new=idle_drivers_new
+                           idle_drivers_new=idle_drivers_new,
+                           # ส่งสถานะการเข้าโรงงาน
+                           shift_status=shift_status
                            )
 
 @app.route('/create_job', methods=['POST'])

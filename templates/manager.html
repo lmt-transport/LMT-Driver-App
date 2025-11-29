@@ -115,7 +115,7 @@
                                 {% set trip_key_tuple = (job.PO_Date|string, job.Car_No|string, job.Round|string) %}
                                 {% set last_end_time = trip_last_end_time.get(trip_key_tuple, "") %}
                                 
-                                {% set status_badge = '<span class="inline-flex items-center gap-1 bg-gray-200 text-gray-700 text-xs font-bold px-3 py-1 rounded-full border border-gray-300">รอเข้า</span>' %}
+                                {% set status_badge = '<span class="inline-flex items-center gap-1 bg-gray-200 text-gray-700 text-xs font-bold px-3 py-1 rounded-full border border-gray-300">ยังไม่ถึงคลัง</span>' %}
                                 {% if last_end_time %}
                                     {% set status_badge = '<span class="inline-flex items-center gap-1 bg-green-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm"><i class="fa-solid fa-flag-checkered"></i> จบงาน</span>' %}
                                 {% elif job.T6_Exit %}

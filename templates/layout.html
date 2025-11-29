@@ -73,12 +73,24 @@
                     <div class="flex items-center gap-2 sm:gap-4">
                         
                         <div class="relative">
-                            <button onclick="toggleNotifications()" class="relative p-2 text-gray-400 hover:text-indigo-600 transition-colors rounded-full hover:bg-gray-100 focus:outline-none">
-                                <i class="fa-solid fa-bell text-xl"></i>
+                            {% set is_day_complete = shift_status.day.is_complete if shift_status and shift_status.day else False %}
+                            {% set is_night_complete = shift_status.night.is_complete if shift_status and shift_status.night else False %}
+                            
+                            <button onclick="toggleNotifications()" class="relative p-2 transition-colors rounded-full hover:bg-gray-100 focus:outline-none 
+                                {% if is_day_complete or is_night_complete %} text-green-600 {% else %} text-gray-400 hover:text-indigo-600 {% endif %}">
+                                
+                                {% if is_day_complete or is_night_complete %}
+                                    <i class="fa-solid fa-bell-ring text-xl animate-pulse"></i>
+                                {% else %}
+                                    <i class="fa-solid fa-bell text-xl"></i>
+                                {% endif %}
+
                                 {% if total_late_cars and total_late_cars > 0 %}
-                                <span class="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-white animate-pulse">
-                                    {{ total_late_cars }}
-                                </span>
+                                    <span class="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-white animate-bounce">
+                                        {{ total_late_cars }}
+                                    </span>
+                                {% elif is_day_complete or is_night_complete %}
+                                    <span class="absolute top-1 right-2 h-3 w-3 rounded-full bg-green-500 ring-2 ring-white"></span>
                                 {% endif %}
                             </button>
 
@@ -89,10 +101,41 @@
                                 </div>
 
                                 <div class="max-h-[400px] overflow-y-auto custom-scrollbar bg-white">
+                                    
+                                    {% if is_day_complete %}
+                                    <div class="px-4 py-3 hover:bg-green-50 flex gap-3 border-b border-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex-shrink-0">
+                                            <div class="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-green-600">
+                                                <i class="fa-solid fa-sun text-lg"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-sm font-bold text-gray-800">รถรอบกลางวัน เข้าครบแล้ว</p>
+                                            <p class="text-xs text-gray-500 mt-0.5">จำนวน {{ shift_status.day.total }} คัน เข้าโรงงานครบถ้วน</p>
+                                        </div>
+                                        <div class="flex-shrink-0 self-center"><i class="fa-solid fa-circle-check text-green-500"></i></div>
+                                    </div>
+                                    {% endif %}
+
+                                    {% if is_night_complete %}
+                                    <div class="px-4 py-3 hover:bg-indigo-50 flex gap-3 border-b border-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex-shrink-0">
+                                            <div class="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
+                                                <i class="fa-solid fa-moon text-lg"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-sm font-bold text-gray-800">รถรอบกลางคืน เข้าครบแล้ว</p>
+                                            <p class="text-xs text-gray-500 mt-0.5">จำนวน {{ shift_status.night.total }} คัน เข้าโรงงานครบถ้วน</p>
+                                        </div>
+                                        <div class="flex-shrink-0 self-center"><i class="fa-solid fa-circle-check text-indigo-500"></i></div>
+                                    </div>
+                                    {% endif %}
+
                                     {% if total_late_cars and total_late_cars > 0 and late_arrivals_by_po %}
                                         {% for po_date, cars in late_arrivals_by_po.items() %}
                                             {% for car in cars %}
-                                            <div class="px-4 py-3 hover:bg-gray-50 flex gap-3 border-b border-gray-50 transition-colors cursor-pointer group relative">
+                                            <div class="px-4 py-3 hover:bg-red-50 flex gap-3 border-b border-gray-50 transition-colors cursor-pointer group relative">
                                                 <div class="flex-shrink-0">
                                                     <div class="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center text-red-500 relative">
                                                         <i class="fa-solid fa-truck-clock text-lg"></i>
@@ -118,20 +161,22 @@
                                             </div>
                                             {% endfor %}
                                         {% endfor %}
-                                    {% else %}
+                                    {% endif %}
+
+                                    {% if not is_day_complete and not is_night_complete and (not total_late_cars or total_late_cars == 0) %}
                                         <div class="px-4 py-12 text-center text-gray-400 flex flex-col items-center">
                                             <div class="bg-gray-50 p-4 rounded-full mb-3">
                                                 <i class="fa-regular fa-bell-slash text-2xl opacity-50"></i>
                                             </div>
                                             <p class="text-sm font-medium text-gray-500">ไม่มีการแจ้งเตือนใหม่</p>
-                                            <p class="text-xs mt-1">รถทุกคันเข้าโหลดตรงเวลาดีเยี่ยม!</p>
+                                            <p class="text-xs mt-1">สถานะรถเข้าโรงงานปกติ</p>
                                         </div>
                                     {% endif %}
                                 </div>
                                 
                                 <div class="bg-gray-50 px-4 py-2 text-center border-t border-gray-100">
                                     <a href="/manager?tab=monitor" class="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center justify-center gap-1">
-                                        ดูรายการรถสายทั้งหมด <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                                        ดูรายการทั้งหมด <i class="fa-solid fa-chevron-right text-[10px]"></i>
                                     </a>
                                 </div>
                             </div>

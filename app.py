@@ -78,7 +78,6 @@ def invalidate_cache(worksheet_name):
     if worksheet_name in cache_storage:
         cache_storage[worksheet_name] = {'data': None, 'timestamp': 0}
 
-# [CHANGED] รับพารามิเตอร์ target_round_time เพื่อเช็คเฉพาะกะที่เกี่ยวข้อง
 def check_and_notify_shift_completion(sheet, target_round_time):
     """ตรวจสอบว่ารถเข้าครบทุกคันหรือยัง (เช็คเฉพาะกะของคนขับที่กดอัปเดต)"""
     try:
@@ -91,7 +90,7 @@ def check_and_notify_shift_completion(sheet, target_round_time):
             print("Invalid round time, skipping check")
             return
 
-        # 2. ดึงข้อมูลมานับยอด
+        # 2. ดึงข้อมูลมานับยอด (ดึงสด ไม่ใช้ Cache เพื่อความแม่นยำในการแจ้งเตือน)
         raw_jobs = sheet.worksheet('Jobs').get_all_records()
         
         now_thai = datetime.now() + timedelta(hours=7)
@@ -1033,238 +1032,6 @@ def export_pdf():
 
     pdf_bytes = pdf.output()
     filename = f"Report_{date_filter if date_filter else 'All'}.pdf"
-    return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
-    
-@app.route('/export_pdf_summary')
-def export_pdf_summary():
-    sheet = get_db()
-    raw_jobs = get_cached_records(sheet, 'Jobs')
-    
-    date_filter = request.args.get('date_filter')
-    if date_filter:
-        jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
-    else:
-        jobs = raw_jobs
-        
-    def sort_key_func(job):
-        po_date = str(job['PO_Date'])
-        car_no_str = str(job['Car_No']).strip()
-        round_val = str(job['Round'])
-        try: car_no_int = int(car_no_str)
-        except ValueError: car_no_int = 99999 
-        return (po_date, car_no_int, round_val)
-
-    jobs = sorted(jobs, key=sort_key_func)
-
-    def create_counter(): return {'count':0, 't1':0, 't2':0, 't3':0, 't4':0, 't5':0, 't6':0, 't7':0, 't8':0}
-    sum_day = create_counter()
-    sum_night = create_counter()
-    grouped_jobs = []
-    current_group = []
-    prev_key = None
-
-    for job in jobs:
-        curr_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
-        if curr_key != prev_key and prev_key is not None:
-            grouped_jobs.append(current_group)
-            current_group = []
-        current_group.append(job)
-        prev_key = curr_key
-        
-        job['is_late'] = False
-        t_plan_str = str(job['Round']).strip()
-        t_act_str = str(job['T2_StartLoad']).strip()
-        if t_plan_str and t_act_str:
-            try:
-                fmt_plan = "%H:%M" if len(t_plan_str) <= 5 else "%H:%M:%S"
-                fmt_act = "%H:%M" if len(t_act_str) <= 5 else "%H:%M:%S"
-                t_plan = datetime.strptime(t_plan_str, fmt_plan)
-                t_act = datetime.strptime(t_act_str, fmt_act)
-                if (t_plan - t_act).total_seconds() > 12 * 3600: t_act += timedelta(days=1)
-                if t_act > t_plan: job['is_late'] = True
-            except: pass
-            
-    if current_group: grouped_jobs.append(current_group)
-
-    for group in grouped_jobs:
-        if not group: continue
-        first_job = group[0]
-        
-        round_time = str(first_job.get('Round', '')).strip()
-        is_day_shift = True
-        try:
-            hour = int(round_time.split(':')[0])
-            if not (6 <= hour <= 18): is_day_shift = False
-        except: pass
-
-        target = sum_day if is_day_shift else sum_night
-        target['count'] += 1 
-        if first_job.get('T1_Enter'): target['t1'] += 1
-        if first_job.get('T2_StartLoad'): target['t2'] += 1
-        if first_job.get('T3_EndLoad'): target['t3'] += 1
-        if first_job.get('T4_SubmitDoc'): target['t4'] += 1
-        if first_job.get('T5_RecvDoc'): target['t5'] += 1
-        if first_job.get('T6_Exit'): target['t6'] += 1
-        
-        if any(str(j.get('T7_ArriveBranch', '')).strip() != '' for j in group): target['t7'] += 1 
-        if all(str(j.get('T8_EndJob', '')).strip() != '' for j in group): target['t8'] += 1       
-
-    sum_total = create_counter()
-    for k in sum_total: sum_total[k] = sum_day[k] + sum_night[k]
-
-    basedir = os.path.abspath(os.path.dirname(__file__))
-    font_path = os.path.join(basedir, 'static', 'fonts', 'Sarabun-Regular.ttf')
-    logo_path = os.path.join(basedir, 'static', 'mylogo.png') 
-    po_date_thai = thai_date_filter(date_filter) if date_filter else "ทั้งหมด"
-    print_date = (datetime.now() + timedelta(hours=7)).strftime("%d/%m/%Y %H:%M")
-
-    COLS = [10, 18, 27, 13, 50, 13, 13, 13, 13, 13, 13]
-    HEADERS = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
-
-    class PDFSummary(FPDF):
-        def header(self):
-            self.add_font('Sarabun', '', font_path, uni=True)
-            if os.path.exists(logo_path):
-                self.image(logo_path, x=7, y=6, w=10)
-            self.set_font('Sarabun', '', 12) 
-            self.set_y(6)
-            self.cell(0, 8, 'สรุปรายงานการจัดส่งสินค้า (Compact View)', align='C', new_x="LMARGIN", new_y="NEXT")
-            self.set_font_size(10)
-            self.cell(0, 7, 'บริษัท แอลเอ็มที. ทรานสปอร์ต จำกัด', align='C', new_x="LMARGIN", new_y="NEXT")
-            self.set_font_size(8)
-            self.cell(0, 6, f'วันที่เอกสาร: {po_date_thai} | พิมพ์เมื่อ: {print_date}', align='C', new_x="LMARGIN", new_y="NEXT")
-            self.ln(3)
-            self.set_fill_color(44, 62, 80)
-            self.set_text_color(255, 255, 255)
-            self.set_draw_color(100, 100, 100)
-            self.set_font('Sarabun', '', 7)
-            for i, h in enumerate(HEADERS):
-                self.cell(COLS[i], 7, h, border=1, align='C', fill=True)
-            self.ln()
-            self.set_text_color(0, 0, 0)
-            self.set_draw_color(200, 200, 200)
-
-        def footer(self):
-            self.set_y(-10)
-            self.set_font('Sarabun', '', 6)
-            self.set_text_color(150)
-            self.cell(0, 10, f'หน้า {self.page_no()}/{{nb}}', align='R')
-
-    pdf = PDFSummary(orientation='P', unit='mm', format='A4')
-    pdf.alias_nb_pages()
-    pdf.set_margins(7, 7, 7)
-    pdf.add_page()
-    
-    group_count = 0
-    for group in grouped_jobs:
-        if group_count % 2 == 0: pdf.set_fill_color(255, 255, 255) 
-        else: pdf.set_fill_color(245, 247, 249) 
-        group_count += 1
-        
-        for idx, job in enumerate(group):
-            is_first_row = (idx == 0)
-            is_last_in_group = (idx == len(group) - 1)
-            
-            c_no = str(job['Car_No']) if is_first_row else ""
-            plate = str(job['Plate']) if is_first_row else ""
-            driver = str(job['Driver']) if is_first_row else ""
-            round_t = str(job['Round']) if is_first_row else ""
-            branch = str(job['Branch_Name'])
-            t1 = str(job['T1_Enter']) if is_first_row else ""
-            
-            t2 = ""
-            is_late_row = False
-            if is_first_row:
-                t2 = str(job['T2_StartLoad'])
-                if job['is_late']: is_late_row = True
-
-            t3 = str(job['T3_EndLoad']) if is_first_row else ""
-            t6 = str(job['T6_Exit']) if is_first_row else ""
-            t7 = str(job['T7_ArriveBranch'])
-            t8 = str(job['T8_EndJob'])
-
-            row_height = 5.8
-            if pdf.get_y() + row_height > pdf.page_break_trigger:
-                pdf.add_page()
-                if (group_count - 1) % 2 == 0: pdf.set_fill_color(255, 255, 255)
-                else: pdf.set_fill_color(245, 247, 249)
-
-            pdf.set_font('Sarabun', '', 7)
-            pdf.set_draw_color(180, 180, 180) 
-            
-            pdf.cell(COLS[0], row_height, c_no, border=1, align='C', fill=True)
-            pdf.cell(COLS[1], row_height, plate, border=1, align='C', fill=True)
-            if pdf.get_string_width(driver) > COLS[2] - 2:
-                 while pdf.get_string_width(driver + "..") > COLS[2] - 2 and len(driver) > 0:
-                     driver = driver[:-1]
-                 driver += ".."
-            pdf.cell(COLS[2], row_height, driver, border=1, align='L', fill=True)
-            pdf.cell(COLS[3], row_height, round_t, border=1, align='C', fill=True)
-            
-            if pdf.get_string_width(branch) > COLS[4] - 2:
-                 while pdf.get_string_width(branch + "..") > COLS[4] - 2 and len(branch) > 0:
-                     branch = branch[:-1]
-                 branch += ".."
-            pdf.cell(COLS[4], row_height, branch, border=1, align='L', fill=True)
-            
-            pdf.cell(COLS[5], row_height, t1, border=1, align='C', fill=True)
-
-            if is_late_row: pdf.set_text_color(192, 57, 43) 
-            elif t2: pdf.set_text_color(39, 174, 96)
-            pdf.cell(COLS[6], row_height, t2, border=1, align='C', fill=True)
-            pdf.set_text_color(0, 0, 0)
-
-            pdf.cell(COLS[7], row_height, t3, border=1, align='C', fill=True)
-            pdf.cell(COLS[8], row_height, t6, border=1, align='C', fill=True)
-            
-            base_r, base_g, base_b = (255, 255, 255) if (group_count - 1) % 2 == 0 else (245, 247, 249)
-            pdf.set_fill_color(240, 253, 244)
-            pdf.cell(COLS[9], row_height, t7, border=1, align='C', fill=True)
-            pdf.set_fill_color(254, 242, 242)
-            pdf.cell(COLS[10], row_height, t8, border=1, align='C', fill=True)
-            
-            pdf.set_fill_color(base_r, base_g, base_b)
-            pdf.ln()
-            
-            if is_last_in_group:
-                y_curr = pdf.get_y()
-                pdf.set_draw_color(0, 0, 0)
-                pdf.set_line_width(0.3)
-                pdf.line(7, y_curr, 203, y_curr) 
-                pdf.set_line_width(0.2)
-                pdf.set_draw_color(180, 180, 180)
-
-    pdf.ln(5)
-    if pdf.get_y() + 30 > pdf.page_break_trigger:
-        pdf.add_page()
-    
-    SUM_HEADERS = ['รอบงาน', 'จำนวน', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ยื่นเอกสาร', 'รับเอกสาร', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
-    SUM_COLS = [20, 16, 20, 20, 20, 20, 20, 20, 20, 20]
-    
-    pdf.set_fill_color(44, 62, 80)
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_font('Sarabun', '', 6)
-    for i, h in enumerate(SUM_HEADERS):
-        pdf.cell(SUM_COLS[i], 8, h, border=1, align='C', fill=True)
-    pdf.ln()
-    
-    def draw_sum_row(label, data, is_total=False):
-        if is_total: pdf.set_fill_color(255, 255, 0)
-        else: pdf.set_fill_color(255, 255, 255)
-        pdf.set_text_color(0, 0, 0)
-        pdf.set_font('Sarabun', '', 7)
-        pdf.cell(SUM_COLS[0], 8, label, border=1, align='C', fill=True)
-        vals = [data['count'], data['t1'], data['t2'], data['t3'], data['t4'], data['t5'], data['t6'], data['t7'], data['t8']]
-        for i, v in enumerate(vals):
-            pdf.cell(SUM_COLS[i+1], 8, str(v), border=1, align='C', fill=True)
-        pdf.ln()
-
-    draw_sum_row('กลางวัน', sum_day)
-    draw_sum_row('กลางคืน', sum_night)
-    draw_sum_row('รวม', sum_total, is_total=True)
-
-    pdf_bytes = pdf.output()
-    filename = f"Summary_{date_filter if date_filter else 'All'}.pdf"
     return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename) 
 
 @app.route('/update_status', methods=['POST'])
@@ -1323,7 +1090,6 @@ def update_status():
     
     invalidate_cache('Jobs')
     
-    # [NEW] Trigger notification checks
     if step == '1' and mode == 'update':
         # Fetch the updated row to determine round time
         try:

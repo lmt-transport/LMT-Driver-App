@@ -206,8 +206,13 @@ def notify_car_completion(sheet, job_data):
         print(f"Car Completion Notify Error: {e}")
 
 # --- Notification Logic 3, 4, 5: กลุ่มครบ (Group Completion) ---
-def check_group_completion(sheet, target_po_date, target_round_time):
-    """ตรวจสอบยอดรวม: เข้าครบ / ออกครบ / จบครบ"""
+def check_group_completion(sheet, target_po_date, target_round_time, trigger_step):
+    """
+    ตรวจสอบยอดรวม: เข้าครบ / ออกครบ / จบครบ
+    - target_po_date: วันที่ PO
+    - target_round_time: เวลารอบ
+    - trigger_step: ขั้นตอนที่เพิ่งกดมา ('1', '6', หรือ '8') เพื่อเลือกเช็คให้ถูกเรื่อง
+    """
     try:
         target_is_day, shift_name = get_shift_info(target_round_time)
         
@@ -235,7 +240,7 @@ def check_group_completion(sheet, target_po_date, target_round_time):
             if is_day == target_is_day:
                 stats['total'] += 1
                 
-                # Check Step 1: เข้าโรงงาน (ดูที่งานแรกของ Trip ก็พอ)
+                # Check Step 1: เข้าโรงงาน
                 if str(first_job.get('T1_Enter', '')).strip() != '':
                     stats['in'] += 1
                 
@@ -253,28 +258,31 @@ def check_group_completion(sheet, target_po_date, target_round_time):
         base_msg = f"✅ PO: {target_po_date} ({shift_name})\n🚛 จำนวนทั้งหมด: `{stats['total']}` คัน\n🕒 เวลา: `{now_str} น.`"
         shift_key = 'day' if target_is_day else 'night'
 
-        # ====================================================
-        # [FIX] ใช้ is_already_notified แทนตัวแปรเดิม
-        # ====================================================
+        # ==================================================================
+        # Logic การแจ้งเตือน (เช็ค trigger_step และใช้ is_already_notified)
+        # ==================================================================
 
-        # Trigger 3: เข้าครบ
-        if stats['total'] == stats['in'] and stats['total'] > 0:
-            cache_key = f"completed_in_{target_po_date}_{shift_key}"
-            # เช็คจาก Sheet ว่าเคยแจ้งรหัสนี้หรือยัง
-            if not is_already_notified(sheet, cache_key):
-                send_discord_msg(f"🏁 **สรุป: รถเข้าโรงงาน ครบทุกคันแล้ว!**\n{base_msg}")
+        # Trigger 3: เข้าครบ (เช็คเมื่อกด Step 1 เท่านั้น)
+        if trigger_step == '1':
+            if stats['total'] == stats['in'] and stats['total'] > 0:
+                cache_key = f"completed_in_{target_po_date}_{shift_key}"
+                # เช็คจาก Sheet ว่าเคยแจ้ง Key นี้ไปหรือยัง
+                if not is_already_notified(sheet, cache_key):
+                    send_discord_msg(f"🏁 **สรุป: รถเข้าโรงงาน ครบแล้ว!**\n{base_msg}")
 
-        # Trigger 4: ออกครบ
-        if stats['total'] == stats['out'] and stats['total'] > 0:
-            cache_key = f"completed_out_{target_po_date}_{shift_key}"
-            if not is_already_notified(sheet, cache_key):
-                send_discord_msg(f"🛫 **สรุป: รถออกจากโรงงาน ครบทุกคันแล้ว!**\n{base_msg}")
+        # Trigger 4: ออกครบ (เช็คเมื่อกด Step 6 เท่านั้น)
+        if trigger_step == '6':
+            if stats['total'] == stats['out'] and stats['total'] > 0:
+                cache_key = f"completed_out_{target_po_date}_{shift_key}"
+                if not is_already_notified(sheet, cache_key):
+                    send_discord_msg(f"🛫 **สรุป: รถออกจากโรงงาน ครบแล้ว!**\n{base_msg}")
 
-        # Trigger 5: จบงานครบ
-        if stats['total'] == stats['done'] and stats['total'] > 0:
-            cache_key = f"completed_done_{target_po_date}_{shift_key}"
-            if not is_already_notified(sheet, cache_key):
-                send_discord_msg(f"🎉 **สรุป: จบงาน ครบทุกคันแล้ว!**\n{base_msg}")
+        # Trigger 5: จบงานครบ (เช็คเมื่อกด Step 8 เท่านั้น)
+        if trigger_step == '8':
+            if stats['total'] == stats['done'] and stats['total'] > 0:
+                cache_key = f"completed_done_{target_po_date}_{shift_key}"
+                if not is_already_notified(sheet, cache_key):
+                    send_discord_msg(f"🎉 **สรุป: จบงานส่งของ ครบทุกคันแล้ว!**\n{base_msg}")
 
     except Exception as e:
         print(f"Group Notify Error: {e}")
@@ -1881,7 +1889,7 @@ def update_status():
         # 2. ตรวจสอบกลุ่ม (เข้าครบ / ออกครบ / จบครบ)
         # เช็คทุกครั้งที่มีการ update Step 1, 6 หรือ 8
         if step in ['1', '6', '8']:
-            check_group_completion(sheet, target_row_data[0], target_row_data[2])
+            check_group_completion(sheet, target_row_data[0], target_row_data[2], step)
             
         # 3. เช็ค Late (ฝากเช็คทุกครั้งที่มีการกด Update)
         check_late_and_notify(sheet)

@@ -20,24 +20,29 @@ app.secret_key = os.environ.get('SECRET_KEY', 'lmt_driver_app_secret_key_2024')
 CORS(app)
 
 # ==========================================
-# [CONFIG] ตั้งค่า Discord Webhook ตรงนี้
+# [CONFIG] ตั้งค่า Discord Webhook
 # ==========================================
 DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1444236316404482139/UJc-I_NRT33p9UKCas5ATGgjAlqlrtxBuPhvKYKnI-Pz2_AyxAnOs_UFNl203_sqLsI5'
 
 def send_discord_msg(message):
     """ฟังก์ชันส่งข้อความเข้า Discord"""
     try:
-        if 'วาง_' in DISCORD_WEBHOOK_URL or not DISCORD_WEBHOOK_URL:
-            print("ยังไม่ได้ตั้งค่า Discord Webhook")
+        if not DISCORD_WEBHOOK_URL or 'วาง_' in DISCORD_WEBHOOK_URL:
+            print("Error: Discord Webhook URL is invalid")
             return
 
         payload = {
             "content": message,
-            "username": "LMT Transport Bot", # ชื่อบอทที่จะแสดง
-            "avatar_url": "https://cdn-icons-png.flaticon.com/512/2936/2936956.png" # รูปไอคอนบอท (เปลี่ยนได้)
+            "username": "LMT Transport Bot",
+            "avatar_url": "https://cdn-icons-png.flaticon.com/512/2936/2936956.png"
         }
         
-        requests.post(DISCORD_WEBHOOK_URL, json=payload)
+        response = requests.post(DISCORD_WEBHOOK_URL, json=payload)
+        if response.status_code == 204:
+            print("Discord notification sent successfully!")
+        else:
+            print(f"Failed to send Discord notification: {response.status_code} - {response.text}")
+            
     except Exception as e:
         print(f"Discord Notify Error: {e}")
 
@@ -73,10 +78,21 @@ def invalidate_cache(worksheet_name):
     if worksheet_name in cache_storage:
         cache_storage[worksheet_name] = {'data': None, 'timestamp': 0}
 
-def check_and_notify_shift_completion(sheet):
-    """ตรวจสอบว่ารถเข้าครบทุกคันหรือยัง และแจ้งเตือนผ่าน Discord"""
+# [CHANGED] รับพารามิเตอร์ target_round_time เพื่อเช็คเฉพาะกะที่เกี่ยวข้อง
+def check_and_notify_shift_completion(sheet, target_round_time):
+    """ตรวจสอบว่ารถเข้าครบทุกคันหรือยัง (เช็คเฉพาะกะของคนขับที่กดอัปเดต)"""
     try:
-        raw_jobs = sheet.worksheet('Jobs').get_all_records() # ดึงสดไม่ผ่าน Cache เพื่อความชัวร์
+        # 1. ระบุกะของผู้กด (Day หรือ Night)
+        target_is_day = True
+        try:
+            h_check = int(str(target_round_time).split(':')[0])
+            if h_check < 6 or h_check >= 19: target_is_day = False
+        except: 
+            print("Invalid round time, skipping check")
+            return
+
+        # 2. ดึงข้อมูลมานับยอด
+        raw_jobs = sheet.worksheet('Jobs').get_all_records()
         
         now_thai = datetime.now() + timedelta(hours=7)
         today_str = now_thai.strftime("%Y-%m-%d")
@@ -87,7 +103,6 @@ def check_and_notify_shift_completion(sheet):
             'night': {'total': 0, 'entered': 0}
         }
         
-        # นับรายคัน (Unique Trip)
         unique_cars = {}
         for job in todays_jobs:
             if str(job.get('Status', '')).lower() == 'cancel': continue
@@ -108,14 +123,15 @@ def check_and_notify_shift_completion(sheet):
             if str(job.get('T1_Enter', '')).strip() != '':
                 target['entered'] += 1
 
-        # ส่งแจ้งเตือนถ้าครบ
-        if stats['day']['total'] > 0 and stats['day']['total'] == stats['day']['entered']:
-            msg = f"☀️ **แจ้งเตือน: รถรอบเช้าเข้าโรงงาน ครบแล้ว!**\n✅ จำนวนทั้งหมด: `{stats['day']['total']}` คัน\n🕒 เวลา: `{now_thai.strftime('%H:%M')} น.`"
-            send_discord_msg(msg)
-
-        if stats['night']['total'] > 0 and stats['night']['total'] == stats['night']['entered']:
-            msg = f"🌙 **แจ้งเตือน: รถรอบดึกเข้าโรงงาน ครบแล้ว!**\n✅ จำนวนทั้งหมด: `{stats['night']['total']}` คัน\n🕒 เวลา: `{now_thai.strftime('%H:%M')} น.`"
-            send_discord_msg(msg)
+        # 3. ส่งแจ้งเตือน (เฉพาะกะที่ตรงกับคนกด)
+        if target_is_day:
+            if stats['day']['total'] > 0 and stats['day']['total'] == stats['day']['entered']:
+                msg = f"☀️ **แจ้งเตือน: รถรอบเช้าเข้าโรงงาน ครบแล้ว!**\n✅ จำนวนทั้งหมด: `{stats['day']['total']}` คัน\n🕒 เวลา: `{now_thai.strftime('%H:%M')} น.`"
+                send_discord_msg(msg)
+        else:
+            if stats['night']['total'] > 0 and stats['night']['total'] == stats['night']['entered']:
+                msg = f"🌙 **แจ้งเตือน: รถรอบดึกเข้าโรงงาน ครบแล้ว!**\n✅ จำนวนทั้งหมด: `{stats['night']['total']}` คัน\n🕒 เวลา: `{now_thai.strftime('%H:%M')} น.`"
+                send_discord_msg(msg)
 
     except Exception as e:
         print(f"Check Notify Error: {e}")
@@ -1073,6 +1089,7 @@ def export_pdf_summary():
     for group in grouped_jobs:
         if not group: continue
         first_job = group[0]
+        
         round_time = str(first_job.get('Round', '')).strip()
         is_day_shift = True
         try:
@@ -1080,17 +1097,17 @@ def export_pdf_summary():
             if not (6 <= hour <= 18): is_day_shift = False
         except: pass
 
-        target_sum = sum_day if is_day_shift else sum_night
-        target_sum['total'] += 1
-        if first_job.get('T1_Enter'): target_sum['t1'] += 1
-        if first_job.get('T2_StartLoad'): target_sum['t2'] += 1
-        if first_job.get('T3_EndLoad'): target_sum['t3'] += 1
-        if first_job.get('T4_SubmitDoc'): target_sum['t4'] += 1
-        if first_job.get('T5_RecvDoc'): target_sum['t5'] += 1
-        if first_job.get('T6_Exit'): target_sum['t6'] += 1
+        target = sum_day if is_day_shift else sum_night
+        target['count'] += 1 
+        if first_job.get('T1_Enter'): target['t1'] += 1
+        if first_job.get('T2_StartLoad'): target['t2'] += 1
+        if first_job.get('T3_EndLoad'): target['t3'] += 1
+        if first_job.get('T4_SubmitDoc'): target['t4'] += 1
+        if first_job.get('T5_RecvDoc'): target['t5'] += 1
+        if first_job.get('T6_Exit'): target['t6'] += 1
         
-        if any(str(j.get('T7_ArriveBranch', '')).strip() != '' for j in group): target_sum['t7'] += 1 
-        if all(str(j.get('T8_EndJob', '')).strip() != '' for j in group): target_sum['t8'] += 1       
+        if any(str(j.get('T7_ArriveBranch', '')).strip() != '' for j in group): target['t7'] += 1 
+        if all(str(j.get('T8_EndJob', '')).strip() != '' for j in group): target['t8'] += 1       
 
     sum_total = create_counter()
     for k in sum_total: sum_total[k] = sum_day[k] + sum_night[k]
@@ -1250,240 +1267,6 @@ def export_pdf_summary():
     filename = f"Summary_{date_filter if date_filter else 'All'}.pdf"
     return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename) 
 
-@app.route('/tracking')
-def customer_view():
-    sheet = get_db()
-    raw_jobs = get_cached_records(sheet, 'Jobs')
-    all_dates = sorted(list(set([str(j['PO_Date']).strip() for j in raw_jobs])), reverse=True)
-    
-    date_filter = request.args.get('date_filter')
-    now_thai = datetime.now() + timedelta(hours=7)
-    if not date_filter: date_filter = now_thai.strftime("%Y-%m-%d")
-
-    jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
-    
-    try:
-        current_date_obj = datetime.strptime(date_filter, "%Y-%m-%d")
-        prev_date = (current_date_obj - timedelta(days=1)).strftime("%Y-%m-%d")
-        next_date = (current_date_obj + timedelta(days=1)).strftime("%Y-%m-%d")
-    except ValueError:
-        prev_date = date_filter
-        next_date = date_filter
-
-    jobs_by_trip_key = {}
-    total_done_jobs = 0
-    total_branches = len(jobs)
-    
-    for job in jobs:
-        trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']))
-        if trip_key not in jobs_by_trip_key: jobs_by_trip_key[trip_key] = []
-        jobs_by_trip_key[trip_key].append(job)
-        if job['Status'] == 'Done': total_done_jobs += 1
-            
-        job['is_late'] = False
-        job['delay_tooltip'] = ""
-        t_plan_str = str(job.get('Round', '')).strip()
-        t_act_str = str(job.get('T2_StartLoad', '')).strip()
-        
-        if t_plan_str and t_act_str:
-            try:
-                fmt_plan = "%H:%M" if len(t_plan_str) <= 5 else "%H:%M:%S"
-                fmt_act = "%H:%M" if len(t_act_str) <= 5 else "%H:%M:%S"
-                t_plan = datetime.strptime(t_plan_str, fmt_plan)
-                t_act = datetime.strptime(t_act_str, fmt_act)
-                if (t_plan - t_act).total_seconds() > 12 * 3600: t_act = t_act + timedelta(days=1)
-                
-                if t_act > t_plan:
-                    job['is_late'] = True
-                    diff = t_act - t_plan
-                    total_seconds = diff.total_seconds()
-                    hours = int(total_seconds // 3600)
-                    minutes = int((total_seconds % 3600) // 60)
-                    job['delay_tooltip'] = f"ล่าช้า {hours} ชม. {minutes} น."
-                else:
-                    job['delay_tooltip'] = "เข้าโหลดตรงตามเวลา"
-            except (ValueError, TypeError): pass
-            
-    completed_trips = 0
-    for trip_key, job_list in jobs_by_trip_key.items():
-        if all(job['Status'] == 'Done' for job in job_list): completed_trips += 1
-            
-    total_trips = len(jobs_by_trip_key)
-    total_running_jobs = total_branches - total_done_jobs
-
-    def sort_key_func(job):
-        car_no_str = str(job['Car_No']).strip()
-        try: car_no_int = int(car_no_str)
-        except ValueError: car_no_int = 99999 
-        return (car_no_int)
-
-    jobs = sorted(jobs, key=sort_key_func)
-    
-    return render_template('customer_view.html', 
-                           jobs=jobs, all_dates=all_dates, current_date=date_filter,
-                           total_trips=total_trips, completed_trips=completed_trips,
-                           total_branches=total_branches, total_done_jobs=total_done_jobs,
-                           total_running_jobs=total_running_jobs,
-                           prev_date=prev_date, next_date=next_date)
-
-@app.route('/driver')
-def driver_select():
-    sheet = get_db()
-    drivers = sheet.worksheet('Drivers').col_values(1)[1:]
-    all_jobs = get_cached_records(sheet, 'Jobs')
-    now_thai = datetime.now() + timedelta(hours=7)
-    
-    driver_info = {} 
-    for name in drivers:
-        driver_info[name] = {
-            'pending_set': set(), 
-            'pending_count': 0, 
-            'urgent_msg': '', 'urgent_color': '', 'urgent_time': '', 'sort_weight': 999
-        }
-
-    for job in all_jobs:
-        d_name = job['Driver']
-        if d_name not in driver_info: continue
-        
-        if job['Status'] != 'Done':
-            trip_key = f"{job['PO_Date']}_{job['Round']}_{job['Car_No']}"
-            driver_info[d_name]['pending_set'].add(trip_key)
-            try:
-                load_date_str = job.get('Load_Date', job['PO_Date'])
-                round_str = str(job['Round']).strip()
-                job_dt_str = f"{load_date_str} {round_str}"
-                try: job_dt = datetime.strptime(job_dt_str, "%Y-%m-%d %H:%M")
-                except ValueError: job_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
-                
-                diff = job_dt - now_thai
-                hours_diff = diff.total_seconds() / 3600
-                h = job_dt.hour
-                m = job_dt.minute
-                
-                msg, color, weight = "", "", 999
-                if hours_diff <= 0:
-                    if hours_diff > -12: 
-                        msg, color, weight = "❗ โหลดตอนนี้", "bg-red-500 text-white border-red-600 animate-pulse shadow-red-200", 1
-                elif 0 < hours_diff <= 16:
-                    if 6 <= h <= 12:   msg, color = "☀️ โหลดเช้านี้", "bg-yellow-100 text-yellow-700 border-yellow-200"
-                    elif 13 <= h <= 18: msg, color = "⛅ โหลดบ่ายนี้", "bg-orange-100 text-orange-700 border-orange-200"
-                    else:               msg, color = "🌙 โหลดคืนนี้", "bg-indigo-100 text-indigo-700 border-indigo-200"
-                    weight = 2
-                elif 16 < hours_diff <= 40:
-                    period = "คืนพรุ่งนี้" if (h >= 19 or h <= 5) else "วันพรุ่งนี้"
-                    if driver_info[d_name]['sort_weight'] > 3:
-                        msg, color, weight = f"⏩ เตรียมโหลด{period}", "bg-gray-100 text-gray-500 border-gray-200", 3
-
-                if weight < driver_info[d_name]['sort_weight']:
-                    driver_info[d_name]['urgent_msg'] = msg
-                    driver_info[d_name]['urgent_color'] = color
-                    driver_info[d_name]['urgent_time'] = f"{h:02}:{m:02} น."
-                    driver_info[d_name]['sort_weight'] = weight
-            except Exception as e: pass
-    
-    for name in drivers:
-        driver_info[name]['pending_count'] = len(driver_info[name]['pending_set'])
-    return render_template('driver_select.html', drivers=drivers, driver_info=driver_info)
-
-@app.route('/driver/tasks', methods=['GET'])
-def driver_tasks():
-    driver_name = request.args.get('name')
-    if not driver_name: return redirect(url_for('driver_select'))
-        
-    sheet = get_db()
-    raw_data = get_cached_records(sheet, 'Jobs')
-    
-    driver_jobs_with_id = []
-    for idx, job in enumerate(raw_data):
-        if job['Driver'] == driver_name:
-            job_copy = job.copy()
-            job_copy['row_id'] = idx + 2
-            driver_jobs_with_id.append(job_copy)
-
-    trips = {}
-    for job in driver_jobs_with_id:
-        trip_key = (str(job['PO_Date']), str(job['Round']), str(job['Car_No']))
-        if trip_key not in trips: trips[trip_key] = []
-        trips[trip_key].append(job)
-
-    final_jobs_list = []
-    now_thai = datetime.now() + timedelta(hours=7)
-    today_date = now_thai.date()
-    
-    for key, job_list in trips.items():
-        is_trip_fully_done = all(j['Status'] == 'Done' for j in job_list)
-        show_this_trip = False
-        
-        if not is_trip_fully_done:
-            show_this_trip = True
-        else:
-            try:
-                job_date_str = job_list[0].get('Load_Date', job_list[0]['PO_Date'])
-                pd = datetime.strptime(job_date_str, "%Y-%m-%d").date()
-                if pd >= today_date:
-                    show_this_trip = True
-            except: 
-                show_this_trip = True
-            
-        if show_this_trip:
-            final_jobs_list.extend(job_list)
-
-    def sort_key_func(job):
-        return (str(job['PO_Date']), str(job.get('Load_Date', '')), str(job['Round']))
-    
-    my_jobs = sorted(final_jobs_list, key=sort_key_func)
-    today_date_str = now_thai.strftime("%Y-%m-%d")
-
-    for job in my_jobs:
-        try:
-            load_date_str = job.get('Load_Date', job['PO_Date'])
-            round_str = str(job['Round']).strip()
-            job_dt_str = f"{load_date_str} {round_str}"
-            try: job_dt = datetime.strptime(job_dt_str, "%Y-%m-%d %H:%M")
-            except: job_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
-            
-            diff = job_dt - now_thai
-            hours_diff = diff.total_seconds() / 3600
-            th_year = job_dt.year + 543
-            real_date_str = f"{job_dt.day}/{job_dt.month}/{str(th_year)[2:]}"
-            h = job_dt.hour
-
-            job['smart_title'] = f"เวลา {round_str}"
-            job['smart_detail'] = f"วันที่ {real_date_str}"
-            job['ui_class'] = {'bg': 'bg-gray-50', 'text': 'text-gray-500', 'icon': 'fa-clock'}
-
-            if hours_diff <= 0:
-                if hours_diff > -12:
-                    job['smart_title'] = f"❗ เข้าโหลดงานตอนนี้"
-                    job['ui_class'] = {'bg': 'bg-red-50 border-red-100 ring-2 ring-red-200 animate-pulse', 'text': 'text-red-600', 'icon': 'fa-truck-ramp-box'}
-                else:
-                    job['smart_title'] = f"🔥 งานค้างส่ง"
-                    job['ui_class'] = {'bg': 'bg-red-50 border-red-100', 'text': 'text-red-500', 'icon': 'fa-triangle-exclamation'}
-                job['smart_detail'] = f"กำหนด: {round_str} น. ({real_date_str})"
-            elif 0 < hours_diff <= 16:
-                if 6 <= h <= 12:   p, i, t = "เช้านี้", "fa-sun", "yellow"
-                elif 13 <= h <= 18: p, i, t = "บ่ายนี้", "fa-cloud-sun", "orange"
-                else:               p, i, t = "คืนนี้", "fa-moon", "indigo"
-                job['smart_title'] = f"โหลดสินค้า{p}"
-                job['smart_detail'] = f"เวลา {round_str} น. ของวันที่ {real_date_str}"
-                job['ui_class'] = {'bg': f'bg-{t}-50 border-{t}-100 ring-1 ring-{t}-50', 'text': f'text-{t}-600', 'icon': i}
-            elif 16 < hours_diff <= 40:
-                period = "คืนพรุ่งนี้" if (h >= 19 or h <= 5) else "วันพรุ่งนี้"
-                job['smart_title'] = f"⏩ เตรียมโหลด{period}"
-                job['smart_detail'] = f"เวลา {round_str} น. ของวันที่ {real_date_str}"
-                job['ui_class'] = {'bg': 'bg-blue-50 border-blue-100', 'text': 'text-blue-600', 'icon': 'fa-calendar-day'}
-            else:
-                job['smart_title'] = f"📅 งานล่วงหน้า"
-                job['smart_detail'] = f"วันที่ {real_date_str} เวลา {round_str} น."
-                job['ui_class'] = {'bg': 'bg-gray-50 border-gray-100', 'text': 'text-gray-500', 'icon': 'fa-calendar-days'}
-            
-            po_d = datetime.strptime(job['PO_Date'], "%Y-%m-%d")
-            po_th = f"{po_d.day}/{po_d.month}/{str(po_d.year+543)[2:]}"
-            job['po_label'] = f"(เอกสาร PO วันที่ {po_th})"
-        except Exception as e: pass
-
-    return render_template('driver_tasks.html', name=driver_name, jobs=my_jobs, today_date=today_date_str)
-
 @app.route('/update_status', methods=['POST'])
 def update_status():
     row_id_target = int(request.form['row_id'])
@@ -1540,8 +1323,16 @@ def update_status():
     
     invalidate_cache('Jobs')
     
+    # [NEW] Trigger notification checks
     if step == '1' and mode == 'update':
-        check_and_notify_shift_completion(sheet)
+        # Fetch the updated row to determine round time
+        try:
+            updated_row_data = ws.row_values(row_id_target)
+            if len(updated_row_data) > 2:
+                round_time_str = updated_row_data[2] # Column C
+                check_and_notify_shift_completion(sheet, round_time_str)
+        except Exception as e:
+            print(f"Error fetching row for notification: {e}")
         
     return redirect(url_for('driver_tasks', name=driver_name))
 

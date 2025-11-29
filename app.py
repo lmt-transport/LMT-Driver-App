@@ -137,42 +137,55 @@ def notify_individual_movement(sheet, job_data, step):
 
 # --- NEW Notification Logic: 5.1 รายคัน (จบงานครบทุกสาขา) ---
 def check_if_trip_is_done(sheet, row_data):
-    """ตรวจสอบว่า Trip จบงานครบทุกสาขาแล้วหรือไม่ (แก้ไข Logic ให้แม่นยำขึ้น)"""
+    """ตรวจสอบว่า Trip จบงานครบทุกสาขาแล้วหรือไม่ (ใช้ get_all_values เพื่อความแม่นยำเรื่อง Type)"""
     try:
-        # ดึงข้อมูลจากแถวที่เพิ่งกดอัปเดต
+        # เตรียมข้อมูลเป้าหมาย (แปลงเป็น String และตัดช่องว่างออกให้หมด)
         target_po = str(row_data[0]).strip()
         target_round = str(row_data[2]).strip()
         target_car = str(row_data[3]).strip()
         
-        # ตรวจสอบว่า row_data มีข้อมูลถึง Branch Name หรือไม่ (Index 6)
+        # สาขาปัจจุบันที่กำลังกดจบงาน
         current_branch = str(row_data[6]).strip() if len(row_data) > 6 else ""
         
-        # ดึงข้อมูลทั้งหมดมาตรวจสอบ
-        raw_jobs = sheet.worksheet('Jobs').get_all_records()
+        # ใช้ get_all_values() แทน get_all_records() เพื่อให้ได้ข้อมูลเป็น String ทั้งหมดเหมือนกัน
+        # (ป้องกันปัญหา "21" != 21 หรือ "12:00" != "12:00:00")
+        all_rows = sheet.worksheet('Jobs').get_all_values()
         
-        trip_jobs_status = []
+        # ตัด Header แถวแรกออก
+        data_rows = all_rows[1:]
         
-        for j in raw_jobs:
-            # กรองเอาเฉพาะงานใน Trip เดียวกัน (PO, Round, Car ตรงกัน)
-            if (str(j.get('PO_Date', '')).strip() == target_po and 
-                str(j.get('Round', '')).strip() == target_round and 
-                str(j.get('Car_No', '')).strip() == target_car):
+        trip_statuses = []
+        
+        for row in data_rows:
+            # ป้องกันแถวว่าง หรือข้อมูลไม่ครบ
+            if len(row) < 16: continue
+            
+            # ดึงข้อมูลจากแถว (Column A=0, C=2, D=3)
+            r_po = str(row[0]).strip()
+            r_round = str(row[2]).strip()
+            r_car = str(row[3]).strip()
+            
+            # เปรียบเทียบ: ต้องตรงกันทั้ง PO, รอบ, และคันรถ
+            if r_po == target_po and r_round == target_round and r_car == target_car:
+                r_branch = str(row[6]).strip()
+                r_status = str(row[15]).strip() # Column P (Status) คือ index 15
                 
-                status = str(j.get('Status', '')).strip()
-                branch = str(j.get('Branch_Name', '')).strip()
+                # Logic สำคัญ: ถ้าเป็นสาขาที่เราเพิ่งกดจบงาน ให้ถือว่าเป็น 'Done' ทันที
+                # (Overrule ข้อมูลเก่าใน Sheet)
+                if r_branch == current_branch:
+                    r_status = 'Done'
                 
-                # *** สำคัญ: ถ้าเป็นสาขาที่เราเพิ่งกดจบงาน ให้ถือว่าเป็น 'Done' ทันที ***
-                # (โดยไม่ต้องรอข้อมูลจาก Sheet ซึ่งอาจจะยังไม่อัปเดต)
-                if branch == current_branch:
-                    status = 'Done'
-                
-                trip_jobs_status.append(status)
+                trip_statuses.append(r_status)
         
-        if not trip_jobs_status: return False
+        # ถ้าไม่เจอ Trip นี้เลย (เป็นไปไม่ได้ แต่กันไว้ก่อน)
+        if not trip_statuses: return False
         
-        # ต้องไม่มีงานไหนเลยที่ไม่ใช่ Done (และต้องไม่ใช่ Cancel)
-        # หรือเช็คง่ายๆ ว่าทุกงานต้องเป็น Done
-        is_all_done = all(s == 'Done' for s in trip_jobs_status)
+        # ตรวจสอบว่า "ทุกงาน" ใน Trip นี้ต้องเป็น Done
+        # (และต้องระวังไม่นับงานที่ Cancel แต่ในโค้ดนี้เราดูแค่ Status ที่เป็น Done)
+        is_all_done = all(s == 'Done' for s in trip_statuses)
+        
+        # Debug Print (ดูใน Terminal ได้ถ้ายากรู้ผล)
+        # print(f"Check Trip: {target_car} | Statuses: {trip_statuses} -> Result: {is_all_done}")
         
         return is_all_done
 

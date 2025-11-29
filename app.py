@@ -1090,6 +1090,7 @@ def update_status():
     
     invalidate_cache('Jobs')
     
+    # [NEW] Trigger notification checks
     if step == '1' and mode == 'update':
         # Fetch the updated row to determine round time
         try:

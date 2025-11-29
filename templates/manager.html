@@ -156,7 +156,8 @@
                                         
                                         {% set modal_info = {
                                             'carNo': job.Car_No,
-                                            'loadDate': show_load | thai_date,  'loadDate': show_load | thai_date,
+                                            'poDate': job.PO_Date | thai_date,
+                                            'loadDate': show_load | thai_date,
                                             'roundTime': job.Round,
                                             'branches': trip_branches,
                                             'oldDriver': job.Driver,
@@ -565,16 +566,16 @@
             </div>
 
             <div class="flex justify-end pt-2 gap-3 border-t mt-4">
-    <button onclick="closeChangeDriverModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium">ปิด</button>
-    
-    <button id="btn-save-driver" onclick="saveChangeDriverToDB()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow flex items-center gap-2">
-        <i class="fa-solid fa-floppy-disk"></i> บันทึกลงระบบ
-    </button>
+                <button onclick="closeChangeDriverModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium">ปิด</button>
+                
+                <button id="btn-save-driver" onclick="saveChangeDriverToDB()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow flex items-center gap-2">
+                    <i class="fa-solid fa-floppy-disk"></i> บันทึกลงระบบ
+                </button>
 
-    <button onclick="copyChangeDriverText()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold shadow flex items-center gap-2">
-        <i class="fa-regular fa-copy"></i> คัดลอกข้อความ
-    </button>
-</div>
+                <button onclick="copyChangeDriverText()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold shadow flex items-center gap-2">
+                    <i class="fa-regular fa-copy"></i> คัดลอกข้อความ
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -766,7 +767,6 @@
         copyToClipboard(msg, "ข้อความอัพเดทสถานะ");
     }
 
-    // --- NEW: Change Driver Logic [FIXED SYNTAX ERROR] ---
     let currentModalData = {};
 
     function openChangeDriverModal(buttonEl) {
@@ -822,74 +822,8 @@
             document.getElementById('md_newPhone').innerText = "-";
         }
     }
-	
-	// --- [NEW] Function บันทึกข้อมูลคนขับลงฐานข้อมูล ---
-    function saveChangeDriverToDB() {
-        const newDriverName = document.getElementById('md_newDriverSelect').value;
-        const newPlate = document.getElementById('md_newPlate').innerText;
 
-        if (!newDriverName) { 
-            alert('❌ กรุณาเลือกคนขับใหม่ก่อนบันทึก'); 
-            return; 
-        }
-
-        if (!confirm(`ยืนยันการเปลี่ยนคนขับเป็น "${newDriverName}" \nสำหรับรถคันที่ #${currentModalData.carNo} ทุกรายการ?`)) {
-            return;
-        }
-
-        // แสดง Loading ที่ปุ่ม
-        const btn = document.getElementById('btn-save-driver');
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> กำลังบันทึก...';
-        btn.disabled = true;
-        btn.classList.add('opacity-50');
-
-        // แปลงวันที่จาก DD/MM/YY (ที่แสดงผล) กลับเป็น YYYY-MM-DD (เพื่อค้นหาใน DB)
-        // หมายเหตุ: currentModalData.loadDate มาจาก show_load | thai_date ซึ่งคือ DD/MM/YY
-        // แต่ใน DB เก็บ PO_Date เป็น YYYY-MM-DD เราต้องใช้ PO_Date จาก data-info ที่ส่งมา
-        // *** เพื่อความชัวร์ ผมจะดึง PO Date จากหน้าจอหลัก (current_filter_date) เพราะเรากรองหน้านี้ด้วย PO นั้นอยู่แล้ว ***
-        const targetPO = document.querySelector('input[name="date_filter"]').value; 
-
-        // สร้าง Payload
-        const payload = {
-            po_date: targetPO, 
-            round_time: currentModalData.roundTime,
-            car_no: currentModalData.carNo,
-            new_driver: newDriverName,
-            new_plate: newPlate
-        };
-
-        fetch('/update_driver', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload)
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                alert(`✅ บันทึกเรียบร้อย! อัพเดทข้อมูลไป ${data.count} แถว`);
-                location.reload(); // รีโหลดหน้าเพื่อแสดงข้อมูลใหม่
-            } else {
-                alert('❌ เกิดข้อผิดพลาด: ' + data.message);
-                // คืนค่าปุ่ม
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                btn.classList.remove('opacity-50');
-            }
-        })
-        .catch((error) => {
-            console.error('Error:', error);
-            alert('❌ เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
-            // คืนค่าปุ่ม
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-            btn.classList.remove('opacity-50');
-        });
-    }
-
-function copyChangeDriverText() {
+    function copyChangeDriverText() {
         const newDriverName = document.getElementById('md_newDriverSelect').value;
         if (!newDriverName) { alert('กรุณาเลือกคนขับใหม่'); return; }
 
@@ -902,7 +836,6 @@ function copyChangeDriverText() {
             branchText += `📍 ${b}\n`;
         });
 
-        // ตกแต่งข้อความด้วย Emoji
         const msg = `เรียน ผู้เกี่ยวข้อง
 📢 แจ้งแก้ไขเปลี่ยนทะเบียนรถ/คนขับรับงาน
 
@@ -929,6 +862,67 @@ ${branchText}
 ขอบคุณครับ 🙏`;
 
         copyToClipboard(msg, "ข้อความแจ้งเปลี่ยนงาน");
+    }
+
+    // --- [NEW] Function บันทึกข้อมูลคนขับลงฐานข้อมูล ---
+    function saveChangeDriverToDB() {
+        const newDriverName = document.getElementById('md_newDriverSelect').value;
+        const newPlate = document.getElementById('md_newPlate').innerText;
+
+        if (!newDriverName) { 
+            alert('❌ กรุณาเลือกคนขับใหม่ก่อนบันทึก'); 
+            return; 
+        }
+
+        if (!confirm(`ยืนยันการเปลี่ยนคนขับเป็น "${newDriverName}" \nสำหรับรถคันที่ #${currentModalData.carNo} ทุกรายการ?`)) {
+            return;
+        }
+
+        // แสดง Loading ที่ปุ่ม
+        const btn = document.getElementById('btn-save-driver');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> กำลังบันทึก...';
+        btn.disabled = true;
+        btn.classList.add('opacity-50');
+
+        // ใช้ PO Date จากหน้าจอหลัก
+        const targetPO = document.querySelector('input[name="date_filter"]').value; 
+
+        // สร้าง Payload
+        const payload = {
+            po_date: targetPO, 
+            round_time: currentModalData.roundTime,
+            car_no: currentModalData.carNo,
+            new_driver: newDriverName,
+            new_plate: newPlate
+        };
+
+        fetch('/update_driver', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert(`✅ บันทึกเรียบร้อย! อัพเดทข้อมูลไป ${data.count} แถว`);
+                location.reload(); // รีโหลดหน้า
+            } else {
+                alert('❌ เกิดข้อผิดพลาด: ' + data.message);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+            }
+        })
+        .catch((error) => {
+            console.error('Error:', error);
+            alert('❌ เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+            btn.classList.remove('opacity-50');
+        });
     }
 </script>
 

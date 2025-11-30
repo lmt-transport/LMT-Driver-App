@@ -4,7 +4,12 @@
 <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
 <style>
-    /* Custom Scrollbar for table */
+    body, h1, h2, h3, h4, h5, h6, p, span, div, table, input, select, button, textarea {
+        font-family: 'Kanit', sans-serif !important;
+    }
+    .table-data { font-size: 0.8rem; } 
+    .table-header { font-size: 0.75rem; }
+    
     .custom-scrollbar::-webkit-scrollbar {
         height: 8px;
         width: 8px;
@@ -24,251 +29,282 @@
 
 <div class="w-full max-w-[99%] mx-auto pb-12">
     
-    <div class="bg-gradient-to-r from-indigo-900 to-blue-800 text-white p-6 md:p-8 rounded-2xl shadow-xl mb-8 text-center relative overflow-hidden">
+    <div class="bg-gradient-to-r from-green-700 to-teal-600 text-white p-6 md:p-8 rounded-2xl shadow-xl mb-8 text-center relative overflow-hidden">
         <div class="absolute top-0 left-0 w-full h-full bg-white opacity-5" style="background-image: radial-gradient(circle, #ffffff 1px, transparent 1px); background-size: 20px 20px;"></div>
         <div class="relative z-10">
             <h1 class="text-2xl md:text-3xl font-bold mb-2 tracking-wide"><i class="fa-solid fa-truck-fast mr-2"></i>ระบบติดตามสถานะการจัดส่งสินค้า LMT. Transport</h1>
-            <p class="text-blue-200 text-sm font-light">Real-time Logistics Tracking Dashboard</p>
+            <p class="text-green-100 text-sm font-light">Real-time Logistics Tracking Dashboard</p>
         </div>
     </div>
     
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-8">
-        <div class="relative overflow-hidden bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-gray-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-            <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 rounded-full bg-gradient-to-br from-blue-50 to-blue-100 opacity-50 blur-2xl group-hover:opacity-80 transition"></div>
-            <div class="relative z-10 flex flex-col items-center">
-                <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-lg md:text-xl shadow-blue-200 shadow-lg mb-3 transform group-hover:scale-110 transition duration-300"><i class="fa-solid fa-route"></i></div>
-                <div class="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">เที่ยววิ่งทั้งหมด</div>
-                <div class="text-2xl md:text-3xl font-extrabold text-gray-800">{{ total_trips }}</div>
-            </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500">
+            <div class="text-gray-500 text-xs font-bold uppercase">เที่ยววิ่งทั้งหมด</div>
+            <div class="text-2xl font-bold text-gray-800">{{ total_trips }}</div>
         </div>
-        <div class="relative overflow-hidden bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-gray-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-            <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 rounded-full bg-gradient-to-br from-green-50 to-green-100 opacity-50 blur-2xl group-hover:opacity-80 transition"></div>
-            <div class="relative z-10 flex flex-col items-center">
-                <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center text-lg md:text-xl shadow-emerald-200 shadow-lg mb-3 transform group-hover:scale-110 transition duration-300"><i class="fa-solid fa-flag-checkered"></i></div>
-                <div class="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">เที่ยวจบแล้ว</div>
-                <div class="text-2xl md:text-3xl font-extrabold text-emerald-600">{{ completed_trips }}</div>
-            </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-700">
+            <div class="text-gray-500 text-xs font-bold uppercase">เที่ยวจบแล้ว</div>
+            <div class="text-2xl font-bold text-green-700">{{ completed_trips }}</div>
         </div>
-        <div class="relative overflow-hidden bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-gray-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-            <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 rounded-full bg-gradient-to-br from-gray-50 to-gray-200 opacity-50 blur-2xl group-hover:opacity-80 transition"></div>
-            <div class="relative z-10 flex flex-col items-center">
-                <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-gray-600 to-gray-800 text-white flex items-center justify-center text-lg md:text-xl shadow-gray-300 shadow-lg mb-3 transform group-hover:scale-110 transition duration-300"><i class="fa-solid fa-store"></i></div>
-                <div class="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">สาขาทั้งหมด</div>
-                <div class="text-2xl md:text-3xl font-extrabold text-gray-700">{{ total_branches }}</div>
-            </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-gray-400">
+            <div class="text-gray-500 text-xs font-bold uppercase">สาขาทั้งหมด</div>
+            <div class="text-2xl font-bold text-gray-800">{{ total_branches }}</div>
         </div>
-        <div class="relative overflow-hidden bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-gray-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-            <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 rounded-full bg-gradient-to-br from-green-50 to-green-100 opacity-50 blur-2xl group-hover:opacity-80 transition"></div>
-            <div class="relative z-10 flex flex-col items-center">
-                <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-green-500 to-green-600 text-white flex items-center justify-center text-lg md:text-xl shadow-green-200 shadow-lg mb-3 transform group-hover:scale-110 transition duration-300"><i class="fa-solid fa-clipboard-check"></i></div>
-                <div class="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">สาขาจบแล้ว</div>
-                <div class="text-2xl md:text-3xl font-extrabold text-green-600">{{ total_done_jobs }}</div>
-            </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-500">
+            <div class="text-gray-500 text-xs font-bold uppercase">สาขาจบแล้ว</div>
+            <div class="text-2xl font-bold text-green-600">{{ total_done_jobs }}</div>
         </div>
-        <div class="relative overflow-hidden bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-gray-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-            <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 rounded-full bg-gradient-to-br from-yellow-50 to-orange-100 opacity-50 blur-2xl group-hover:opacity-80 transition"></div>
-            <div class="relative z-10 flex flex-col items-center">
-                <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center text-lg md:text-xl shadow-orange-200 shadow-lg mb-3 transform group-hover:scale-110 transition duration-300 animate-pulse"><i class="fa-solid fa-truck-fast"></i></div>
-                <div class="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">กำลังวิ่ง</div>
-                <div class="text-2xl md:text-3xl font-extrabold text-orange-500">{{ total_running_jobs }}</div>
-            </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-yellow-500">
+            <div class="text-gray-500 text-xs font-bold uppercase">กำลังวิ่ง</div>
+            <div class="text-2xl font-bold text-yellow-600">{{ total_running_jobs }}</div>
         </div>
     </div>
     
     <div class="flex flex-col lg:flex-row justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 gap-4">
-        
         <form action="/tracking" method="GET" id="tracking-filter-form" class="flex items-center gap-2 w-full lg:w-auto bg-gray-50 p-1.5 rounded-lg border border-gray-300 shadow-inner justify-center lg:justify-start">
-            
-            <a href="/tracking?date_filter={{ prev_date }}" class="px-3 py-1 text-gray-500 hover:text-indigo-600 border-r border-gray-300 transition" title="วันก่อนหน้า">
-                <i class="fa-solid fa-chevron-left"></i>
-            </a>
-
-            <span class="text-xs font-bold text-gray-500 pl-2 uppercase hidden sm:inline">Date:</span>
-            
-            <input type="date" 
-                   name="date_filter" 
-                   id="customer_date_filter" 
-                   value="{{ current_date }}" 
-                   onchange="this.form.submit()" 
-                   class="bg-transparent border-none text-sm font-bold text-gray-700 focus:ring-0 cursor-pointer h-8 w-32 sm:w-auto text-center sm:text-left">
-
-            <a href="/tracking?date_filter={{ next_date }}" class="px-3 py-1 text-gray-500 hover:text-indigo-600 border-l border-gray-300 transition" title="วันถัดไป">
-                <i class="fa-solid fa-chevron-right"></i>
-            </a>
-            
-            <a href="/tracking" class="px-3 py-1 text-indigo-500 hover:text-indigo-700 border-l border-gray-300 transition" title="กลับไปวันนี้">
-                <i class="fa-solid fa-rotate-right"></i>
-            </a>
+            <a href="/tracking?date_filter={{ prev_date }}" class="px-3 py-1 text-gray-500 hover:text-green-600 border-r border-gray-300 transition"><i class="fa-solid fa-chevron-left"></i></a>
+            <span class="text-xs font-bold text-gray-500 pl-2 uppercase hidden sm:inline">PO Date:</span>
+            <input type="date" name="date_filter" id="customer_date_filter" value="{{ current_date }}" onchange="this.form.submit()" class="bg-transparent border-none text-sm font-bold text-gray-700 focus:ring-0 cursor-pointer h-8 w-32 sm:w-auto text-center sm:text-left">
+            <a href="/tracking?date_filter={{ next_date }}" class="px-3 py-1 text-gray-500 hover:text-green-600 border-l border-gray-300 transition"><i class="fa-solid fa-chevron-right"></i></a>
+            <a href="/tracking" class="px-3 py-1 text-green-500 hover:text-green-700 border-l border-gray-300 transition"><i class="fa-solid fa-rotate-right"></i></a>
         </form>
 
         <div class="flex flex-wrap gap-2 w-full lg:w-auto justify-center">            
-            <a href="#" onclick="triggerCustomerPDF()" class="bg-red-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-red-700 transition shadow-md flex items-center gap-2 transform active:scale-95">
-                <i class="fa-solid fa-file-pdf"></i> <span class="hidden sm:inline">PDF Export</span>
-            </a>
-            
-            <a href="#" onclick="triggerCompactPDF()" class="bg-orange-500 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-orange-600 transition shadow-md flex items-center gap-2 transform active:scale-95">
-                <i class="fa-solid fa-file-contract"></i> <span class="hidden sm:inline">PDF Summary</span>
-            </a>
-            
-            <a href="#" onclick="triggerCustomerExport()" class="bg-green-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-green-700 transition shadow-md flex items-center gap-2 transform active:scale-95">
-                <i class="fa-solid fa-file-excel"></i> <span class="hidden sm:inline">Excel Export</span>
-            </a>
-
-            <button type="button" onclick="copyCustomerReportImage()" class="bg-teal-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-teal-700 transition shadow-md flex items-center gap-2 transform active:scale-95">
-                <i class="fa-solid fa-camera"></i> <span class="hidden sm:inline">Image Report</span>
-            </button>
+            <a href="#" onclick="triggerCustomerPDF()" class="bg-red-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-red-700 transition shadow-md flex items-center gap-2 transform active:scale-95"><i class="fa-solid fa-file-pdf"></i> <span class="hidden sm:inline">PDF</span></a>
+            <a href="#" onclick="triggerCompactPDF()" class="bg-orange-500 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-orange-600 transition shadow-md flex items-center gap-2 transform active:scale-95"><i class="fa-solid fa-file-contract"></i> <span class="hidden sm:inline">Summary</span></a>
+            <a href="#" onclick="triggerCustomerExport()" class="bg-green-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-green-700 transition shadow-md flex items-center gap-2 transform active:scale-95"><i class="fa-solid fa-file-excel"></i> <span class="hidden sm:inline">Excel</span></a>
+            <button type="button" onclick="copyCustomerReportImage()" class="bg-teal-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-teal-700 transition shadow-md flex items-center gap-2 transform active:scale-95"><i class="fa-solid fa-camera"></i> <span class="hidden sm:inline">รูปภาพ</span></button>
         </div>
     </div>
 
     <div id="customer-capture-area" class="bg-white p-2">
         
         <div id="customer-report-header" style="display:none;" class="mb-4">
-            <div class="flex items-center justify-center gap-3 bg-indigo-50 border border-indigo-100 p-3 rounded-xl mx-auto w-fit shadow-sm">
-                <div class="bg-indigo-600 text-white w-10 h-10 flex items-center justify-center rounded-lg shadow-md">
+            <div class="flex items-center justify-center gap-3 bg-green-50 border border-green-100 p-3 rounded-xl mx-auto w-fit shadow-sm">
+                <div class="bg-green-600 text-white w-10 h-10 flex items-center justify-center rounded-lg shadow-md">
                     <i class="fa-solid fa-file-invoice text-xl"></i>
                 </div>
                 <div class="text-left">
-                    <div class="text-xs text-indigo-600 font-bold uppercase tracking-wider">LMT. Transport Tracking Report</div>
+                    <div class="text-xs text-green-600 font-bold uppercase tracking-wider">Daily Delivery Report</div>
                     <div class="text-xl font-bold text-gray-800">
-                        สถานะการจัดส่ง (PO: <span id="img-po-date" class="text-indigo-700"></span>)
+                        สถานะการจัดส่งสินค้า (PO: <span id="img-po-date" class="text-green-700"></span>)
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
-            <div class="bg-gray-50 px-4 py-2 border-b border-gray-200 flex justify-between items-center">
-                <div class="text-xs font-bold text-gray-500 uppercase">รายละเอียดการขนส่ง</div>
-                <div class="text-[10px] text-gray-400 flex items-center gap-1">
-                    <i class="fa-solid fa-clock-rotate-left"></i> อัปเดต: <span id="update-time"></span>
-                </div>
-            </div>
-            
-            <div class="overflow-x-auto custom-scrollbar">
-                <table class="w-full text-xs text-center whitespace-nowrap">
-                    <thead>
-                        <tr class="text-white uppercase tracking-wider text-[10px]">
-                            <th class="px-2 py-2 bg-indigo-900 sticky left-0 z-10 font-bold">คันที่</th>
-                            <th class="px-2 py-2 bg-indigo-800 font-bold">ทะเบียนรถ</th>
-                            <th class="px-2 py-2 bg-indigo-800 font-bold">คนขับ</th>
-                            <th class="px-2 py-2 bg-indigo-800 font-bold">เวลาโหลด</th>
-                            <th class="px-2 py-2 bg-indigo-800 min-w-[160px] text-left pl-4 font-bold">สาขาปลายทาง</th>
-                            <th class="px-2 py-2 bg-indigo-800 font-bold">น้ำหนัก</th>
-                            <th class="px-2 py-2 bg-gray-600 font-bold">เข้าโรงงาน</th>
-                            <th class="px-2 py-2 bg-gray-600 font-bold">เริ่มโหลด</th>
-                            <th class="px-2 py-2 bg-gray-600 font-bold">โหลดเสร็จ</th>
-                            <th class="px-2 py-2 bg-gray-600 font-bold">ยื่นเอกสาร</th>
-                            <th class="px-2 py-2 bg-gray-600 font-bold">รับเอกสาร</th>
-                            
-                            <th class="px-2 py-2 bg-gray-600 font-bold">ออกโรงงาน</th>
-                            <th class="px-2 py-2 bg-emerald-600 font-bold">ถึงสาขา</th>
-                            <th class="px-2 py-2 bg-rose-600 font-bold">จบงาน</th>
-                        </tr>
-                    </thead>
-                    <tbody class="text-gray-600 bg-white">
-                        {% if jobs|length == 0 %}
-                        <tr><td colspan="14" class="p-12 text-center text-gray-400 bg-gray-50">
-                            <i class="fa-regular fa-folder-open text-4xl mb-2 opacity-50"></i><br>ไม่พบข้อมูลการขนส่งในวันที่เลือก
-                        </td></tr>
-                        {% endif %}
+        <div class="border rounded-lg overflow-hidden overflow-x-auto shadow-inner bg-gray-500 custom-scrollbar">
+            <table class="w-full text-center border-collapse whitespace-nowrap table-data" id="main-report-table">
+                <thead>
+                    <tr class="text-white table-header font-bold tracking-wide">
+                        <th class="px-2 py-2 bg-green-700 border-r border-green-600 sticky left-0 z-10 shadow-lg">ลำดับ</th>
+                        <th class="px-2 py-2 bg-green-600 border-r border-green-500">PO Date</th>
+                        <th class="px-2 py-2 bg-blue-600 border-r border-blue-500">Load Date</th>
+                        <th class="px-2 py-2 bg-green-600 border-r border-green-500">เวลา</th>
+                        <th class="px-2 py-2 bg-green-600 border-r border-green-500 min-w-[150px]">ปลายทาง (สาขา)</th>
+                        <th class="px-2 py-2 bg-green-600 border-r border-green-500">น้ำหนัก</th>
+                        <th class="px-2 py-2 bg-green-600 border-r border-green-500">ทะเบียน</th>
+                        <th class="px-2 py-2 bg-green-600 border-r border-green-500">คนขับ</th>
+                        <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">เข้าโรงงาน</th>
+                        <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">เริ่มโหลด</th>
+                        <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">โหลดเสร็จ</th>
+                        <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">ยื่นเอกสาร</th>
+                        <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">รับเอกสาร</th>
+                        <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">ออกโรงงาน</th>
+                        <th class="px-2 py-2 bg-[#9bbb59] border-r border-[#8aa64f]">ถึงสาขา</th>
+                        <th class="px-2 py-2 bg-[#9bbb59]">จบงาน</th>
+                    </tr>
+                </thead>
+                <tbody class="text-gray-700 bg-white">
+                    {% if jobs|length == 0 %}
+                        <tr><td colspan="16" class="p-10 text-center text-gray-400">กรุณาเลือกวันที่ หรือ ไม่พบข้อมูล</td></tr>
+                    {% else %}
+                        {% macro report_time_cell(time_val, loc_val, text_class='') %}
+                            {% if time_val %}
+                                {% if loc_val %}
+                                    <a href="https://maps.google.com/maps?q={{ loc_val }}" target="_blank" class="inline-flex items-center justify-center gap-1 hover:bg-gray-100/80 px-1.5 py-0.5 rounded transition group cursor-pointer {{ text_class }}" title="ดูพิกัด">
+                                        {{ time_val }} <i class="fa-solid fa-location-dot text-[9px] opacity-30 group-hover:opacity-100 group-hover:text-blue-600"></i>
+                                    </a>
+                                {% else %}
+                                    <span class="{{ text_class }}">{{ time_val }}</span>
+                                {% endif %}
+                            {% endif %}
+                        {% endmacro %}
 
                         {% for job in jobs %}
                             {% set is_same = False %}
-                            {% if not loop.first and loop.previtem.Car_No == job.Car_No and loop.previtem.Driver == job.Driver and loop.previtem.Round == job.Round %}
+                            {% if not loop.first and loop.previtem.Car_No == job.Car_No and loop.previtem.Driver == job.Driver and loop.previtem.PO_Date == job.PO_Date %}
                                 {% set is_same = True %}
                             {% endif %}
-
-                            <tr class="border-b border-gray-100 hover:bg-blue-50/30 transition duration-150">
-                                <td class="px-2 py-1 border-r border-gray-100 bg-gray-50/80 sticky left-0 font-bold text-indigo-900">
-                                    {% if not is_same %} <span class="bg-white border border-gray-200 px-2 py-1 rounded shadow-sm">#{{ job.Car_No }}</span> {% endif %}
-                                </td>
-                                <td class="px-2 py-1 border-r border-gray-100">
-                                    {% if not is_same %} {{ job.Plate }} {% endif %}
-                                </td>
-                                <td class="px-2 py-1 border-r border-gray-100 font-medium text-gray-800"> 
-                                    {% if not is_same %} {{ job.Driver }} {% endif %}
-                                </td>
-                                <td class="px-2 py-1 border-r border-gray-100 font-bold text-indigo-700">
-                                    {% if not is_same %} {{ job.Round }} {% endif %}
-                                </td>
-                                
-                                <td class="px-2 py-1 border-r border-gray-100 text-left pl-4 font-bold text-indigo-700">
-                                    {{ job.Branch_Name }}
-                                </td>
-
-                                <td class="px-2 py-1 border-r border-gray-100 text-center font-medium text-gray-600">
-                                    {% if not is_same %} {{ job.get('Weight', '-') | comma_format }} {% endif %}
-                                </td>
-                                {% macro time_display(time_val, loc_val) %}
-                                    {% if time_val %}
-                                        {% if loc_val %}
-                                        <a href="https://maps.google.com/maps?q={{ loc_val }}" target="_blank" 
-                                           class="inline-flex items-center gap-1 bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100 hover:bg-blue-100 transition group" title="ดูแผนที่">
-                                            <span class="font-bold">{{ time_val }}</span> <i class="fa-solid fa-location-arrow text-[8px] opacity-50 group-hover:opacity-100"></i>
-                                        </a>
-                                        {% else %}
-                                        <span class="text-gray-500">{{ time_val }}</span>
-                                        {% endif %}
-                                    {% else %} 
-                                        <span class="text-gray-300">-</span> 
-                                    {% endif %}
-                                {% endmacro %}
-
-                                {% if is_same %}
-                                    <td class="px-2 py-1 border-r border-gray-100 bg-gray-50/30" colspan="6"></td>
-                                {% else %}
-                                    <td class="px-2 py-1 border-r border-gray-100">{{ time_display(job.T1_Enter, job.L1_Loc) }}</td>
-                                    <td class="px-2 py-1 border-r border-gray-100">
-                                        {% if job.T2_StartLoad %}
-                                        {% set text_color = 'text-red-600' if job.is_late else 'text-green-600' %}
-                                        {% set bg_color = 'bg-red-50' if job.is_late else 'bg-green-50' %}
-                    
-                                        {% if job.L2_Loc %}
-                                        <a href="https://maps.google.com/maps?q={{ job.L2_Loc }}" target="_blank" 
-                                        class="inline-flex items-center gap-1 {{ bg_color }} {{ text_color }} px-2 py-0.5 rounded-full border border-gray-200 hover:bg-gray-100 transition group cursor-help" 
-                                        title="{{ job.delay_tooltip }}">
-                                        <span class="font-bold">{{ job.T2_StartLoad }}</span> 
-                                        <i class="fa-solid fa-location-arrow text-[8px] opacity-50 group-hover:opacity-100"></i>
-                                        </a>
-                                        {% else %}
-                                        <span class="{{ text_color }} font-bold cursor-help border-b border-dotted border-gray-300" 
-                                        title="{{ job.delay_tooltip }}">
-                                        {{ job.T2_StartLoad }}
-                                        </span>
-                                        {% endif %}
-                                        {% else %}
-                                        <span class="text-gray-300">-</span>
-                                        {% endif %}
-                                    </td>
-                                    <td class="px-2 py-1 border-r border-gray-100">{{ time_display(job.T3_EndLoad, job.L3_Loc) }}</td>
-                                    <td class="px-2 py-1 border-r border-gray-100">{{ time_display(job.T4_SubmitDoc, job.L4_Loc) }}</td>
-                                    <td class="px-2 py-1 border-r border-gray-100">{{ time_display(job.T5_RecvDoc, job.L5_Loc) }}</td>
-                                    <td class="px-2 py-1 border-r border-gray-100">{{ time_display(job.T6_Exit, job.L6_Loc) }}</td>
+                            
+                            {% set start_load_color = '' %}
+                            {% if job.T2_StartLoad %}
+                                {% if job.is_start_late %} 
+                                    {% set start_load_color = 'text-red-600 font-bold' %}
+                                {% else %} 
+                                    {% set start_load_color = 'text-green-600 font-bold' %} 
                                 {% endif %}
+                            {% endif %}
+                            
+                            <tr class="border-b hover:bg-gray-50 transition">
+                                <td class="px-2 py-1 border-r font-bold bg-gray-50 sticky left-0 z-10 border-gray-200 text-indigo-900 text-center">{% if not is_same %} #{{ job.Car_No }} {% endif %}</td>
+                                <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %}{{ job.PO_Date | thai_date }}{% endif %}</td>
+                                
+                                <td class="px-2 py-1 border-r border-gray-200 text-blue-700 font-bold bg-blue-50/20">
+                                    {% if not is_same %}
+                                        {% set show_load = job.get('Load_Date', job.PO_Date) %}
+                                        {{ show_load | thai_date }}
+                                    {% endif %}
+                                </td>
 
-                                <td class="px-2 py-1 border-r border-gray-100 bg-emerald-50/30 font-medium text-emerald-700">
-                                    {{ time_display(job.T7_ArriveBranch, job.L7_Loc) }}
-                                </td>
-                                <td class="px-2 py-1 font-bold text-rose-600 bg-rose-50/30">
-                                    {{ time_display(job.T8_EndJob, job.L8_Loc) }}
-                                </td>
+                                <td class="px-2 py-1 border-r border-gray-200 font-bold">{% if not is_same %}{{ job.Round }}{% endif %}</td>
+                                <td class="px-2 py-1 border-r border-gray-200 text-left pl-2 font-bold text-indigo-700 truncate max-w-[200px]" title="{{ job.Branch_Name }}">{{ job.Branch_Name }}</td>
+                                <td class="px-2 py-1 border-r border-gray-200 text-center text-gray-600 font-medium">{% if not is_same %}{{ job.get('Weight', '-') | comma_format }}{% endif %}</td>
+                                <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %} {{ job.Plate }} {% endif %}</td>
+                                <td class="px-2 py-1 border-r border-gray-200 font-medium truncate max-w-[120px]" title="{{ job.Driver }}">{% if not is_same %} {{ job.Driver }} {% endif %}</td>
+                                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T1_Enter, job.L1_Loc) }}{% endif %}</td>
+                                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T2_StartLoad, job.L2_Loc, start_load_color) }}{% endif %}</td>
+                                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T3_EndLoad, job.L3_Loc) }}{% endif %}</td>
+                                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T4_SubmitDoc, job.L4_Loc) }}{% endif %}</td>
+                                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T5_RecvDoc, job.L5_Loc) }}{% endif %}</td>
+                                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T6_Exit, job.L6_Loc) }}{% endif %}</td>
+                                <td class="px-2 py-1 border-r font-bold text-green-700 bg-green-50/50 border-gray-200">{{ report_time_cell(job.T7_ArriveBranch, job.L7_Loc, 'text-green-800') }}</td>
+                                <td class="px-2 py-1 font-bold text-red-600 bg-red-50/50">{{ report_time_cell(job.T8_EndJob, job.L8_Loc, 'text-red-700') }}</td>
                             </tr>
                         {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            
-            <div class="p-4 text-center bg-gray-50 border-t border-gray-200">
-                <a href="/tracking" class="inline-flex items-center gap-2 text-sm text-indigo-500 hover:text-indigo-700 font-medium transition">
-                    <i class="fa-solid fa-arrows-rotate"></i> รีเฟรชข้อมูลล่าสุด
-                </a>
-            </div>
+                    {% endif %}
+                </tbody>
+                
+                <tfoot class="font-bold text-sm bg-gray-100 border-t-2 border-gray-300 text-gray-800">
+                    <tr id="summary-row-day" class="bg-white">
+                        <td colspan="8" class="border px-2 py-1 text-right">รอบกลางวัน</td>
+                    </tr>
+                    <tr id="summary-row-night" class="bg-white">
+                        <td colspan="8" class="border px-2 py-1 text-right">รอบกลางคืน</td>
+                    </tr>
+                    <tr id="summary-row-total" class="bg-yellow-300">
+                        <td colspan="8" class="border px-2 py-1 text-right text-black">รวม</td>
+                    </tr>
+                </tfoot>
+            </table>
         </div>
-    </div> </div>
+        
+        <div class="mt-2 text-right text-[10px] text-gray-400">ข้อมูลล่าสุด: <span id="update-time"></span></div>
+    </div>
+</div>
 
 <script>
-    document.getElementById('update-time').innerText = new Date().toLocaleString('th-TH');
-    
+    document.addEventListener("DOMContentLoaded", function() {
+        document.getElementById('update-time').innerText = new Date().toLocaleString('th-TH');
+        // คำนวณสรุปท้ายตารางเมื่อโหลดเสร็จ
+        setTimeout(calculateSummaryTable, 500);
+    });
+
+    // --------------------------------------------------------
+    // Calculate Summary Table
+    // --------------------------------------------------------
+    function calculateSummaryTable() {
+        let counts = {
+            day: { t1:0, t2:0, t3:0, t4:0, t5:0, t6:0, t7:0, t8:0 },
+            night: { t1:0, t2:0, t3:0, t4:0, t5:0, t6:0, t7:0, t8:0 },
+            total: { t1:0, t2:0, t3:0, t4:0, t5:0, t6:0, t7:0, t8:0 }
+        };
+
+        const rows = document.querySelectorAll("#main-report-table tbody tr");
+        
+        rows.forEach(row => {
+            const timeCell = row.cells[3]?.innerText.trim() || ""; 
+            if(!timeCell) return;
+
+            const hour = parseInt(timeCell.split(':')[0]);
+            const isDay = (hour >= 6 && hour <= 18);
+            const target = isDay ? counts.day : counts.night;
+
+            if(row.cells[8].innerText.trim()) target.t1++;
+            if(row.cells[9].innerText.trim()) target.t2++;
+            if(row.cells[10].innerText.trim()) target.t3++;
+            if(row.cells[11].innerText.trim()) target.t4++;
+            if(row.cells[12].innerText.trim()) target.t5++;
+            if(row.cells[13].innerText.trim()) target.t6++;
+            if(row.cells[14].innerText.trim()) target.t7++;
+            if(row.cells[15].innerText.trim()) target.t8++;
+        });
+
+        for(let k in counts.total) { counts.total[k] = counts.day[k] + counts.night[k]; }
+
+        const createCells = (data, rowId) => {
+            const row = document.getElementById(rowId);
+            if(!row) return;
+            while(row.cells.length > 1) row.deleteCell(1);
+            
+            const keys = ['t1','t2','t3','t4','t5','t6','t7','t8'];
+            keys.forEach(k => {
+                const td = row.insertCell();
+                td.className = "border px-1 py-1 text-center";
+                td.innerText = data[k];
+            });
+        };
+
+        createCells(counts.day, 'summary-row-day');
+        createCells(counts.night, 'summary-row-night');
+        createCells(counts.total, 'summary-row-total');
+    }
+
+    // --------------------------------------------------------
+    // Copy Image (High Quality for Customer)
+    // --------------------------------------------------------
+    async function copyCustomerReportImage() {
+        const captureArea = document.getElementById('customer-capture-area');
+        const headerTitle = document.getElementById('customer-report-header');
+        const poVal = document.getElementById('customer_date_filter').value;
+        
+        let poDisplay = poVal;
+        if (poVal) {
+            const [y, m, d] = poVal.split('-');
+            const thYear = parseInt(y) + 543;
+            poDisplay = `${d}/${m}/${thYear}`;
+        }
+        document.getElementById('img-po-date').innerText = poDisplay;
+
+        headerTitle.style.display = 'block';
+
+        try {
+            const canvas = await html2canvas(captureArea, {
+                scale: 2, 
+                backgroundColor: '#ffffff', 
+                useCORS: true,
+                logging: false,
+                onclone: (clonedDoc) => {
+                    const clonedHeader = clonedDoc.getElementById('customer-report-header');
+                    if(clonedHeader) clonedHeader.style.display = 'block';
+                }
+            });
+
+            headerTitle.style.display = 'none';
+
+            canvas.toBlob(async (blob) => {
+                if (!blob) { alert('เกิดข้อผิดพลาดในการสร้างภาพ'); return; }
+                try {
+                    const item = new ClipboardItem({ "image/png": blob });
+                    await navigator.clipboard.write([item]);
+                    alert("✅ คัดลอกรูปภาพรายงานแล้ว! (กดวางใน Line ได้เลย)");
+                } catch (err) {
+                    console.error(err);
+                    const link = document.createElement('a');
+                    link.download = `Tracking_Report_${poVal}.png`;
+                    link.href = canvas.toDataURL();
+                    link.click();
+                    alert("⚠️ บราวเซอร์ไม่อนุญาตให้คัดลอกอัตโนมัติ\nระบบจึงดาวน์โหลดเป็นไฟล์ภาพให้แทนครับ");
+                }
+            });
+
+        } catch (error) {
+            console.error("Capture Error:", error);
+            headerTitle.style.display = 'none';
+            alert("เกิดข้อผิดพลาดในการถ่ายภาพ");
+        }
+    }
+
     function triggerCustomerExport() {
         const selectedDate = document.getElementById('customer_date_filter').value;
         let url = '/export_excel'; 
@@ -288,88 +324,6 @@
         let url = '/export_pdf_summary'; 
         if (selectedDate) url += `?date_filter=${selectedDate}`;
         window.location.href = url;
-    }
-
-    // --- UPDATED: Copy Image Function (High Quality & High Contrast) ---
-    async function copyCustomerReportImage() {
-        const captureArea = document.getElementById('customer-capture-area');
-        const headerTitle = document.getElementById('customer-report-header');
-        const poVal = document.getElementById('customer_date_filter').value;
-        
-        // แปลงวันที่ไทย
-        let poDisplay = poVal;
-        if (poVal) {
-            const [y, m, d] = poVal.split('-');
-            const thYear = parseInt(y) + 543;
-            poDisplay = `${d}/${m}/${thYear}`;
-        }
-        document.getElementById('img-po-date').innerText = poDisplay;
-
-        // แสดงหัวข้อ
-        headerTitle.style.display = 'block';
-
-        try {
-            const canvas = await html2canvas(captureArea, {
-                scale: 3, // เพิ่มความละเอียดเป็น 3 เท่า (ชัดกว่า Manager)
-                backgroundColor: '#ffffff', 
-                useCORS: true,
-                logging: false,
-                // *** เทคนิคสำคัญ: ปรับแต่ง HTML จำลองก่อนถ่ายภาพ ***
-                onclone: (clonedDoc) => {
-                    const clonedHeader = clonedDoc.getElementById('customer-report-header');
-                    if(clonedHeader) clonedHeader.style.display = 'block';
-
-                    // 1. ลบเงา (Shadow) ทั้งหมดออก เพื่อให้ภาพคมไม่ฟุ้ง
-                    const shadows = clonedDoc.querySelectorAll('.shadow-lg, .shadow-xl, .shadow-sm, .shadow-md');
-                    shadows.forEach(el => {
-                        el.classList.remove('shadow-lg', 'shadow-xl', 'shadow-sm', 'shadow-md');
-                        el.style.boxShadow = 'none';
-                        el.style.border = '1px solid #e5e7eb'; // ใส่เส้นขอบบางๆ แทนเงา
-                    });
-
-                    // 2. เปลี่ยนสีตัวอักษรสีเทา ให้เป็นสีดำสนิท (เพื่อให้อ่านง่ายในรูปภาพ)
-                    const textGrays = clonedDoc.querySelectorAll('.text-gray-600, .text-gray-500, .text-gray-400');
-                    textGrays.forEach(el => {
-                        el.classList.remove('text-gray-600', 'text-gray-500', 'text-gray-400');
-                        el.classList.add('text-black');
-                    });
-
-                    // 3. ปรับ Table Container ให้กางเต็ม ไม่ต้องมี Scrollbar
-                    const tableDiv = clonedDoc.querySelector('.overflow-x-auto');
-                    if(tableDiv) {
-                        tableDiv.classList.remove('overflow-x-auto', 'custom-scrollbar');
-                        tableDiv.style.overflow = 'visible';
-                        tableDiv.style.width = 'auto';
-                        tableDiv.style.display = 'block';
-                    }
-                }
-            });
-
-            // ซ่อนหัวข้อกลับคืน
-            headerTitle.style.display = 'none';
-
-            canvas.toBlob(async (blob) => {
-                if (!blob) { alert('เกิดข้อผิดพลาดในการสร้างภาพ'); return; }
-                
-                try {
-                    const item = new ClipboardItem({ "image/png": blob });
-                    await navigator.clipboard.write([item]);
-                    alert("✅ คัดลอกรูปภาพรายงานแล้ว! (ภาพคมชัด กดวางใน Line ได้เลย)");
-                } catch (err) {
-                    console.error(err);
-                    const link = document.createElement('a');
-                    link.download = `Tracking_Report_${poVal}.png`;
-                    link.href = canvas.toDataURL();
-                    link.click();
-                    alert("⚠️ บราวเซอร์ไม่อนุญาตให้คัดลอกอัตโนมัติ\nระบบจึงดาวน์โหลดเป็นไฟล์ภาพให้แทนครับ");
-                }
-            });
-
-        } catch (error) {
-            console.error("Capture Error:", error);
-            headerTitle.style.display = 'none';
-            alert("เกิดข้อผิดพลาดในการถ่ายภาพ");
-        }
     }
 </script>
 {% endblock %}

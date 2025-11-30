@@ -1665,7 +1665,7 @@ def driver_tasks():
                 job['smart_detail'] = f"วันที่ {real_date_str} เวลา {round_str} น."
                 job['ui_class'] = {'bg': 'bg-gray-50 border-gray-100', 'text': 'text-gray-500', 'icon': 'fa-calendar-days'}
             
-            po_d = datetime.strptime(job['PO_Date'], "%Y-%m-%d')
+            po_d = datetime.strptime(job['PO_Date'], "%Y-%m-%d")
             po_th = f"{po_d.day}/{po_d.month}/{str(po_d.year+543)[2:]}"
             job['po_label'] = f"(เอกสาร PO วันที่ {po_th})"
         except Exception as e: pass

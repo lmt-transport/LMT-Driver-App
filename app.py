@@ -476,28 +476,59 @@ def manager_dashboard():
             'status': 'Done' if all(j['Status'] == 'Done' for j in group) else 'Pending'
         })
     
-    for d in driver_stats:
+for d in driver_stats:
         driver_stats[d]['rounds'].sort(key=lambda x: int(str(x['car_no']).strip()) if str(x['car_no']).strip().isdigit() else 9999)
 
-    working_drivers_set = set(driver_stats.keys())
+    # --- [แก้ไขใหม่] Idle Drivers Logic (เช็คละเอียดแยกกะ) ---
+    # 1. หาว่าวันนี้ใครไม่ว่างช่วงไหนบ้าง
+    busy_day_drivers = set()
+    busy_night_drivers = set()
+
+    for job in filtered_jobs:
+        if str(job.get('Status', '')).lower() == 'cancel': continue
+        d_name = job.get('Driver')
+        r_time = str(job.get('Round', '')).strip()
+        try:
+            h = int(r_time.split(':')[0])
+            if 6 <= h <= 18: busy_day_drivers.add(d_name) # ไม่ว่างกะเช้า
+            else: busy_night_drivers.add(d_name)          # ไม่ว่างกะดึก
+        except: pass
+
+    # 2. เตรียม list
     idle_drivers_day = []
     idle_drivers_night = []
     idle_drivers_hybrid = []
     idle_drivers_new = []
 
+    # 3. วนลูปคนขับทุกคนเพื่อจัดกลุ่ม
     for d in drivers:
         d_name = d.get('Name')
-        if d_name and d_name not in working_drivers_set:
-            history = driver_history.get(d_name)
+        history = driver_history.get(d_name) # ประวัติการวิ่ง (Day/Night count)
+        
+        # เช็คสถานะ "วันนี้"
+        is_busy_day = d_name in busy_day_drivers
+        is_busy_night = d_name in busy_night_drivers
+        is_fully_free = not is_busy_day and not is_busy_night
+
+        if history:
+            has_day_hist = history['day_count'] > 0
+            has_night_hist = history['night_count'] > 0
             
-            if history:
-                has_day = history['day_count'] > 0
-                has_night = history['night_count'] > 0
-                
-                if has_day and has_night: idle_drivers_hybrid.append(d)
-                elif has_day: idle_drivers_day.append(d)
-                else: idle_drivers_night.append(d)
-            else:
+            if has_day_hist and has_night_hist:
+                # Hybrid: แสดงเมื่อว่างทั้งวัน (หรือจะปรับให้แสดงถ้าว่างกะใดกะหนึ่งก็ได้)
+                if is_fully_free:
+                    idle_drivers_hybrid.append(d)
+            elif has_day_hist:
+                # Day Only: แสดงถ้า "วันนี้ยังไม่มีงานกะเช้า" (แม้จะมีงานกะดึกก็ตาม)
+                if not is_busy_day:
+                    idle_drivers_day.append(d)
+            elif has_night_hist:
+                # Night Only: แสดงถ้า "วันนี้ยังไม่มีงานกะดึก"
+                if not is_busy_night:
+                    idle_drivers_night.append(d)
+        else:
+            # พนักงานใหม่/ไม่มีประวัติ: แสดงเมื่อว่างทั้งวัน
+            if is_fully_free:
                 idle_drivers_new.append(d)
 
     shift_status = {

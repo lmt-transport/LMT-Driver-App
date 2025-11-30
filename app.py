@@ -609,6 +609,9 @@ def manager_dashboard():
                            idle_drivers_night=idle_drivers_night, idle_drivers_hybrid=idle_drivers_hybrid,
                            idle_drivers_new=idle_drivers_new, shift_status=shift_status)
                            
+# ==========================================
+# [UPDATED] Create Job Function
+# ==========================================
 @app.route('/create_job', methods=['POST'])
 def create_job():
     if 'user' not in session: return redirect(url_for('manager_login'))
@@ -623,6 +626,15 @@ def create_job():
     weight = request.form.get('weight', '')
     branches = request.form.getlist('branches') 
     
+    # --- [ส่วนสำคัญ] รับค่า PO List จาก Textarea ---
+    po_input_raw = request.form.get('po_list_input', '')
+    po_str_to_save = ""
+    if po_input_raw:
+        # แยกบรรทัด ตัดช่องว่าง และรวมเป็น string เดียวคั่นด้วย comma
+        po_lines = [line.strip() for line in po_input_raw.splitlines() if line.strip()]
+        po_str_to_save = ",".join(po_lines)
+    # ---------------------------------------------
+    
     drivers_ws = sheet.worksheet('Drivers')
     driver_list = drivers_ws.get_all_records()
     plate = ""
@@ -634,7 +646,15 @@ def create_job():
     new_rows = []
     for branch in branches:
         if branch.strip(): 
-            row = [po_date, load_date, round_time, car_no, driver_name, plate, branch, weight, "", "", "", "", "", "", "", "", "New", "", "", "", "", "", "", "", "", ""]
+            # สร้างแถวข้อมูล โดยใส่ PO ลงใน Column Z (ลำดับที่ 26)
+            row = [
+                po_date, load_date, round_time, car_no, driver_name, plate, branch, weight, 
+                "", "", "", "", "", "", "", "", "New",  # ถึง Column Q (17)
+                "", "", "", "", "", "", "", "",         # Column R-Y (18-25)
+                po_str_to_save,                         # Column Z (26) : PO_Nos
+                "",                                     # Column AA (27) : Doc_Result
+                ""                                      # Column AB (28) : Weight_Result
+            ]
             new_rows.append(row)
     
     if new_rows: 

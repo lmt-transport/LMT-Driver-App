@@ -691,8 +691,10 @@
 // --------------------------------------------------------
     // [FIXED] Download Full Image Function (Manager Version)
     // --------------------------------------------------------
+// --------------------------------------------------------
+    // [FIXED] Download Full Image Function (Manager Version)
+    // --------------------------------------------------------
     async function copyReportImage() {
-        // แสดง Loading ที่ปุ่ม
         const btnIcon = document.querySelector('button[onclick="copyReportImage()"] i');
         const originalIconClass = btnIcon.className;
         btnIcon.className = "fa-solid fa-spinner fa-spin"; // เปลี่ยนไอคอนเป็นหมุนๆ
@@ -705,7 +707,7 @@
         const dateInput = document.getElementById('report_date_filter');
         if (dateInput) poVal = dateInput.value;
         
-        // แปลงวันที่เป็น format ไทยสำหรับหัวข้อภาพ
+        // เตรียมวันที่ไทย
         let poDisplay = poVal;
         if (poVal) {
             const [y, m, d] = poVal.split('-');
@@ -717,14 +719,21 @@
         // แสดงหัวข้อชั่วคราว
         headerTitle.style.display = 'block';
 
+        // 1. [สำคัญ] วัดความกว้างจริงของตารางก่อน เพื่อตั้งค่า Canvas
+        // บวกเพิ่ม 40px เผื่อขอบซ้ายขวา
+        const tableElement = document.getElementById('main-report-table');
+        const realTableWidth = tableElement.scrollWidth + 40; 
+        const targetWidth = Math.max(realTableWidth, 1200); // อย่างน้อยต้องกว้าง 1200px
+
         try {
             const canvas = await html2canvas(captureArea, {
-                scale: 2, // ใช้ Scale 2 เพื่อประสิทธิภาพที่ดีบนมือถือ
+                scale: 2, 
                 backgroundColor: '#ffffff', 
                 useCORS: true,
                 logging: false,
-                // จำลองหน้าจอ Desktop เพื่อให้ Layout ไม่เพี้ยน
-                windowWidth: 1440, 
+                // [แก้จุดที่ 1] ตั้งค่าหน้าจอจำลองให้กว้างเท่ากับตารางจริง
+                windowWidth: targetWidth,
+                width: targetWidth, 
                 
                 onclone: (clonedDoc) => {
                     const clonedHeader = clonedDoc.getElementById('report-header-title');
@@ -732,15 +741,15 @@
                     
                     if(clonedHeader) clonedHeader.style.display = 'block';
                     
-                    // 1. บังคับขนาด Container หลักให้กว้างพอ
+                    // [แก้จุดที่ 2] บังคับ Container ให้กว้างเท่าที่คำนวณไว้ ไม่ล็อคที่ 1200px แล้ว
                     if(clonedArea) {
-                        clonedArea.style.width = '1200px'; 
+                        clonedArea.style.width = targetWidth + 'px'; 
                         clonedArea.style.padding = '20px';
                         clonedArea.style.height = 'auto';
                         clonedArea.style.overflow = 'visible';
                     }
 
-                    // 2. ปลดล็อค Scrollbar ของตารางเพื่อให้ html2canvas เห็นครบทุกบรรทัด
+                    // ปลดล็อค Scrollbar และขยายตารางให้เต็ม
                     const tableWrapper = clonedDoc.querySelector('.overflow-x-auto');
                     if(tableWrapper) {
                         tableWrapper.classList.remove('overflow-x-auto', 'custom-scrollbar');
@@ -751,7 +760,7 @@
                         tableWrapper.style.display = 'block';
                     }
                     
-                    // ปรับแต่งความสวยงาม (ลบเงาที่อาจจะดูแปลกๆ ในภาพนิ่ง)
+                    // ปรับแต่งความสวยงาม (ลบเงา)
                     const shadows = clonedDoc.querySelectorAll('.shadow-lg, .shadow-xl, .shadow-sm, .shadow-md, .shadow-inner');
                     shadows.forEach(el => {
                         el.style.boxShadow = 'none';
@@ -760,11 +769,9 @@
                 }
             });
 
-            // ซ่อนหัวข้อกลับคืน และคืนค่าไอคอน
             headerTitle.style.display = 'none';
             btnIcon.className = originalIconClass;
 
-            // 3. ทำการดาวน์โหลดไฟล์ภาพทันที (รองรับมือถือดีกว่า Clipboard)
             const link = document.createElement('a');
             link.download = `Report_PO_${poVal}.jpg`;
             link.href = canvas.toDataURL("image/jpeg", 0.9);

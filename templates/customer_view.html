@@ -250,23 +250,18 @@
         createCells(counts.total, 'summary-row-total');
     }
 
-    // --------------------------------------------------------
-    // Copy Image (High Quality for Customer)
-    // --------------------------------------------------------
 // --------------------------------------------------------
-    // [FIXED] Download Full Image Function
+    // [FIXED] Download Full Image Function (Customer Version)
     // --------------------------------------------------------
     async function copyCustomerReportImage() {
-        // แสดง Loading เพื่อให้รู้ว่ากำลังทำงาน (เพราะรูปยาวจะใช้เวลาประมวลผลแป๊บนึง)
         const btnIcon = document.querySelector('button[onclick="copyCustomerReportImage()"] i');
         const originalIconClass = btnIcon.className;
-        btnIcon.className = "fa-solid fa-spinner fa-spin"; // เปลี่ยนไอคอนเป็นหมุนๆ
+        btnIcon.className = "fa-solid fa-spinner fa-spin"; 
 
         const captureArea = document.getElementById('customer-capture-area');
         const headerTitle = document.getElementById('customer-report-header');
         const poVal = document.getElementById('customer_date_filter').value;
         
-        // 1. เตรียมวันที่ไทยสำหรับหัวข้อ
         let poDisplay = poVal;
         if (poVal) {
             const [y, m, d] = poVal.split('-');
@@ -275,17 +270,22 @@
         }
         document.getElementById('img-po-date').innerText = poDisplay;
 
-        // 2. แสดงหัวข้อชั่วคราวเพื่อให้ติดในรูป
         headerTitle.style.display = 'block';
+
+        // 1. [สำคัญ] วัดความกว้างจริงของตารางก่อน
+        const tableElement = document.getElementById('main-report-table');
+        const realTableWidth = tableElement.scrollWidth + 40; 
+        const targetWidth = Math.max(realTableWidth, 1200);
 
         try {
             const canvas = await html2canvas(captureArea, {
-                scale: 2, // ลด Scale ลงนิดหน่อยจาก 3 เหลือ 2 เพื่อลดขนาดไฟล์และโอกาส Crash บนมือถือ (ยังชัดอยู่)
+                scale: 2, 
                 backgroundColor: '#ffffff', 
                 useCORS: true,
                 logging: false,
-                // ตั้งค่าเพื่อให้ Browser จำลองหน้าจอ desktop ตอน render
-                windowWidth: 1440, 
+                // [แก้จุดที่ 1] ตั้งค่า windowWidth ตามความกว้างจริง
+                windowWidth: targetWidth, 
+                width: targetWidth,
                 
                 onclone: (clonedDoc) => {
                     const clonedHeader = clonedDoc.getElementById('customer-report-header');
@@ -293,28 +293,24 @@
                     
                     if(clonedHeader) clonedHeader.style.display = 'block';
 
-                    // [จุดสำคัญที่แก้ปัญหาภาพตัด]
+                    // [แก้จุดที่ 2] ใช้ความกว้างที่คำนวณมา
                     if(clonedArea) {
-                        // บังคับความกว้าง fixed เพื่อให้ตารางจัดระเบียบเหมือน Desktop
-                        clonedArea.style.width = '1200px'; 
+                        clonedArea.style.width = targetWidth + 'px'; 
                         clonedArea.style.padding = '20px';
-                        // บังคับความสูงเป็น auto เพื่อให้ยืดตามเนื้อหาทั้งหมด
                         clonedArea.style.height = 'auto';
                         clonedArea.style.overflow = 'visible';
                     }
 
-                    // หาตัว container ของตารางที่มี scrollbar แล้วสั่งปลดล็อค
                     const tableWrapper = clonedDoc.querySelector('.overflow-x-auto');
                     if(tableWrapper) {
                         tableWrapper.classList.remove('overflow-x-auto', 'custom-scrollbar');
-                        tableWrapper.style.overflow = 'visible'; // ปลด scroll
-                        tableWrapper.style.height = 'auto';      // ยืดเต็มความสูง
-                        tableWrapper.style.maxHeight = 'none';   // ห้ามจำกัดความสูง
+                        tableWrapper.style.overflow = 'visible'; 
+                        tableWrapper.style.height = 'auto';      
+                        tableWrapper.style.maxHeight = 'none';   
                         tableWrapper.style.width = '100%'; 
                         tableWrapper.style.display = 'block';
                     }
 
-                    // ปรับแต่งความสวยงาม (ลบเงา ปรับสีตัวอักษร)
                     const shadows = clonedDoc.querySelectorAll('.shadow-lg, .shadow-xl, .shadow-sm, .shadow-md');
                     shadows.forEach(el => {
                         el.style.boxShadow = 'none';
@@ -329,14 +325,12 @@
                 }
             });
 
-            // ซ่อนหัวข้อกลับคืน
             headerTitle.style.display = 'none';
-            btnIcon.className = originalIconClass; // คืนค่าไอคอนเดิม
+            btnIcon.className = originalIconClass; 
 
-            // 3. ทำการดาวน์โหลดไฟล์ภาพทันที
             const link = document.createElement('a');
             link.download = `LMT_Report_${poVal}.jpg`;
-            link.href = canvas.toDataURL("image/jpeg", 0.9); // ใช้ JPEG quality 0.9 เพื่อให้ไฟล์ไม่ใหญ่เกินไป
+            link.href = canvas.toDataURL("image/jpeg", 0.9); 
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);

@@ -1,116 +1,82 @@
 {% extends "layout.html" %}
 {% block content %}
 
-<div class="max-w-md mx-auto bg-gray-50 min-h-screen pb-10">
+<div class="max-w-md mx-auto py-10 px-4">
     
-    <div class="bg-white pt-8 pb-4 px-6 rounded-b-3xl shadow-sm mb-4">
-        <div class="text-center">
-            <div class="inline-block p-3 bg-indigo-100 text-indigo-600 rounded-full mb-3 shadow-inner">
-                <i class="fa-solid fa-user-tag text-2xl"></i>
-            </div>
-            <h2 class="text-2xl font-bold text-gray-800">ระบุตัวตน</h2>
-            <p class="text-gray-500 text-sm mt-1">เลือกชื่อของคุณเพื่อเริ่มงาน</p>
-        </div>
+    <!-- Header -->
+    <div class="text-center mb-8">
+        <h2 class="text-2xl font-bold text-gray-800 mb-2">
+            <i class="fa-solid fa-user-astronaut text-indigo-600"></i> เลือกชื่อพนักงานขับรถ
+        </h2>
+        <p class="text-sm text-gray-500">กรุณาเลือกชื่อของท่านเพื่อเข้าสู่ระบบบันทึกเวลา</p>
     </div>
 
-    <div class="sticky top-0 z-20 px-4 py-2 bg-gray-50/95 backdrop-blur-sm">
-        <div class="relative shadow-sm">
-            <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-indigo-400">
-                <i class="fa-solid fa-magnifying-glass"></i>
-            </span>
-            <input type="text" id="searchInput" onkeyup="filterDrivers()" 
-                class="w-full pl-11 pr-4 py-3.5 rounded-2xl border-none focus:ring-2 focus:ring-indigo-500 shadow-md text-gray-700 placeholder-gray-400 text-sm transition-all" 
-                placeholder="พิมพ์ค้นหาชื่อ...">
-        </div>
-    </div>
-
-    <div class="px-4 mt-2 space-y-3" id="driverList">
-        {% for driver_name in drivers | sort %}
-        
-        {% set info = driver_info.get(driver_name, {}) %}
-        {% set pending = info.get('pending_count', 0) %}
-        {% set msg = info.get('urgent_msg', '') %}
-        {% set color = info.get('urgent_color', '') %}
-        {% set time = info.get('urgent_time', '') %}
-
-        <a href="/driver/tasks?name={{ driver_name }}" 
-           class="driver-card group relative bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md active:scale-[0.98] transition-all duration-200 cursor-pointer">
-            
-            <div class="flex items-center gap-4 w-full">
-                <div class="relative flex-shrink-0">
-                    <div class="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-lg font-bold shadow-sm group-hover:scale-110 transition-transform">
-                        {{ driver_name[0] }}
+    <!-- Active Drivers (มีงานใน 48 ชม.) -->
+    <div class="space-y-3">
+        {% for name in active_drivers %}
+            {% set info = driver_info[name] %}
+            <a href="{{ url_for('driver_tasks', name=name) }}" 
+               class="block bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:border-indigo-500 hover:shadow-md transition duration-200 group relative overflow-hidden">
+                
+                {% if info.urgent_msg %}
+                    <div class="absolute top-0 right-0 {{ info.urgent_color }} text-[10px] px-2 py-0.5 rounded-bl-lg font-bold shadow-sm z-10">
+                        {{ info.urgent_msg }} {{ info.urgent_time }}
                     </div>
+                {% endif %}
 
-                    {% if pending > 0 or (msg and 'ตอนนี้' in msg) %}
-                    <span class="absolute -top-1 -right-1 flex h-5 w-5">
-                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-5 w-5 bg-red-500 text-white text-[10px] font-bold items-center justify-center border-2 border-white shadow-sm">!</span>
-                    </span>
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition">
+                            <i class="fa-solid fa-user text-lg"></i>
+                        </div>
+                        <div>
+                            <div class="font-bold text-gray-800 group-hover:text-indigo-700 text-lg">{{ name }}</div>
+                            <div class="text-xs text-gray-400 group-hover:text-indigo-400">แตะเพื่อดูงาน</div>
+                        </div>
+                    </div>
+                    {% if info.pending_count > 0 %}
+                        <div class="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-sm animate-pulse">
+                            {{ info.pending_count }} งาน
+                        </div>
+                    {% else %}
+                        <i class="fa-solid fa-chevron-right text-gray-300 group-hover:text-indigo-500"></i>
                     {% endif %}
                 </div>
-                
-                <div class="flex flex-col flex-grow">
-                    <span class="font-bold text-gray-800 text-base group-hover:text-indigo-700 transition-colors mb-0.5">{{ driver_name }}</span>
-                    
-                    <div class="flex flex-col gap-1 items-start">
-                        
-                        {% if msg %}
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold border shadow-sm {{ color }}">
-                                {{ msg }} {{ time }}
-                            </span>
-                        {% endif %}
-
-                        {% if pending > 0 %}
-                            <span class="inline-flex items-center gap-1 text-[10px] text-gray-400 font-medium">
-                                <i class="fa-solid fa-box-open"></i> ค้างส่ง {{ pending }} เที่ยว
-                            </span>
-                        {% endif %}
-
-                        {% if not msg and pending == 0 %}
-                            <span class="text-[11px] text-gray-300 font-light flex items-center gap-1">
-                                <i class="fa-regular fa-circle-check"></i> ว่าง / ไม่มีงานเร็วๆนี้
-                            </span>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-
-            <div class="w-8 h-8 rounded-full bg-gray-50 flex-shrink-0 flex items-center justify-center text-gray-300 group-hover:bg-indigo-50 group-hover:text-indigo-500 transition-colors ml-2">
-                <i class="fa-solid fa-chevron-right text-xs"></i>
-            </div>
-        </a>
+            </a>
         {% endfor %}
     </div>
 
-    <div id="noResult" class="hidden flex flex-col items-center justify-center mt-12 text-center opacity-60">
-        <div class="bg-gray-200 w-16 h-16 rounded-full flex items-center justify-center mb-3">
-            <i class="fa-solid fa-user-slash text-2xl text-gray-500"></i>
+    <!-- Divider / Button Toggle -->
+    {% if hidden_drivers|length > 0 %}
+    <div class="mt-8">
+        <button onclick="document.getElementById('hidden-list').classList.toggle('hidden'); this.querySelector('i').classList.toggle('fa-chevron-down'); this.querySelector('i').classList.toggle('fa-chevron-up');" 
+                class="w-full py-3 bg-gray-100 text-gray-500 rounded-lg text-sm font-medium hover:bg-gray-200 transition flex items-center justify-center gap-2">
+            <span>แสดงพนักงานที่ไม่มีงานเร็วๆ นี้ ({{ hidden_drivers|length }})</span>
+            <i class="fa-solid fa-chevron-down text-xs"></i>
+        </button>
+
+        <!-- Hidden Drivers (ซ่อนอยู่) -->
+        <div id="hidden-list" class="hidden mt-3 space-y-3 opacity-80 scale-95 origin-top transition-all duration-300">
+            {% for name in hidden_drivers %}
+                {% set info = driver_info[name] %}
+                <a href="{{ url_for('driver_tasks', name=name) }}" 
+                   class="block bg-gray-50 p-3 rounded-xl border border-transparent hover:border-gray-300 hover:bg-white transition flex items-center justify-between grayscale hover:grayscale-0">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-400">
+                            <i class="fa-regular fa-user"></i>
+                        </div>
+                        <div class="font-medium text-gray-600">{{ name }}</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-gray-300 text-xs"></i>
+                </a>
+            {% endfor %}
         </div>
-        <p class="text-gray-500 font-medium">ไม่พบรายชื่อนี้</p>
+    </div>
+    {% endif %}
+
+    <div class="mt-10 text-center">
+        <a href="/" class="text-sm text-gray-400 hover:text-gray-600 underline">กลับหน้าหลัก</a>
     </div>
 </div>
-
-<script>
-    function filterDrivers() {
-        var input = document.getElementById("searchInput");
-        var filter = input.value.toUpperCase();
-        var list = document.getElementById("driverList");
-        var cards = list.getElementsByClassName("driver-card");
-        var hasResult = false;
-
-        for (var i = 0; i < cards.length; i++) {
-            var nameSpan = cards[i].querySelector("span.font-bold"); 
-            var txtValue = nameSpan.textContent || nameSpan.innerText;
-            if (txtValue.toUpperCase().indexOf(filter) > -1) {
-                cards[i].style.display = "";
-                hasResult = true;
-            } else {
-                cards[i].style.display = "none";
-            }
-        }
-        document.getElementById("noResult").style.display = hasResult ? "none" : "flex";
-    }
-</script>
 
 {% endblock %}

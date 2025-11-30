@@ -1723,13 +1723,12 @@ def update_status():
     if mode == 'update' and len(target_row_data) > 5:
         # เตรียมข้อมูลสำหรับส่งแจ้งเตือน
         # ตรวจสอบ index ให้แน่ใจว่าตรงกับ Sheet (Driver=Col E (idx 4), Plate=Col F (idx 5))
-        job_info_for_notify = {
+        job_info_for_notify = 
             'PO_Date': target_row_data[0],
             'Round': target_row_data[2],
             'Car_No': target_row_data[3],
             'Driver': target_row_data[4],
             'Plate': target_row_data[5]
-        }
 
         # 1. แจ้งเตือนรายคัน (เข้า Step 1 / ออก Step 6)
         if step == '1' or step == '6':

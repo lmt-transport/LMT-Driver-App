@@ -458,17 +458,20 @@
                             {% if jobs|length == 0 %}
                                 <tr><td colspan="16" class="p-10 text-center text-gray-400">กรุณาเลือกวันที่ หรือ ไม่พบข้อมูล</td></tr>
                             {% else %}
-                                {% macro report_time_cell(time_val, loc_val, text_class='') %}
-                                    {% if time_val %}
-                                        {% if loc_val %}
-                                            <a href="https://maps.google.com/maps?q={{ loc_val }}" target="_blank" class="inline-flex items-center justify-center gap-1 hover:bg-gray-100/80 px-1.5 py-0.5 rounded transition group cursor-pointer {{ text_class }}" title="ดูพิกัด">
-                                                {{ time_val }} <i class="fa-solid fa-location-dot text-[9px] opacity-30 group-hover:opacity-100 group-hover:text-blue-600"></i>
-                                            </a>
-                                        {% else %}
-                                            <span class="{{ text_class }}">{{ time_val }}</span>
-                                        {% endif %}
-                                    {% endif %}
-                                {% endmacro %}
+                            {% macro report_time_cell(time_val, loc_val, text_class='') %}
+                                    {% macro report_time_cell(time_val, loc_val, text_class='', tooltip_msg='') %}
+										{% if time_val %}
+										{% if loc_val %}
+											<a href="https://maps.google.com/maps?q={{ loc_val }}" target="_blank" 
+											class="inline-flex items-center justify-center gap-1 hover:bg-gray-100/80 px-1.5 py-0.5 rounded transition group cursor-pointer {{ text_class }}" 
+											title="{{ tooltip_msg if tooltip_msg else 'ดูพิกัด' }}">
+											{{ time_val }} <i class="fa-solid fa-location-dot text-[9px] opacity-30 group-hover:opacity-100 group-hover:text-blue-600"></i>
+											</a>
+							{% else %}
+											<span class="{{ text_class }} cursor-default" title="{{ tooltip_msg }}">{{ time_val }}</span>
+							{% endif %}
+							{% endif %}
+							{% endmacro %}
 
                                 {% for job in jobs %}
                                     {% set is_same = False %}
@@ -502,7 +505,7 @@
                                         <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %} {{ job.Plate }} {% endif %}</td>
                                         <td class="px-2 py-1 border-r border-gray-200 font-medium truncate max-w-[120px]" title="{{ job.Driver }}">{% if not is_same %} {{ job.Driver }} {% endif %}</td>
                                         <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T1_Enter, job.L1_Loc) }}{% endif %}</td>
-                                        <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T2_StartLoad, job.L2_Loc, start_load_color) }}{% endif %}</td>
+                                        <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T2_StartLoad, job.L2_Loc, start_load_color, job.delay_msg) }}{% endif %}</td>
                                         <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T3_EndLoad, job.L3_Loc) }}{% endif %}</td>
                                         <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T4_SubmitDoc, job.L4_Loc) }}{% endif %}</td>
                                         <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T5_RecvDoc, job.L5_Loc) }}{% endif %}</td>

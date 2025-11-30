@@ -1578,72 +1578,101 @@ def customer_view():
 @app.route('/driver')
 def driver_select():
     sheet = get_db()
-    drivers = sheet.worksheet('Drivers').col_values(1)[1:]
+    # ดึงรายชื่อคนขับทั้งหมด (เฉพาะ Column แรก)
+    drivers_list_raw = sheet.worksheet('Drivers').col_values(1)[1:]
     all_jobs = get_cached_records(sheet, 'Jobs')
     now_thai = datetime.now() + timedelta(hours=7)
     
+    # กำหนดเวลาขอบเขต 48 ชม.
+    limit_time = now_thai + timedelta(hours=48)
+    
     driver_info = {} 
-    for name in drivers:
+    # เก็บเวลาที่งานเร็วที่สุดของแต่ละคนไว้เพื่อ Sorting (Default คืออนาคตไกลๆ)
+    driver_earliest_dt = {}
+
+    # เริ่มต้นข้อมูล
+    for name in drivers_list_raw:
         driver_info[name] = {
             'pending_set': set(), 
             'pending_count': 0, 
             'urgent_msg': '', 'urgent_color': '', 'urgent_time': '', 'sort_weight': 999
         }
+        driver_earliest_dt[name] = datetime.max
 
+    # วนลูปงานเพื่อหาเวลาที่เร็วที่สุด และสร้าง Badge แจ้งเตือน
     for job in all_jobs:
-        d_name = job['Driver']
+        d_name = job.get('Driver')
         if d_name not in driver_info: continue
         
-        if job['Status'] != 'Done':
+        # เช็คเฉพาะงานที่ยังไม่จบและไม่ยกเลิก
+        status = str(job.get('Status', '')).lower()
+        if status != 'done' and status != 'cancel':
             trip_key = f"{job['PO_Date']}_{job['Round']}_{job['Car_No']}"
             driver_info[d_name]['pending_set'].add(trip_key)
             try:
+                # แปลงวันเวลาโหลด
                 load_date_str = job.get('Load_Date', job['PO_Date'])
                 round_str = str(job['Round']).strip()
                 job_dt_str = f"{load_date_str} {round_str}"
+                
                 try: job_dt = datetime.strptime(job_dt_str, "%Y-%m-%d %H:%M")
                 except ValueError: job_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
                 
-                # --- [แก้ไข] คำนวณความต่างวัน ---
+                # ถ้าเจองานที่เร็วกว่าเดิม ให้บันทึกเวลาไว้ (เพื่อใช้ Sort)
+                if job_dt < driver_earliest_dt[d_name]:
+                    driver_earliest_dt[d_name] = job_dt
+
+                # --- สร้าง Badge สีๆ เหมือนเดิม ---
                 diff = job_dt - now_thai
                 hours_diff = diff.total_seconds() / 3600
                 delta_days = (job_dt.date() - now_thai.date()).days
-                # ------------------------------
-
                 h = job_dt.hour
                 m = job_dt.minute
                 
                 msg, color, weight = "", "", 999
                 
-                # 1. งานเร่งด่วน/ค้างส่ง (น้อยกว่า 0 ชม.)
                 if hours_diff <= 0:
                     if hours_diff > -12: 
                         msg, color, weight = "❗ โหลดตอนนี้", "bg-red-500 text-white border-red-600 animate-pulse shadow-red-200", 1
-                
-                # 2. งานภายใน 16 ชม. (โหลดวันนี้/คืนนี้)
                 elif 0 < hours_diff <= 16:
                     if 6 <= h <= 12:   msg, color = "☀️ โหลดเช้านี้", "bg-yellow-100 text-yellow-700 border-yellow-200"
                     elif 13 <= h <= 18: msg, color = "⛅ โหลดบ่ายนี้", "bg-orange-100 text-orange-700 border-orange-200"
                     else:               msg, color = "🌙 โหลดคืนนี้", "bg-indigo-100 text-indigo-700 border-indigo-200"
                     weight = 2
-                
-                # 3. [แก้ไข] งานวันพรุ่งนี้ (เช็คจากปฏิทิน ไม่ใช่ชั่วโมงรวม)
                 elif delta_days == 1:
                     period = "คืนพรุ่งนี้" if (h >= 19 or h <= 5) else "วันพรุ่งนี้"
                     if driver_info[d_name]['sort_weight'] > 3:
                         msg, color, weight = f"⏩ เตรียมโหลด{period}", "bg-gray-100 text-gray-500 border-gray-200", 3
 
-                # อัปเดตข้อมูลถ้างานนี้สำคัญกว่า (weight น้อยกว่า)
                 if weight < driver_info[d_name]['sort_weight']:
                     driver_info[d_name]['urgent_msg'] = msg
                     driver_info[d_name]['urgent_color'] = color
                     driver_info[d_name]['urgent_time'] = f"{h:02}:{m:02} น."
                     driver_info[d_name]['sort_weight'] = weight
+                # --------------------------------
+
             except Exception as e: pass
     
-    for name in drivers:
+    # อัปเดตจำนวนงานค้าง
+    for name in drivers_list_raw:
         driver_info[name]['pending_count'] = len(driver_info[name]['pending_set'])
-    return render_template('driver_select.html', drivers=drivers, driver_info=driver_info)
+
+    # --- [ส่วนคัดกรองและเรียงลำดับ] ---
+    final_drivers = []
+    for name in drivers_list_raw:
+        earliest = driver_earliest_dt[name]
+        
+        # เงื่อนไข: ต้องมีเวลาเริ่มงาน (ไม่เท่ากับ max) และ เวลานั้นต้อง <= 48 ชม. จากตอนนี้
+        # (รวมถึงงานในอดีตที่ยังไม่จบด้วย เพราะ time < now + 48h)
+        if earliest != datetime.max and earliest <= limit_time:
+            final_drivers.append(name)
+            
+    # เรียงลำดับ: 
+    # 1. ตามเวลาที่ต้องโหลด (เร็วสุดขึ้นก่อน) -> x[0]
+    # 2. ตามชื่อ (ก-ฮ) -> x[1]
+    final_drivers.sort(key=lambda x: (driver_earliest_dt[x], x))
+
+    return render_template('driver_select.html', drivers=final_drivers, driver_info=driver_info)
 
 @app.route('/driver/tasks', methods=['GET'])
 def driver_tasks():

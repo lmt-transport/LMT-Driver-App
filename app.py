@@ -93,7 +93,7 @@ def get_driver_details(sheet, driver_name):
     return '-', '-'
     
 def comma_format(value):
-    """แปลงตัวเลขให้มีเครื่องหมาย , (รองรับทั้ง int/float และ string)"""
+    """แปลงตัวเลขให้มีเครื่องหมาย ,"""
     if not value: return ""
     if value == '-': return "-"
     try:
@@ -105,7 +105,6 @@ def comma_format(value):
     except:
         return str(value)
 
-# [FIX] ปรับรูปแบบวันที่เป็น 30/11/2568
 def thai_date_filter(date_val):
     """แปลงวันที่ string (YYYY-MM-DD) เป็นรูปแบบไทยตัวเลข (30/11/2568)"""
     if not date_val: return ""
@@ -116,14 +115,13 @@ def thai_date_filter(date_val):
             d = date_val
             
         year = d.year + 543
-        # จัดรูปแบบเป็น dd/mm/yyyy
         return f"{d.day:02d}/{d.month:02d}/{year}"
     except:
         return str(date_val)
 
 # Register Filters
 app.jinja_env.filters['comma_format'] = comma_format
-app.jinja_env.filters['thai_date'] = thai_date_filter  # ลงทะเบียน filter
+app.jinja_env.filters['thai_date'] = thai_date_filter
 
 # ==========================================
 # [FIX for Vercel] ระบบจำค่าผ่าน Google Sheet
@@ -150,7 +148,7 @@ def is_already_notified(sheet, key):
         print(f"Log Sheet Error: {e}")
         return True
 
-# --- Notification Logic 1 & 2: รายคัน (Real-time) ---
+# --- Notification Logic ---
 def notify_individual_movement(sheet, job_data, step):
     try:
         id_card, phone = get_driver_details(sheet, job_data['Driver'])
@@ -158,7 +156,6 @@ def notify_individual_movement(sheet, job_data, step):
         
         action_txt = ""
         icon = ""
-        
         if step == '1':
             action_txt = "เข้าถึงโรงงาน"
             icon = "🟩" 
@@ -210,11 +207,9 @@ def notify_car_completion(sheet, job_data):
             f"📞 โทร: `{phone}`"
         )
         send_discord_msg(msg)
-
     except Exception as e:
         print(f"Car Completion Notify Error: {e}")
 
-# --- Notification Logic 3, 4, 5: กลุ่มครบ (Group Completion) ---
 def check_group_completion(sheet, target_po_date, target_round_time, trigger_step):
     try:
         target_is_day, shift_name = get_shift_info(target_round_time)
@@ -267,7 +262,6 @@ def check_group_completion(sheet, target_po_date, target_round_time, trigger_ste
     except Exception as e:
         print(f"Group Notify Error: {e}")
 
-# --- Notification Logic 6: เตือนสาย (Late Alert) ---
 def check_late_and_notify(sheet):
     try:
         now_thai = datetime.now() + timedelta(hours=7)
@@ -319,7 +313,6 @@ def check_late_and_notify(sheet):
                         if is_day: late_list['day'].append(info_txt)
                         else: late_list['night'].append(info_txt)
             except Exception as e: 
-                print(f"Error checking job {job.get('Car_No')}: {e}")
                 continue
 
         current_hour_key = now_thai.strftime("%Y-%m-%d_%H")
@@ -392,9 +385,11 @@ def manager_dashboard():
         return (str(j['PO_Date']), c, str(j['Round']))
     filtered_jobs = sorted(filtered_jobs, key=sort_key)
     
-    # [ADDED] Logic คำนวณรถเข้าสาย (Red Text Logic)
+    # [UPDATED] Logic คำนวณเวลาเข้าสายแบบละเอียด (ชั่วโมง/นาที)
     for job in filtered_jobs:
         job['is_start_late'] = False
+        job['delay_msg'] = ""
+        
         t_plan_str = str(job.get('Round', '')).strip()
         t_act_str = str(job.get('T2_StartLoad', '')).strip()
         
@@ -402,14 +397,24 @@ def manager_dashboard():
             try:
                 fmt_plan = "%H:%M" if len(t_plan_str) <= 5 else "%H:%M:%S"
                 fmt_act = "%H:%M" if len(t_act_str) <= 5 else "%H:%M:%S"
-                dummy_date = datetime(2000, 1, 1)
+                
+                # ใช้ปีสมมติเพื่อเปรียบเทียบเวลา
                 t_plan = datetime.strptime(t_plan_str, fmt_plan).replace(year=2000, month=1, day=1)
                 t_act = datetime.strptime(t_act_str, fmt_act).replace(year=2000, month=1, day=1)
                 
-                if t_plan.hour >= 18 and t_act.hour < 6: t_act += timedelta(days=1)
-                elif t_plan.hour < 6 and t_act.hour >= 18: t_act -= timedelta(days=1)
+                # จัดการกรณีข้ามวัน (Night Shift)
+                if t_plan.hour >= 18 and t_act.hour < 6: 
+                    t_act += timedelta(days=1)
+                elif t_plan.hour < 6 and t_act.hour >= 18: 
+                    t_act -= timedelta(days=1)
                     
-                if t_act > t_plan: job['is_start_late'] = True
+                if t_act > t_plan: 
+                    job['is_start_late'] = True
+                    diff = t_act - t_plan
+                    total_seconds = diff.total_seconds()
+                    hours = int(total_seconds // 3600)
+                    minutes = int((total_seconds % 3600) // 60)
+                    job['delay_msg'] = f"ล่าช้า {hours} ชม. {minutes} น."
             except: pass
 
     jobs_by_trip_key = {}
@@ -566,7 +571,7 @@ def manager_dashboard():
                            driver_stats=driver_stats, idle_drivers_day=idle_drivers_day,
                            idle_drivers_night=idle_drivers_night, idle_drivers_hybrid=idle_drivers_hybrid,
                            idle_drivers_new=idle_drivers_new, shift_status=shift_status)
-
+                           
 @app.route('/create_job', methods=['POST'])
 def create_job():
     if 'user' not in session: return redirect(url_for('manager_login'))
@@ -891,13 +896,11 @@ def export_excel():
     
 @app.route('/export_pdf')
 def export_pdf():
-    # --- Helper function for PDF: thai_date_filter is missing from the provided code, mocking it to prevent crash ---
     def thai_date_filter(date_str):
         try:
             d = datetime.strptime(date_str, "%Y-%m-%d")
             return f"{d.day} {['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][d.month-1]} {d.year+543}"
         except: return date_str
-    # -----------------------------------------------------------------------------------------------------------------
 
     sheet = get_db()
     raw_jobs = get_cached_records(sheet, 'Jobs')
@@ -1132,7 +1135,7 @@ def export_pdf():
     pdf.is_summary_page = True
     pdf.add_page()
     
-    sum_headers = ['รอบงาน', 'จำนวนเที่ยว', 'เข้าโรงงาน', 'เข้าโหลด', 'โหลดเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
+    sum_headers = ['รอบงาน', 'จำนวน', 'เข้าโรงงาน', 'เข้าโหลด', 'โหลดเสร็จ', 'ยื่นเอกสาร', 'รับเอกสาร', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
     sum_cols = [45, 25, 25, 25, 25, 25, 25, 25] 
     total_table_width = sum(sum_cols)
     start_x = (297 - total_table_width) / 2 
@@ -1432,8 +1435,8 @@ def export_pdf_summary():
 
     pdf_bytes = pdf.output()
     filename = f"Summary_{date_filter if date_filter else 'All'}.pdf"
-    return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename) 
-
+    return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
+    
 @app.route('/tracking')
 def customer_view():
     sheet = get_db()
@@ -1464,8 +1467,10 @@ def customer_view():
         jobs_by_trip_key[trip_key].append(job)
         if job['Status'] == 'Done': total_done_jobs += 1
             
-        job['is_late'] = False
-        job['delay_tooltip'] = ""
+        # [UPDATED] Logic คำนวณเวลาเข้าสายแบบละเอียด (ชั่วโมง/นาที)
+        job['is_start_late'] = False
+        job['delay_msg'] = ""
+        
         t_plan_str = str(job.get('Round', '')).strip()
         t_act_str = str(job.get('T2_StartLoad', '')).strip()
         
@@ -1473,20 +1478,23 @@ def customer_view():
             try:
                 fmt_plan = "%H:%M" if len(t_plan_str) <= 5 else "%H:%M:%S"
                 fmt_act = "%H:%M" if len(t_act_str) <= 5 else "%H:%M:%S"
-                t_plan = datetime.strptime(t_plan_str, fmt_plan)
-                t_act = datetime.strptime(t_act_str, fmt_act)
-                if (t_plan - t_act).total_seconds() > 12 * 3600: t_act = t_act + timedelta(days=1)
                 
-                if t_act > t_plan:
-                    job['is_late'] = True
+                t_plan = datetime.strptime(t_plan_str, fmt_plan).replace(year=2000, month=1, day=1)
+                t_act = datetime.strptime(t_act_str, fmt_act).replace(year=2000, month=1, day=1)
+                
+                if t_plan.hour >= 18 and t_act.hour < 6: 
+                    t_act += timedelta(days=1)
+                elif t_plan.hour < 6 and t_act.hour >= 18: 
+                    t_act -= timedelta(days=1)
+                    
+                if t_act > t_plan: 
+                    job['is_start_late'] = True
                     diff = t_act - t_plan
                     total_seconds = diff.total_seconds()
                     hours = int(total_seconds // 3600)
                     minutes = int((total_seconds % 3600) // 60)
-                    job['delay_tooltip'] = f"ล่าช้า {hours} ชม. {minutes} น."
-                else:
-                    job['delay_tooltip'] = "เข้าโหลดตรงตามเวลา"
-            except (ValueError, TypeError): pass
+                    job['delay_msg'] = f"ล่าช้า {hours} ชม. {minutes} น."
+            except: pass
             
     completed_trips = 0
     for trip_key, job_list in jobs_by_trip_key.items():
@@ -1683,6 +1691,7 @@ def driver_tasks():
                 job['smart_detail'] = f"วันที่ {real_date_str} เวลา {round_str} น."
                 job['ui_class'] = {'bg': 'bg-gray-50 border-gray-100', 'text': 'text-gray-500', 'icon': 'fa-calendar-days'}
             
+            # --- แก้ไขจาก "%Y-%m-%d' เป็น "%Y-%m-%d" ---
             po_d = datetime.strptime(job['PO_Date'], "%Y-%m-%d")
             po_th = f"{po_d.day}/{po_d.month}/{str(po_d.year+543)[2:]}"
             job['po_label'] = f"(เอกสาร PO วันที่ {po_th})"

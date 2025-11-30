@@ -117,21 +117,79 @@
                                 {% set trip_key_tuple = (job.PO_Date|string, job.Car_No|string, job.Round|string) %}
                                 {% set last_end_time = trip_last_end_time.get(trip_key_tuple, "") %}
                                 
-                                {% set status_badge = '<span class="inline-flex items-center gap-1 bg-gray-200 text-gray-700 text-xs font-bold px-3 py-1 rounded-full border border-gray-300">ยังไม่ถึงคลัง</span>' %}
-                                {% if last_end_time %}
-                                    {% set status_badge = '<span class="inline-flex items-center gap-1 bg-green-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm"><i class="fa-solid fa-flag-checkered"></i> จบงาน</span>' %}
-                                {% elif job.T6_Exit %}
-                                    {% set status_badge = '<span class="inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full border border-blue-200"><i class="fa-solid fa-truck-fast"></i> กำลังออกส่ง</span>' %}
-                                {% elif job.T1_Enter %}
-                                    {% set status_badge = '<span class="inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-1 rounded-full border border-indigo-200"><i class="fa-solid fa-warehouse"></i> ถึงคลังแล้ว</span>' %}
-                                {% endif %}
-                                
+                                {% set ns = namespace(remaining=0) %}
                                 {% set trip_branches = [] %}
                                 {% for j in jobs %}
                                     {% if j.PO_Date == job.PO_Date and j.Car_No == job.Car_No and j.Round == job.Round %}
                                         {% set _ = trip_branches.append(j.Branch_Name) %}
+                                        {% if not j.T8_EndJob %}
+                                            {% set ns.remaining = ns.remaining + 1 %}
+                                        {% endif %}
                                     {% endif %}
                                 {% endfor %}
+                                
+                                {% set status_badge = '<span class="inline-flex items-center gap-1 bg-gray-200 text-gray-700 text-[10px] md:text-xs font-bold px-2 py-1 rounded-full border border-gray-300 whitespace-nowrap">ยังไม่ถึงคลัง</span>' %}
+                                
+                                {% if last_end_time %}
+                                    {% set status_badge = '<span class="inline-flex items-center gap-1 bg-green-600 text-white text-[10px] md:text-xs font-bold px-3 py-1 rounded-full shadow-sm whitespace-nowrap"><i class="fa-solid fa-flag-checkered"></i> จบงาน</span>' %}
+                                
+                                {% elif job.T6_Exit %}
+                                    {% set status_badge = '<span class="inline-flex items-center gap-1 bg-amber-100 text-amber-700 text-[10px] md:text-xs font-bold px-3 py-1 rounded-full border border-amber-200 shadow-sm whitespace-nowrap"><i class="fa-solid fa-truck-arrow-right"></i> ส่งอีก ' ~ ns.remaining ~ ' สาขา</span>' %}
+                                
+                                {% elif job.T1_Enter %}
+                                    {% set status_badge = '<span class="inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 text-[10px] md:text-xs font-bold px-3 py-1 rounded-full border border-indigo-200 whitespace-nowrap"><i class="fa-solid fa-warehouse"></i> ถึงคลังแล้ว</span>' %}
+                                {% endif %}
+                                
+                                <tr class="hover:bg-indigo-50/30 transition group/row">
+                                    <td class="px-4 py-3 text-center">{{ status_badge | safe }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap">
+                                        <div class="font-bold text-gray-800">{{ job.PO_Date | thai_date }}</div>
+                                        {% set show_load = job.get('Load_Date', job.PO_Date) %}
+                                        <div class="text-xs text-blue-600 font-medium bg-blue-50 px-1 rounded inline-block mt-0.5">โหลด: {{ show_load | thai_date }}</div>
+                                    </td>
+                                    <td class="px-4 py-3 whitespace-nowrap font-bold text-gray-800">
+                                        คันที่ #{{ job.Car_No }}
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        <div class="font-medium text-gray-900">{{ job.Driver }}</div>
+                                        <div class="text-xs text-gray-500 bg-gray-100 inline-block px-1.5 py-0.5 rounded mt-1">{{ job.Plate }}</div>
+                                    </td>
+                                    <td class="px-4 py-3 text-center font-bold text-indigo-700 text-base">{{ job.Round }}</td>
+                                    <td class="px-4 py-3 text-center">{% if job.T1_Enter %}<span class="text-indigo-600 font-bold">{{ job.T1_Enter }}</span>{% else %}<span class="text-gray-300">-</span>{% endif %}</td>
+                                    <td class="px-4 py-3 text-center">{% if job.T6_Exit %}<span class="text-blue-600 font-bold">{{ job.T6_Exit }}</span>{% else %}<span class="text-gray-300">-</span>{% endif %}</td>
+                                    <td class="px-4 py-3 text-center">{% if last_end_time %}<span class="text-green-600 font-bold">{{ last_end_time }}</span>{% else %}<span class="text-gray-300">-</span>{% endif %}</td>
+                                    
+                                    <td class="px-4 py-3 text-center flex justify-center gap-2 items-center">
+                                        {% if job.L1_Loc %}
+                                            <a href="https://www.google.com/maps/search/?api=1&query={{ job.L1_Loc }}" target="_blank" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800 transition shadow-sm" title="ดูพิกัด"><i class="fa-solid fa-location-dot"></i></a>
+                                        {% endif %}
+                                        
+                                        {% set modal_info = {
+                                            'carNo': job.Car_No,
+                                            'poDate': job.PO_Date | thai_date,
+                                            'loadDate': show_load | thai_date,
+                                            'roundTime': job.Round,
+                                            'branches': trip_branches,
+                                            'oldDriver': job.Driver,
+                                            'oldPlate': job.Plate
+                                        } %}
+                                        <button 
+                                            data-info='{{ modal_info | tojson | forceescape }}'
+                                            onclick="openChangeDriverModal(this)"
+                                            class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-50 text-orange-500 hover:bg-orange-100 hover:text-orange-700 transition shadow-sm" title="แจ้งเปลี่ยนคนขับ/ทะเบียน">
+                                            <i class="fa-solid fa-right-left"></i>
+                                        </button>
+
+                                        <form action="/delete_job" method="POST" onsubmit="return confirm('⚠️ ยืนยันการลบเที่ยววิ่งนี้?');">
+                                            <input type="hidden" name="po_date" value="{{ job.PO_Date }}">
+                                            <input type="hidden" name="round_time" value="{{ job.Round }}">
+                                            <input type="hidden" name="car_no" value="{{ job.Car_No }}">
+                                            <button type="submit" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition shadow-sm" title="ลบงาน"><i class="fa-solid fa-trash-can"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        {% endfor %}
                                 
                                 <tr class="hover:bg-indigo-50/30 transition group/row">
                                     <td class="px-4 py-3 text-center">{{ status_badge | safe }}</td>

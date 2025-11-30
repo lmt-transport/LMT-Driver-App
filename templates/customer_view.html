@@ -1,6 +1,8 @@
 {% extends "layout.html" %}
 {% block content %}
 
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
 <style>
     /* Custom Scrollbar for table */
     .custom-scrollbar::-webkit-scrollbar {
@@ -111,138 +113,158 @@
             <a href="#" onclick="triggerCustomerExport()" class="bg-green-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-green-700 transition shadow-md flex items-center gap-2 transform active:scale-95">
                 <i class="fa-solid fa-file-excel"></i> <span class="hidden sm:inline">Excel Export</span>
             </a>
+
+            <button type="button" onclick="copyCustomerReportImage()" class="bg-teal-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-teal-700 transition shadow-md flex items-center gap-2 transform active:scale-95">
+                <i class="fa-solid fa-camera"></i> <span class="hidden sm:inline">Image Report</span>
+            </button>
         </div>
     </div>
 
-    <div class="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
-        <div class="bg-gray-50 px-4 py-2 border-b border-gray-200 flex justify-between items-center">
-            <div class="text-xs font-bold text-gray-500 uppercase">รายละเอียดการขนส่ง</div>
-            <div class="text-[10px] text-gray-400 flex items-center gap-1">
-                <i class="fa-solid fa-clock-rotate-left"></i> อัปเดต: <span id="update-time"></span>
+    <div id="customer-capture-area" class="bg-white p-2">
+        
+        <div id="customer-report-header" style="display:none;" class="mb-4">
+            <div class="flex items-center justify-center gap-3 bg-indigo-50 border border-indigo-100 p-3 rounded-xl mx-auto w-fit shadow-sm">
+                <div class="bg-indigo-600 text-white w-10 h-10 flex items-center justify-center rounded-lg shadow-md">
+                    <i class="fa-solid fa-file-invoice text-xl"></i>
+                </div>
+                <div class="text-left">
+                    <div class="text-xs text-indigo-600 font-bold uppercase tracking-wider">LMT. Transport Tracking Report</div>
+                    <div class="text-xl font-bold text-gray-800">
+                        สถานะการจัดส่ง (PO: <span id="img-po-date" class="text-indigo-700"></span>)
+                    </div>
+                </div>
             </div>
         </div>
-        
-        <div class="overflow-x-auto custom-scrollbar">
-            <table class="w-full text-xs text-center whitespace-nowrap">
-                <thead>
-                    <tr class="text-white uppercase tracking-wider text-[10px]">
-                        <th class="px-2 py-2 bg-indigo-900 sticky left-0 z-10 font-bold">คันที่</th>
-                        <th class="px-2 py-2 bg-indigo-800 font-bold">ทะเบียนรถ</th>
-                        <th class="px-2 py-2 bg-indigo-800 font-bold">คนขับ</th>
-                        <th class="px-2 py-2 bg-indigo-800 font-bold">เวลาโหลด</th>
-                        <th class="px-2 py-2 bg-indigo-800 min-w-[160px] text-left pl-4 font-bold">สาขาปลายทาง</th>
-                        <th class="px-2 py-2 bg-indigo-800 font-bold">น้ำหนัก</th>
-                        <th class="px-2 py-2 bg-gray-600 font-bold">เข้าโรงงาน</th>
-                        <th class="px-2 py-2 bg-gray-600 font-bold">เริ่มโหลด</th>
-                        <th class="px-2 py-2 bg-gray-600 font-bold">โหลดเสร็จ</th>
-                        <th class="px-2 py-2 bg-gray-600 font-bold">ยื่นเอกสาร</th>
-                        <th class="px-2 py-2 bg-gray-600 font-bold">รับเอกสาร</th>
-                        
-                        <th class="px-2 py-2 bg-gray-600 font-bold">ออกโรงงาน</th>
-                        <th class="px-2 py-2 bg-emerald-600 font-bold">ถึงสาขา</th>
-                        <th class="px-2 py-2 bg-rose-600 font-bold">จบงาน</th>
-                    </tr>
-                </thead>
-                <tbody class="text-gray-600 bg-white">
-                    {% if jobs|length == 0 %}
-                    <tr><td colspan="14" class="p-12 text-center text-gray-400 bg-gray-50">
-                        <i class="fa-regular fa-folder-open text-4xl mb-2 opacity-50"></i><br>ไม่พบข้อมูลการขนส่งในวันที่เลือก
-                    </td></tr>
-                    {% endif %}
 
-                    {% for job in jobs %}
-                        {% set is_same = False %}
-                        {% if not loop.first and loop.previtem.Car_No == job.Car_No and loop.previtem.Driver == job.Driver and loop.previtem.Round == job.Round %}
-                            {% set is_same = True %}
+        <div class="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
+            <div class="bg-gray-50 px-4 py-2 border-b border-gray-200 flex justify-between items-center">
+                <div class="text-xs font-bold text-gray-500 uppercase">รายละเอียดการขนส่ง</div>
+                <div class="text-[10px] text-gray-400 flex items-center gap-1">
+                    <i class="fa-solid fa-clock-rotate-left"></i> อัปเดต: <span id="update-time"></span>
+                </div>
+            </div>
+            
+            <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-xs text-center whitespace-nowrap">
+                    <thead>
+                        <tr class="text-white uppercase tracking-wider text-[10px]">
+                            <th class="px-2 py-2 bg-indigo-900 sticky left-0 z-10 font-bold">คันที่</th>
+                            <th class="px-2 py-2 bg-indigo-800 font-bold">ทะเบียนรถ</th>
+                            <th class="px-2 py-2 bg-indigo-800 font-bold">คนขับ</th>
+                            <th class="px-2 py-2 bg-indigo-800 font-bold">เวลาโหลด</th>
+                            <th class="px-2 py-2 bg-indigo-800 min-w-[160px] text-left pl-4 font-bold">สาขาปลายทาง</th>
+                            <th class="px-2 py-2 bg-indigo-800 font-bold">น้ำหนัก</th>
+                            <th class="px-2 py-2 bg-gray-600 font-bold">เข้าโรงงาน</th>
+                            <th class="px-2 py-2 bg-gray-600 font-bold">เริ่มโหลด</th>
+                            <th class="px-2 py-2 bg-gray-600 font-bold">โหลดเสร็จ</th>
+                            <th class="px-2 py-2 bg-gray-600 font-bold">ยื่นเอกสาร</th>
+                            <th class="px-2 py-2 bg-gray-600 font-bold">รับเอกสาร</th>
+                            
+                            <th class="px-2 py-2 bg-gray-600 font-bold">ออกโรงงาน</th>
+                            <th class="px-2 py-2 bg-emerald-600 font-bold">ถึงสาขา</th>
+                            <th class="px-2 py-2 bg-rose-600 font-bold">จบงาน</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-gray-600 bg-white">
+                        {% if jobs|length == 0 %}
+                        <tr><td colspan="14" class="p-12 text-center text-gray-400 bg-gray-50">
+                            <i class="fa-regular fa-folder-open text-4xl mb-2 opacity-50"></i><br>ไม่พบข้อมูลการขนส่งในวันที่เลือก
+                        </td></tr>
                         {% endif %}
 
-                        <tr class="border-b border-gray-100 hover:bg-blue-50/30 transition duration-150">
-                            <td class="px-2 py-1 border-r border-gray-100 bg-gray-50/80 sticky left-0 font-bold text-indigo-900">
-                                {% if not is_same %} <span class="bg-white border border-gray-200 px-2 py-1 rounded shadow-sm">#{{ job.Car_No }}</span> {% endif %}
-                            </td>
-                            <td class="px-2 py-1 border-r border-gray-100">
-                                {% if not is_same %} {{ job.Plate }} {% endif %}
-                            </td>
-                            <td class="px-2 py-1 border-r border-gray-100 font-medium text-gray-800"> 
-                                {% if not is_same %} {{ job.Driver }} {% endif %}
-                            </td>
-                            <td class="px-2 py-1 border-r border-gray-100 font-bold text-indigo-700">
-                                {% if not is_same %} {{ job.Round }} {% endif %}
-                            </td>
-                            
-                            <td class="px-2 py-1 border-r border-gray-100 text-left pl-4 font-bold text-indigo-700">
-                                {{ job.Branch_Name }}
-                            </td>
-
-                            <td class="px-2 py-1 border-r border-gray-100 text-center font-medium text-gray-600">
-								{% if not is_same %} {{ job.get('Weight', '-') | comma_format }} {% endif %}
-							</td>
-                            {% macro time_display(time_val, loc_val) %}
-                                {% if time_val %}
-                                    {% if loc_val %}
-                                    <a href="https://maps.google.com/maps?q={{ loc_val }}" target="_blank" 
-                                       class="inline-flex items-center gap-1 bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100 hover:bg-blue-100 transition group" title="ดูแผนที่">
-                                        <span class="font-bold">{{ time_val }}</span> <i class="fa-solid fa-location-arrow text-[8px] opacity-50 group-hover:opacity-100"></i>
-                                    </a>
-                                    {% else %}
-                                    <span class="text-gray-500">{{ time_val }}</span>
-                                    {% endif %}
-                                {% else %} 
-                                    <span class="text-gray-300">-</span> 
-                                {% endif %}
-                            {% endmacro %}
-
-                            {% if is_same %}
-                                <td class="px-2 py-1 border-r border-gray-100 bg-gray-50/30" colspan="6"></td>
-                            {% else %}
-                                <td class="px-2 py-1 border-r border-gray-100">{{ time_display(job.T1_Enter, job.L1_Loc) }}</td>
-                                <td class="px-2 py-1 border-r border-gray-100">
-                                    {% if job.T2_StartLoad %}
-                                    {% set text_color = 'text-red-600' if job.is_late else 'text-green-600' %}
-                                    {% set bg_color = 'bg-red-50' if job.is_late else 'bg-green-50' %}
-                
-                                    {% if job.L2_Loc %}
-                                    <a href="https://maps.google.com/maps?q={{ job.L2_Loc }}" target="_blank" 
-                                    class="inline-flex items-center gap-1 {{ bg_color }} {{ text_color }} px-2 py-0.5 rounded-full border border-gray-200 hover:bg-gray-100 transition group cursor-help" 
-                                    title="{{ job.delay_tooltip }}">
-                                    <span class="font-bold">{{ job.T2_StartLoad }}</span> 
-                                    <i class="fa-solid fa-location-arrow text-[8px] opacity-50 group-hover:opacity-100"></i>
-                                    </a>
-                                    {% else %}
-                                    <span class="{{ text_color }} font-bold cursor-help border-b border-dotted border-gray-300" 
-                                    title="{{ job.delay_tooltip }}">
-                                    {{ job.T2_StartLoad }}
-                                    </span>
-                                    {% endif %}
-                                    {% else %}
-                                    <span class="text-gray-300">-</span>
-                                    {% endif %}
-                                </td>
-                                <td class="px-2 py-1 border-r border-gray-100">{{ time_display(job.T3_EndLoad, job.L3_Loc) }}</td>
-                                <td class="px-2 py-1 border-r border-gray-100">{{ time_display(job.T4_SubmitDoc, job.L4_Loc) }}</td>
-                                <td class="px-2 py-1 border-r border-gray-100">{{ time_display(job.T5_RecvDoc, job.L5_Loc) }}</td>
-                                <td class="px-2 py-1 border-r border-gray-100">{{ time_display(job.T6_Exit, job.L6_Loc) }}</td>
+                        {% for job in jobs %}
+                            {% set is_same = False %}
+                            {% if not loop.first and loop.previtem.Car_No == job.Car_No and loop.previtem.Driver == job.Driver and loop.previtem.Round == job.Round %}
+                                {% set is_same = True %}
                             {% endif %}
 
-                            <td class="px-2 py-1 border-r border-gray-100 bg-emerald-50/30 font-medium text-emerald-700">
-                                {{ time_display(job.T7_ArriveBranch, job.L7_Loc) }}
-                            </td>
-                            <td class="px-2 py-1 font-bold text-rose-600 bg-rose-50/30">
-                                {{ time_display(job.T8_EndJob, job.L8_Loc) }}
-                            </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                            <tr class="border-b border-gray-100 hover:bg-blue-50/30 transition duration-150">
+                                <td class="px-2 py-1 border-r border-gray-100 bg-gray-50/80 sticky left-0 font-bold text-indigo-900">
+                                    {% if not is_same %} <span class="bg-white border border-gray-200 px-2 py-1 rounded shadow-sm">#{{ job.Car_No }}</span> {% endif %}
+                                </td>
+                                <td class="px-2 py-1 border-r border-gray-100">
+                                    {% if not is_same %} {{ job.Plate }} {% endif %}
+                                </td>
+                                <td class="px-2 py-1 border-r border-gray-100 font-medium text-gray-800"> 
+                                    {% if not is_same %} {{ job.Driver }} {% endif %}
+                                </td>
+                                <td class="px-2 py-1 border-r border-gray-100 font-bold text-indigo-700">
+                                    {% if not is_same %} {{ job.Round }} {% endif %}
+                                </td>
+                                
+                                <td class="px-2 py-1 border-r border-gray-100 text-left pl-4 font-bold text-indigo-700">
+                                    {{ job.Branch_Name }}
+                                </td>
+
+                                <td class="px-2 py-1 border-r border-gray-100 text-center font-medium text-gray-600">
+                                    {% if not is_same %} {{ job.get('Weight', '-') | comma_format }} {% endif %}
+                                </td>
+                                {% macro time_display(time_val, loc_val) %}
+                                    {% if time_val %}
+                                        {% if loc_val %}
+                                        <a href="https://maps.google.com/maps?q={{ loc_val }}" target="_blank" 
+                                           class="inline-flex items-center gap-1 bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100 hover:bg-blue-100 transition group" title="ดูแผนที่">
+                                            <span class="font-bold">{{ time_val }}</span> <i class="fa-solid fa-location-arrow text-[8px] opacity-50 group-hover:opacity-100"></i>
+                                        </a>
+                                        {% else %}
+                                        <span class="text-gray-500">{{ time_val }}</span>
+                                        {% endif %}
+                                    {% else %} 
+                                        <span class="text-gray-300">-</span> 
+                                    {% endif %}
+                                {% endmacro %}
+
+                                {% if is_same %}
+                                    <td class="px-2 py-1 border-r border-gray-100 bg-gray-50/30" colspan="6"></td>
+                                {% else %}
+                                    <td class="px-2 py-1 border-r border-gray-100">{{ time_display(job.T1_Enter, job.L1_Loc) }}</td>
+                                    <td class="px-2 py-1 border-r border-gray-100">
+                                        {% if job.T2_StartLoad %}
+                                        {% set text_color = 'text-red-600' if job.is_late else 'text-green-600' %}
+                                        {% set bg_color = 'bg-red-50' if job.is_late else 'bg-green-50' %}
+                    
+                                        {% if job.L2_Loc %}
+                                        <a href="https://maps.google.com/maps?q={{ job.L2_Loc }}" target="_blank" 
+                                        class="inline-flex items-center gap-1 {{ bg_color }} {{ text_color }} px-2 py-0.5 rounded-full border border-gray-200 hover:bg-gray-100 transition group cursor-help" 
+                                        title="{{ job.delay_tooltip }}">
+                                        <span class="font-bold">{{ job.T2_StartLoad }}</span> 
+                                        <i class="fa-solid fa-location-arrow text-[8px] opacity-50 group-hover:opacity-100"></i>
+                                        </a>
+                                        {% else %}
+                                        <span class="{{ text_color }} font-bold cursor-help border-b border-dotted border-gray-300" 
+                                        title="{{ job.delay_tooltip }}">
+                                        {{ job.T2_StartLoad }}
+                                        </span>
+                                        {% endif %}
+                                        {% else %}
+                                        <span class="text-gray-300">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-2 py-1 border-r border-gray-100">{{ time_display(job.T3_EndLoad, job.L3_Loc) }}</td>
+                                    <td class="px-2 py-1 border-r border-gray-100">{{ time_display(job.T4_SubmitDoc, job.L4_Loc) }}</td>
+                                    <td class="px-2 py-1 border-r border-gray-100">{{ time_display(job.T5_RecvDoc, job.L5_Loc) }}</td>
+                                    <td class="px-2 py-1 border-r border-gray-100">{{ time_display(job.T6_Exit, job.L6_Loc) }}</td>
+                                {% endif %}
+
+                                <td class="px-2 py-1 border-r border-gray-100 bg-emerald-50/30 font-medium text-emerald-700">
+                                    {{ time_display(job.T7_ArriveBranch, job.L7_Loc) }}
+                                </td>
+                                <td class="px-2 py-1 font-bold text-rose-600 bg-rose-50/30">
+                                    {{ time_display(job.T8_EndJob, job.L8_Loc) }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="p-4 text-center bg-gray-50 border-t border-gray-200">
+                <a href="/tracking" class="inline-flex items-center gap-2 text-sm text-indigo-500 hover:text-indigo-700 font-medium transition">
+                    <i class="fa-solid fa-arrows-rotate"></i> รีเฟรชข้อมูลล่าสุด
+                </a>
+            </div>
         </div>
-        
-        <div class="p-4 text-center bg-gray-50 border-t border-gray-200">
-            <a href="/tracking" class="inline-flex items-center gap-2 text-sm text-indigo-500 hover:text-indigo-700 font-medium transition">
-                <i class="fa-solid fa-arrows-rotate"></i> รีเฟรชข้อมูลล่าสุด
-            </a>
-        </div>
-    </div>
-</div>
+    </div> </div>
 
 <script>
     document.getElementById('update-time').innerText = new Date().toLocaleString('th-TH');
@@ -250,28 +272,76 @@
     function triggerCustomerExport() {
         const selectedDate = document.getElementById('customer_date_filter').value;
         let url = '/export_excel'; 
-        if (selectedDate) {
-            url += `?date_filter=${selectedDate}`;
-        }
+        if (selectedDate) url += `?date_filter=${selectedDate}`;
         window.location.href = url;
     }
 
     function triggerCustomerPDF() {
         const selectedDate = document.getElementById('customer_date_filter').value;
         let url = '/export_pdf'; 
-        if (selectedDate) {
-            url += `?date_filter=${selectedDate}`;
-        }
+        if (selectedDate) url += `?date_filter=${selectedDate}`;
         window.location.href = url;
     }
     
     function triggerCompactPDF() {
         const selectedDate = document.getElementById('customer_date_filter').value;
         let url = '/export_pdf_summary'; 
-        if (selectedDate) {
-            url += `?date_filter=${selectedDate}`;
-        }
+        if (selectedDate) url += `?date_filter=${selectedDate}`;
         window.location.href = url;
+    }
+
+    // --- NEW: Copy Image Function ---
+    async function copyCustomerReportImage() {
+        const captureArea = document.getElementById('customer-capture-area');
+        const headerTitle = document.getElementById('customer-report-header');
+        const poVal = document.getElementById('customer_date_filter').value;
+        
+        let poDisplay = poVal;
+        if (poVal) {
+            const [y, m, d] = poVal.split('-');
+            const thYear = parseInt(y) + 543;
+            poDisplay = `${d}/${m}/${thYear}`;
+        }
+        document.getElementById('img-po-date').innerText = poDisplay;
+
+        headerTitle.style.display = 'block';
+
+        try {
+            const canvas = await html2canvas(captureArea, {
+                scale: 2, 
+                backgroundColor: '#ffffff', 
+                useCORS: true,
+                logging: false,
+                onclone: (clonedDoc) => {
+                    const clonedHeader = clonedDoc.getElementById('customer-report-header');
+                    if(clonedHeader) clonedHeader.style.display = 'block';
+                }
+            });
+
+            headerTitle.style.display = 'none';
+
+            canvas.toBlob(async (blob) => {
+                if (!blob) { alert('เกิดข้อผิดพลาดในการสร้างภาพ'); return; }
+                
+                try {
+                    const item = new ClipboardItem({ "image/png": blob });
+                    await navigator.clipboard.write([item]);
+                    alert("✅ คัดลอกรูปภาพรายงานแล้ว! (กดวางใน Line ได้เลย)");
+                } catch (err) {
+                    console.error(err);
+                    const link = document.createElement('a');
+                    link.download = `Tracking_Report_${poVal}.png`;
+                    link.href = canvas.toDataURL();
+                    link.click();
+                    alert("⚠️ บราวเซอร์ไม่อนุญาตให้คัดลอกอัตโนมัติ\nระบบจึงดาวน์โหลดเป็นไฟล์ภาพให้แทนครับ");
+                }
+            });
+
+        } catch (error) {
+            console.error("Capture Error:", error);
+            headerTitle.style.display = 'none';
+            alert("เกิดข้อผิดพลาดในการถ่ายภาพ");
+        }
     }
 </script>
 {% endblock %}

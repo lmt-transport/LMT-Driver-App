@@ -1587,8 +1587,8 @@ def driver_select():
     limit_time = now_thai + timedelta(hours=48)
     
     driver_info = {} 
-    # เก็บเวลาที่งานเร็วที่สุดของแต่ละคนไว้เพื่อ Sorting (Default คืออนาคตไกลๆ)
-    driver_earliest_dt = {}
+    # เก็บข้อมูลสำหรับ Sorting: { name: {'min_dt': datetime, 'min_car': int} }
+    driver_sort_data = {}
 
     # เริ่มต้นข้อมูล
     for name in drivers_list_raw:
@@ -1597,20 +1597,21 @@ def driver_select():
             'pending_count': 0, 
             'urgent_msg': '', 'urgent_color': '', 'urgent_time': '', 'sort_weight': 999
         }
-        driver_earliest_dt[name] = datetime.max
+        # ค่า Default สำหรับคนไม่มีงาน: เวลาไกลสุด, เลขรถเยอะสุด
+        driver_sort_data[name] = {'dt': datetime.max, 'car': 99999}
 
     # วนลูปงานเพื่อหาเวลาที่เร็วที่สุด และสร้าง Badge แจ้งเตือน
     for job in all_jobs:
         d_name = job.get('Driver')
         if d_name not in driver_info: continue
         
-        # เช็คเฉพาะงานที่ยังไม่จบและไม่ยกเลิก
         status = str(job.get('Status', '')).lower()
         if status != 'done' and status != 'cancel':
             trip_key = f"{job['PO_Date']}_{job['Round']}_{job['Car_No']}"
             driver_info[d_name]['pending_set'].add(trip_key)
+            
             try:
-                # แปลงวันเวลาโหลด
+                # 1. แปลงวันเวลาโหลด เพื่อใช้ Sort
                 load_date_str = job.get('Load_Date', job['PO_Date'])
                 round_str = str(job['Round']).strip()
                 job_dt_str = f"{load_date_str} {round_str}"
@@ -1618,11 +1619,16 @@ def driver_select():
                 try: job_dt = datetime.strptime(job_dt_str, "%Y-%m-%d %H:%M")
                 except ValueError: job_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
                 
-                # ถ้าเจองานที่เร็วกว่าเดิม ให้บันทึกเวลาไว้ (เพื่อใช้ Sort)
-                if job_dt < driver_earliest_dt[d_name]:
-                    driver_earliest_dt[d_name] = job_dt
+                # เอาเลขรถมาใช้เป็นเกณฑ์รอง
+                try: car_n = int(str(job['Car_No']).strip())
+                except: car_n = 99999
 
-                # --- สร้าง Badge สีๆ เหมือนเดิม ---
+                # ถ้าเจองานที่เร็วกว่าที่เคยเจอ ให้บันทึกไว้เป็น "งานแรกสุด" ของคนนี้
+                if job_dt < driver_sort_data[d_name]['dt']:
+                    driver_sort_data[d_name]['dt'] = job_dt
+                    driver_sort_data[d_name]['car'] = car_n
+
+                # 2. คำนวณ UI Badge (เหมือนเดิม)
                 diff = job_dt - now_thai
                 hours_diff = diff.total_seconds() / 3600
                 delta_days = (job_dt.date() - now_thai.date()).days
@@ -1649,7 +1655,6 @@ def driver_select():
                     driver_info[d_name]['urgent_color'] = color
                     driver_info[d_name]['urgent_time'] = f"{h:02}:{m:02} น."
                     driver_info[d_name]['sort_weight'] = weight
-                # --------------------------------
 
             except Exception as e: pass
     
@@ -1657,22 +1662,32 @@ def driver_select():
     for name in drivers_list_raw:
         driver_info[name]['pending_count'] = len(driver_info[name]['pending_set'])
 
-    # --- [ส่วนคัดกรองและเรียงลำดับ] ---
-    final_drivers = []
-    for name in drivers_list_raw:
-        earliest = driver_earliest_dt[name]
-        
-        # เงื่อนไข: ต้องมีเวลาเริ่มงาน (ไม่เท่ากับ max) และ เวลานั้นต้อง <= 48 ชม. จากตอนนี้
-        # (รวมถึงงานในอดีตที่ยังไม่จบด้วย เพราะ time < now + 48h)
-        if earliest != datetime.max and earliest <= limit_time:
-            final_drivers.append(name)
-            
-    # เรียงลำดับ: 
-    # 1. ตามเวลาที่ต้องโหลด (เร็วสุดขึ้นก่อน) -> x[0]
-    # 2. ตามชื่อ (ก-ฮ) -> x[1]
-    final_drivers.sort(key=lambda x: (driver_earliest_dt[x], x))
+    # --- [แยกกลุ่ม และ เรียงลำดับ] ---
+    active_drivers = []
+    hidden_drivers = []
 
-    return render_template('driver_select.html', drivers=final_drivers, driver_info=driver_info)
+    for name in drivers_list_raw:
+        earliest_dt = driver_sort_data[name]['dt']
+        
+        # เงื่อนไข Active: ต้องมีงาน (ไม่เท่ากับ max) และ งานนั้นต้องมาถึงใน <= 48 ชม.
+        # (รวมถึงงานที่เลยเวลามาแล้วแต่ยังไม่เสร็จด้วย เพราะ datetime < now + 48h)
+        if earliest_dt != datetime.max and earliest_dt <= limit_time:
+            active_drivers.append(name)
+        else:
+            hidden_drivers.append(name)
+            
+    # Key ในการ Sort: (เวลาโหลด, เลขรถ)
+    def sort_key(n):
+        return (driver_sort_data[n]['dt'], driver_sort_data[n]['car'])
+
+    active_drivers.sort(key=sort_key)
+    # Hidden drivers ก็เรียงด้วย เผื่อกดดูจะได้เห็นงานที่ไกลๆ เป็นระเบียบ (หรือเรียงตามชื่อถ้าไม่มีงาน)
+    hidden_drivers.sort(key=sort_key)
+
+    return render_template('driver_select.html', 
+                           active_drivers=active_drivers, 
+                           hidden_drivers=hidden_drivers, 
+                           driver_info=driver_info)
 
 @app.route('/driver/tasks', methods=['GET'])
 def driver_tasks():

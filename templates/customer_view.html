@@ -253,11 +253,13 @@
     // --------------------------------------------------------
     // Copy Image (High Quality for Customer)
     // --------------------------------------------------------
+// --- UPDATED: Copy Image Function (Mobile Optimized) ---
     async function copyCustomerReportImage() {
         const captureArea = document.getElementById('customer-capture-area');
         const headerTitle = document.getElementById('customer-report-header');
         const poVal = document.getElementById('customer_date_filter').value;
         
+        // 1. เตรียมวันที่ไทย
         let poDisplay = poVal;
         if (poVal) {
             const [y, m, d] = poVal.split('-');
@@ -266,35 +268,77 @@
         }
         document.getElementById('img-po-date').innerText = poDisplay;
 
+        // 2. แสดงหัวข้อชั่วคราว
         headerTitle.style.display = 'block';
 
         try {
             const canvas = await html2canvas(captureArea, {
-                scale: 2, 
+                scale: 3, // ความคมชัดระดับ 3 เท่า (ชัดเปรี้ยะบนมือถือ)
                 backgroundColor: '#ffffff', 
                 useCORS: true,
                 logging: false,
+                // *** [สำคัญสำหรับมือถือ] บังคับให้เรนเดอร์กว้าง 1200px (เหมือนจอคอม) ***
+                windowWidth: 1280, 
+                
                 onclone: (clonedDoc) => {
                     const clonedHeader = clonedDoc.getElementById('customer-report-header');
+                    const clonedArea = clonedDoc.getElementById('customer-capture-area');
+                    
                     if(clonedHeader) clonedHeader.style.display = 'block';
+
+                    // [สำคัญ] บังคับความกว้างของพื้นที่ถ่ายรูปในโลกจำลอง ให้กว้างเท่าคอม
+                    // เพื่อให้ตารางกางออกเต็มที่ ไม่ถูกบีบ
+                    if(clonedArea) {
+                        clonedArea.style.width = '1200px'; 
+                        clonedArea.style.padding = '20px';
+                    }
+
+                    // ลบเงาและปรับสีตัวอักษร (เหมือนเดิม)
+                    const shadows = clonedDoc.querySelectorAll('.shadow-lg, .shadow-xl, .shadow-sm, .shadow-md');
+                    shadows.forEach(el => {
+                        el.classList.remove('shadow-lg', 'shadow-xl', 'shadow-sm', 'shadow-md');
+                        el.style.boxShadow = 'none';
+                        el.style.border = '1px solid #e5e7eb';
+                    });
+
+                    const textGrays = clonedDoc.querySelectorAll('.text-gray-600, .text-gray-500, .text-gray-400');
+                    textGrays.forEach(el => {
+                        el.classList.remove('text-gray-600', 'text-gray-500', 'text-gray-400');
+                        el.classList.add('text-black');
+                    });
+
+                    // ปิด Scrollbar ในภาพถ่าย
+                    const tableDiv = clonedDoc.querySelector('.overflow-x-auto');
+                    if(tableDiv) {
+                        tableDiv.classList.remove('overflow-x-auto', 'custom-scrollbar');
+                        tableDiv.style.overflow = 'visible';
+                        tableDiv.style.width = '100%'; 
+                    }
                 }
             });
 
+            // ซ่อนหัวข้อกลับคืน
             headerTitle.style.display = 'none';
 
             canvas.toBlob(async (blob) => {
                 if (!blob) { alert('เกิดข้อผิดพลาดในการสร้างภาพ'); return; }
+                
+                // บนมือถือบางรุ่น การเขียน Clipboard อัตโนมัติอาจถูกบล็อก
+                // เราจึงเน้นการ "ดาวน์โหลด" หรือ "แชร์" เป็นหลักถ้าทำได้
                 try {
+                    // ลอง Copy ก่อน (เผื่อใช้บน iPad/Tablet)
                     const item = new ClipboardItem({ "image/png": blob });
                     await navigator.clipboard.write([item]);
-                    alert("✅ คัดลอกรูปภาพรายงานแล้ว! (กดวางใน Line ได้เลย)");
+                    alert("✅ บันทึกรูปภาพแล้ว (อยู่ใน Clipboard)\nกดวางในแอป Line ได้เลยครับ");
                 } catch (err) {
-                    console.error(err);
+                    // ถ้า Copy ไม่ได้ (ซึ่งปกติในมือถือ Android/iOS จะเข้าเคสนี้)
+                    // ให้ดาวน์โหลดไฟล์ภาพอัตโนมัติ
+                    console.log("Clipboard not supported, downloading instead.");
                     const link = document.createElement('a');
                     link.download = `Tracking_Report_${poVal}.png`;
                     link.href = canvas.toDataURL();
                     link.click();
-                    alert("⚠️ บราวเซอร์ไม่อนุญาตให้คัดลอกอัตโนมัติ\nระบบจึงดาวน์โหลดเป็นไฟล์ภาพให้แทนครับ");
+                    // ไม่ต้อง Alert กวนใจ เพราะ Browser จะเด้งถามดาวน์โหลดเอง
                 }
             });
 

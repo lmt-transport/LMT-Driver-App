@@ -24,12 +24,13 @@ CORS(app)
 # ==========================================
 DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1444236316404482139/UJc-I_NRT33p9UKCas5ATGgjAlqlrtxBuPhvKYKnI-Pz2_AyxAnOs_UFNl203_sqLsI5'
 
+last_late_alert_time = {'day': 0, 'night': 0}
+notify_flags = {} 
+
 def send_discord_msg(message):
-    """ฟังก์ชันส่งข้อความเข้า Discord"""
     try:
         if not DISCORD_WEBHOOK_URL or 'วาง_' in DISCORD_WEBHOOK_URL:
             return
-
         payload = {
             "content": message,
             "username": "LMT Smart Bot",
@@ -50,17 +51,12 @@ CACHE_DURATION = 60
 def get_cached_records(sheet, worksheet_name):
     current_time = time.time()
     cache_entry = cache_storage.get(worksheet_name)
-    
     if cache_entry and cache_entry['data'] is not None:
         if current_time - cache_entry['timestamp'] < CACHE_DURATION:
             return cache_entry['data']
-    
     try:
         data = sheet.worksheet(worksheet_name).get_all_records()
-        cache_storage[worksheet_name] = {
-            'data': data,
-            'timestamp': current_time
-        }
+        cache_storage[worksheet_name] = {'data': data, 'timestamp': current_time}
         return data
     except gspread.exceptions.APIError as e:
         if "429" in str(e) and cache_entry and cache_entry['data'] is not None:
@@ -71,10 +67,8 @@ def invalidate_cache(worksheet_name):
     if worksheet_name in cache_storage:
         cache_storage[worksheet_name] = {'data': None, 'timestamp': 0}
 
-# --- Helper Functions for Notification ---
-
+# --- Helper Functions ---
 def get_shift_info(round_time):
-    """ระบุกะ Day/Night จากเวลา"""
     is_day = True
     try:
         h = int(str(round_time).split(':')[0])
@@ -83,7 +77,6 @@ def get_shift_info(round_time):
     return is_day, ("กลางวัน ☀️" if is_day else "กลางคืน 🌙")
 
 def get_driver_details(sheet, driver_name):
-    """ดึงเลขบัตรและเบอร์โทรจาก Cache Drivers"""
     try:
         drivers = get_cached_records(sheet, 'Drivers')
         for d in drivers:
@@ -93,64 +86,45 @@ def get_driver_details(sheet, driver_name):
     return '-', '-'
     
 def comma_format(value):
-    """แปลงตัวเลขให้มีเครื่องหมาย , (รองรับทั้ง int/float และ string)"""
     if not value: return ""
     if value == '-': return "-"
     try:
-        # ลบ , เดิมออกก่อน (เผื่อมีมาแล้ว)
         clean_val = str(value).replace(',', '')
         num = float(clean_val)
-        if num.is_integer():
-            return "{:,.0f}".format(num)
+        if num.is_integer(): return "{:,.0f}".format(num)
         return "{:,.2f}".format(num)
-    except:
-        return str(value)
+    except: return str(value)
 
 app.jinja_env.filters['comma_format'] = comma_format
 
-# ==========================================
-# [FIX for Vercel] ระบบจำค่าผ่าน Google Sheet
-# ==========================================
 def is_already_notified(sheet, key):
     try:
-        try:
-            ws_log = sheet.worksheet('NotifyLogs')
+        try: ws_log = sheet.worksheet('NotifyLogs')
         except:
             ws_log = sheet.add_worksheet(title="NotifyLogs", rows=1000, cols=2)
             ws_log.append_row(['Notify_Key', 'Timestamp'])
             return False
-
         existing_keys = ws_log.col_values(1)
-        
-        if key in existing_keys:
-            return True
+        if key in existing_keys: return True
         else:
             timestamp = (datetime.now() + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S")
             ws_log.append_row([key, timestamp])
             return False
-            
-    except Exception as e:
-        print(f"Log Sheet Error: {e}")
-        return True
+    except: return True
 
-# --- Notification Logic 1 & 2: รายคัน (Real-time) ---
+def get_notify_flag(key):
+    return notify_flags.get(key, False)
+
+def set_notify_flag(key):
+    notify_flags[key] = True
+
+# --- Notification Logics ---
 def notify_individual_movement(sheet, job_data, step):
     try:
         id_card, phone = get_driver_details(sheet, job_data['Driver'])
         is_day, shift_name = get_shift_info(job_data['Round'])
-        
-        action_txt = ""
-        icon = ""
-        
-        if step == '1':
-            action_txt = "เข้าถึงโรงงาน"
-            icon = "🟩" 
-        elif step == '6':
-            action_txt = "ออกจากโรงงาน"
-            icon = "🚀" 
-        else:
-            return
-
+        action_txt = "เข้าถึงโรงงาน" if step == '1' else "ออกจากโรงงาน"
+        icon = "🟩" if step == '1' else "🚀"
         msg = (
             f"{icon} **แจ้งเตือน: รถ{action_txt}**\n"
             f"📅 PO: `{job_data['PO_Date']}` | กะ: {shift_name}\n"
@@ -164,7 +138,7 @@ def notify_individual_movement(sheet, job_data, step):
         send_discord_msg(msg)
     except Exception as e:
         print(f"Individual Notify Error: {e}")
-        
+
 def notify_car_completion(sheet, job_data):
     try:
         all_jobs = sheet.worksheet('Jobs').get_all_records()
@@ -193,17 +167,14 @@ def notify_car_completion(sheet, job_data):
             f"📞 โทร: `{phone}`"
         )
         send_discord_msg(msg)
-
     except Exception as e:
         print(f"Car Completion Notify Error: {e}")
 
-# --- Notification Logic 3, 4, 5: กลุ่มครบ (Group Completion) ---
 def check_group_completion(sheet, target_po_date, target_round_time, trigger_step):
     try:
         target_is_day, shift_name = get_shift_info(target_round_time)
         raw_jobs = sheet.worksheet('Jobs').get_all_records()
         target_jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(target_po_date).strip()]
-
         stats = {'total': 0, 'in': 0, 'out': 0, 'done': 0}
         trips = {}
         for job in target_jobs:
@@ -213,57 +184,35 @@ def check_group_completion(sheet, target_po_date, target_round_time, trigger_ste
             trips[key].append(job)
 
         for key, job_list in trips.items():
-            first_job = job_list[0]
-            r_time = str(first_job.get('Round', '')).strip()
-            is_day, _ = get_shift_info(r_time)
-            
+            is_day, _ = get_shift_info(str(job_list[0].get('Round', '')))
             if is_day == target_is_day:
                 stats['total'] += 1
-                if str(first_job.get('T1_Enter', '')).strip() != '': stats['in'] += 1
-                if str(first_job.get('T6_Exit', '')).strip() != '': stats['out'] += 1
+                if str(job_list[0].get('T1_Enter', '')).strip(): stats['in'] += 1
+                if str(job_list[0].get('T6_Exit', '')).strip(): stats['out'] += 1
                 if all(j['Status'] == 'Done' for j in job_list): stats['done'] += 1
 
         if stats['total'] == 0: return
-
         now_str = (datetime.now() + timedelta(hours=7)).strftime('%H:%M')
         base_msg = f"✅ PO: {target_po_date} ({shift_name})\n🚛 จำนวนทั้งหมด: `{stats['total']}` คัน\n🕒 เวลา: `{now_str} น.`"
         shift_key = 'day' if target_is_day else 'night'
 
-        if trigger_step == '1':
-            if stats['total'] == stats['in'] and stats['total'] > 0:
-                cache_key = f"completed_in_{target_po_date}_{shift_key}"
-                if not is_already_notified(sheet, cache_key):
-                    send_discord_msg(f"🏁 **สรุป: รถเข้าโรงงาน ครบแล้ว!**\n{base_msg}")
+        if trigger_step == '1' and stats['total'] == stats['in'] and stats['total']>0:
+            key = f"completed_in_{target_po_date}_{shift_key}"
+            if not is_already_notified(sheet, key): send_discord_msg(f"🏁 **สรุป: รถเข้าโรงงาน ครบแล้ว!**\n{base_msg}")
+        if trigger_step == '6' and stats['total'] == stats['out'] and stats['total']>0:
+            key = f"completed_out_{target_po_date}_{shift_key}"
+            if not is_already_notified(sheet, key): send_discord_msg(f"🛫 **สรุป: รถออกจากโรงงาน ครบแล้ว!**\n{base_msg}")
+        if trigger_step == '8' and stats['total'] == stats['done'] and stats['total']>0:
+            key = f"completed_done_{target_po_date}_{shift_key}"
+            if not is_already_notified(sheet, key): send_discord_msg(f"🎉 **สรุป: จบงานส่งของ ครบทุกคันแล้ว!**\n{base_msg}")
+    except Exception as e: print(f"Group Notify Error: {e}")
 
-        if trigger_step == '6':
-            if stats['total'] == stats['out'] and stats['total'] > 0:
-                cache_key = f"completed_out_{target_po_date}_{shift_key}"
-                if not is_already_notified(sheet, cache_key):
-                    send_discord_msg(f"🛫 **สรุป: รถออกจากโรงงาน ครบแล้ว!**\n{base_msg}")
-
-        if trigger_step == '8':
-            if stats['total'] == stats['done'] and stats['total'] > 0:
-                cache_key = f"completed_done_{target_po_date}_{shift_key}"
-                if not is_already_notified(sheet, cache_key):
-                    send_discord_msg(f"🎉 **สรุป: จบงานส่งของ ครบทุกคันแล้ว!**\n{base_msg}")
-
-    except Exception as e:
-        print(f"Group Notify Error: {e}")
-
-# --- Notification Logic 6: เตือนสาย (Late Alert) ---
 def check_late_and_notify(sheet):
     try:
         now_thai = datetime.now() + timedelta(hours=7)
         raw_jobs = get_cached_records(sheet, 'Jobs')
         unique_cars = {}
-        
-        active_jobs = [
-            j for j in raw_jobs 
-            if str(j.get('Status', '')).lower() != 'cancel' 
-            and str(j.get('Status', '')).lower() != 'done' 
-            and str(j.get('T1_Enter', '')).strip() == ''
-        ]
-
+        active_jobs = [j for j in raw_jobs if str(j.get('Status', '')).lower() not in ['cancel', 'done'] and str(j.get('T1_Enter', '')).strip() == '']
         late_list = {'day': [], 'night': []}
 
         for job in active_jobs:
@@ -271,96 +220,55 @@ def check_late_and_notify(sheet):
                 key = (str(job['PO_Date']), str(job['Round']), str(job['Car_No']))
                 if key in unique_cars: continue
                 unique_cars[key] = True
-
                 load_date_str = job.get('Load_Date', job['PO_Date'])
                 round_str = str(job['Round']).strip()
-                
-                try:
-                    plan_dt = datetime.strptime(f"{load_date_str} {round_str}", "%Y-%m-%d %H:%M")
-                except ValueError:
-                    continue
-
+                try: plan_dt = datetime.strptime(f"{load_date_str} {round_str}", "%Y-%m-%d %H:%M")
+                except: continue
                 if str(job.get('Load_Date', '')).strip() == '' or str(job.get('Load_Date')) == str(job['PO_Date']):
-                    h_plan = plan_dt.hour
-                    if 0 <= h_plan < 6:
-                        plan_dt = plan_dt + timedelta(days=1)
-
+                    if 0 <= plan_dt.hour < 6: plan_dt += timedelta(days=1)
+                
                 if now_thai > plan_dt and (now_thai - plan_dt).total_seconds() < 48 * 3600:
                     diff = now_thai - plan_dt
                     hours_late = diff.total_seconds() / 3600
-                    
                     if hours_late >= 2:
                         is_day, _ = get_shift_info(round_str)
                         id_card, phone = get_driver_details(sheet, job['Driver'])
-                        minutes_late = int((diff.total_seconds() % 3600) // 60)
-                        
-                        info_txt = (f"• คันที่ {job['Car_No']} (นัด {round_str})\n"
-                                    f"   - ทะเบียน: {job['Plate']}\n"
-                                    f"   - คนขับ: {job['Driver']} ({phone})\n"
-                                    f"   - ⏳ สาย: {int(hours_late)} ชม. {minutes_late} นาที")
-                        
-                        if is_day: late_list['day'].append(info_txt)
-                        else: late_list['night'].append(info_txt)
-            except Exception as e: 
-                print(f"Error checking job {job.get('Car_No')}: {e}")
-                continue
+                        mins = int((diff.total_seconds() % 3600) // 60)
+                        info = f"• คันที่ {job['Car_No']} (นัด {round_str})\n   - ทะเบียน: {job['Plate']}\n   - คนขับ: {job['Driver']} ({phone})\n   - ⏳ สาย: {int(hours_late)} ชม. {mins} นาที"
+                        if is_day: late_list['day'].append(info)
+                        else: late_list['night'].append(info)
+            except: continue
 
         current_hour_key = now_thai.strftime("%Y-%m-%d_%H")
-
         if late_list['day']:
-            notify_key = f"late_alert_day_{current_hour_key}"
-            if not is_already_notified(sheet, notify_key):
-                msg = f"⚠️ **เตือนภัย: รถเข้าช้าเกิน 2 ชม. (รอบเช้า)**\n(แจ้งเตือนประจำชั่วโมงที่ {now_thai.hour}:00)\n" + "\n".join(late_list['day'])
-                send_discord_msg(msg)
-            
+            if not is_already_notified(sheet, f"late_alert_day_{current_hour_key}"):
+                send_discord_msg(f"⚠️ **เตือนภัย: รถเข้าช้าเกิน 2 ชม. (รอบเช้า)**\n(แจ้งเตือนประจำชั่วโมงที่ {now_thai.hour}:00)\n" + "\n".join(late_list['day']))
         if late_list['night']:
-            notify_key = f"late_alert_night_{current_hour_key}"
-            if not is_already_notified(sheet, notify_key):
-                msg = f"⚠️ **เตือนภัย: รถเข้าช้าเกิน 2 ชม. (รอบดึก)**\n(แจ้งเตือนประจำชั่วโมงที่ {now_thai.hour}:00)\n" + "\n".join(late_list['night'])
-                send_discord_msg(msg)
-
-    except Exception as e:
-        print(f"Late Check Error: {e}")
-
-# --- Custom Filter ---
-def thai_date_filter(date_str):
-    if not date_str: return ""
-    try:
-        date_obj = datetime.strptime(str(date_str).strip(), "%Y-%m-%d")
-        thai_year = date_obj.year + 543
-        return date_obj.strftime(f"%d/%m/{thai_year}")
-    except ValueError: return date_str
-
-app.jinja_env.filters['thai_date'] = thai_date_filter
+            if not is_already_notified(sheet, f"late_alert_night_{current_hour_key}"):
+                send_discord_msg(f"⚠️ **เตือนภัย: รถเข้าช้าเกิน 2 ชม. (รอบดึก)**\n(แจ้งเตือนประจำชั่วโมงที่ {now_thai.hour}:00)\n" + "\n".join(late_list['night']))
+    except Exception as e: print(f"Late Check Error: {e}")
 
 # --- DB Connection ---
 def get_db():
     scope = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets', "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
     creds_json = os.environ.get('GSPREAD_CREDENTIALS')
-    
     if not creds_json:
         if os.path.exists("credentials.json"): return gspread.service_account(filename="credentials.json").open("DriverLogApp")
         else: return None
-        
-    creds_dict = json.loads(creds_json)
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(creds_json), scope)
     client = gspread.authorize(creds)
-    sheet = client.open("DriverLogApp") 
-    return sheet
+    return client.open("DriverLogApp")
 
 # --- Routes ---
-
 @app.route('/manager_login', methods=['GET', 'POST'])
 def manager_login():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
         try:
             sheet = get_db()
             users = get_cached_records(sheet, 'Users')
             for user in users:
-                if str(user['Username']) == username and str(user['Password']) == password:
-                    session['user'] = username
+                if str(user['Username']) == request.form['username'] and str(user['Password']) == request.form['password']:
+                    session['user'] = request.form['username']
                     return redirect(url_for('manager_dashboard'))
             return render_template('login.html', error="ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง")
         except Exception as e: return render_template('login.html', error=f"Error: {str(e)}")
@@ -386,11 +294,40 @@ def manager_dashboard():
         return (str(j['PO_Date']), c, str(j['Round']))
     filtered_jobs = sorted(filtered_jobs, key=sort_key)
     
+    # -------------------------------------------------------------
+    # [ADDED] Logic คำนวณรถเข้าสาย (Red Text Logic)
+    # -------------------------------------------------------------
+    for job in filtered_jobs:
+        job['is_start_late'] = False
+        t_plan_str = str(job.get('Round', '')).strip()
+        t_act_str = str(job.get('T2_StartLoad', '')).strip()
+        
+        if t_plan_str and t_act_str:
+            try:
+                fmt_plan = "%H:%M" if len(t_plan_str) <= 5 else "%H:%M:%S"
+                fmt_act = "%H:%M" if len(t_act_str) <= 5 else "%H:%M:%S"
+                
+                # ใช้ Dummy Date เพื่อเทียบเวลา
+                dummy_date = datetime(2000, 1, 1)
+                t_plan = datetime.strptime(t_plan_str, fmt_plan).replace(year=2000, month=1, day=1)
+                t_act = datetime.strptime(t_act_str, fmt_act).replace(year=2000, month=1, day=1)
+                
+                # Logic ข้ามคืน: ถ้านัดดึก (>=18:00) แต่มาเช้า (<06:00) ถือว่าเป็นวันถัดไป
+                if t_plan.hour >= 18 and t_act.hour < 6:
+                    t_act += timedelta(days=1)
+                # ถ้านัดเช้า (<06:00) แต่ดันมาดึก (>=18:00) (เคสแปลกๆ)
+                elif t_plan.hour < 6 and t_act.hour >= 18:
+                    t_act -= timedelta(days=1)
+                    
+                if t_act > t_plan:
+                    job['is_start_late'] = True
+            except: pass
+    # -------------------------------------------------------------
+
     jobs_by_trip_key = {}
     total_done_jobs = 0
     total_branches = len(filtered_jobs)
     trip_last_end_time = {} 
-    
     grouped_jobs_for_stats = []
     current_group = []
     prev_key = None
@@ -408,7 +345,6 @@ def manager_dashboard():
         trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']))
         if trip_key not in jobs_by_trip_key: jobs_by_trip_key[trip_key] = []
         jobs_by_trip_key[trip_key].append(job)
-        
         if job['Status'] == 'Done': total_done_jobs += 1
             
         if not job.get('T1_Enter') and job['Status'] != 'Done':
@@ -418,6 +354,9 @@ def manager_dashboard():
                 plan_dt = datetime.strptime(f"{load_date_str} {round_str}", "%Y-%m-%d %H:%M") if ' ' in f"{load_date_str} {round_str}" else None
                 if not plan_dt: plan_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
                 
+                if str(job.get('Load_Date', '')).strip() == '' or str(job.get('Load_Date')) == str(job['PO_Date']):
+                    if 0 <= plan_dt.hour < 6: plan_dt += timedelta(days=1)
+
                 if now_thai > plan_dt:
                     po_key = str(job['PO_Date'])
                     if po_key not in late_arrivals_by_po: late_arrivals_by_po[po_key] = []
@@ -448,7 +387,6 @@ def manager_dashboard():
     for d in driver_stats:
         driver_stats[d]['rounds'].sort(key=lambda x: int(str(x['car_no']).strip()) if str(x['car_no']).strip().isdigit() else 9999)
 
-    # --- IDLE DRIVERS LOGIC (Revised: Everyone is Hybrid) ---
     busy_day_drivers = set()
     busy_night_drivers = set()
     for job in filtered_jobs:
@@ -469,18 +407,9 @@ def manager_dashboard():
         d_name = d.get('Name')
         is_busy_day = d_name in busy_day_drivers
         is_busy_night = d_name in busy_night_drivers
-        
-        # เงื่อนไขใหม่: ดูแค่สถานะว่าง ไม่ดูประวัติใดๆ ทั้งสิ้น
-        # 1. ว่างทั้งวัน -> ใส่ Hybrid
-        if not is_busy_day and not is_busy_night:
-            idle_drivers_hybrid.append(d)
-        # 2. ว่างแค่เช้า (เพราะมีงานดึก) -> ใส่ Day Only
-        elif not is_busy_day:
-            idle_drivers_day.append(d)
-        # 3. ว่างแค่ดึก (เพราะมีงานเช้า) -> ใส่ Night Only
-        elif not is_busy_night:
-            idle_drivers_night.append(d)
-    # ----------------------------------
+        if not is_busy_day and not is_busy_night: idle_drivers_hybrid.append(d)
+        elif not is_busy_day: idle_drivers_day.append(d)
+        elif not is_busy_night: idle_drivers_night.append(d)
 
     shift_status = {'day': {'total': 0, 'entered': 0, 'finished': 0, 'is_enter_complete': False, 'is_job_complete': False},
                     'night': {'total': 0, 'entered': 0, 'finished': 0, 'is_enter_complete': False, 'is_job_complete': False}}
@@ -561,7 +490,7 @@ def create_job():
     round_time = request.form['round_time']
     car_no = request.form['car_no']
     driver_name = request.form['driver_name']
-    weight = request.form.get('weight', '') # เพิ่มรับค่าน้ำหนัก
+    weight = request.form.get('weight', '')
     branches = request.form.getlist('branches') 
     
     drivers_ws = sheet.worksheet('Drivers')
@@ -575,7 +504,6 @@ def create_job():
     new_rows = []
     for branch in branches:
         if branch.strip(): 
-            # แทรก weight ที่ตำแหน่ง index 7 (คอลัมน์ H)
             row = [po_date, load_date, round_time, car_no, driver_name, plate, branch, weight, "", "", "", "", "", "", "", "", "New", "", "", "", "", "", "", "", "", ""]
             new_rows.append(row)
     
@@ -685,9 +613,7 @@ def export_excel():
             'เวลาโหลด': "" if is_same else job['Round'], 
             'คนขับ': "" if is_same else job['Driver'],
             'ปลายทาง (สาขา)': job['Branch_Name'],
-            # [แก้ไข] แสดงน้ำหนักเฉพาะบรรทัดแรกของกลุ่ม
             'น้ำหนัก': "" if is_same else comma_format(job.get('Weight', '')),
-            # ------------------------------------
             'ทะเบียนรถ': "" if is_same else job['Plate'],
             'เข้าโรงงาน': "" if is_same else job['T1_Enter'],
             'เริ่มโหลด': "" if is_same else t2_display, 
@@ -820,7 +746,6 @@ def export_excel():
     for k in sum_total: sum_total[k] = sum_day[k] + sum_night[k]
 
     start_row = ws.max_row + 2 
-    # Adjusted columns for summary (shifted by 1 due to weight)
     summary_headers = ['รอบโหลด', 'จำนวนรถ', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ยื่นเอกสาร', 'รับเอกสาร', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
     col_map_idx = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15] 
     
@@ -988,7 +913,6 @@ def export_pdf():
                 self.cell(0, 6, f'วันที่เอกสาร: {po_date_thai} | พิมพ์เมื่อ: {print_date}', align='C', new_x="LMARGIN", new_y="NEXT")
                 self.ln(4)
 
-                # Adjusted columns to fit weight. Total width approx 280mm
                 cols = [10, 30, 35, 16, 45, 12, 16, 35, 16, 16, 22, 22]
                 headers = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', 'นน.', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
                 self.set_fill_color(44, 62, 80)
@@ -1035,9 +959,7 @@ def export_pdf():
             driver = str(job['Driver']) if is_first_row else ""
             round_t = str(job['Round']) if is_first_row else ""
             branch = str(job['Branch_Name'])
-            # [แก้ไข] แสดงน้ำหนักเฉพาะบรรทัดแรก
             weight = comma_format(job.get('Weight', '')) if is_first_row else ""
-            # ---------------------------------
             t1 = str(job['T1_Enter']) if is_first_row else ""
             
             t2_text = ""
@@ -1099,7 +1021,7 @@ def export_pdf():
                 pdf.set_draw_color(200, 200, 200)
                 pdf.set_line_width(0.1)
                 
-            pdf.line(7, y_top, 282, y_top) # Adjusted line length
+            pdf.line(7, y_top, 282, y_top)
 
             if is_last_in_group:
                 y_bottom = pdf.get_y()
@@ -1801,3 +1723,4 @@ def logout():
 
 if __name__ == '__main__':
     app.run(debug=True)
+}

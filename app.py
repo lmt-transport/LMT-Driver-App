@@ -377,21 +377,14 @@ def manager_dashboard():
     date_filter = request.args.get('date_filter')
     now_thai = datetime.now() + timedelta(hours=7)
     today_date = now_thai.strftime("%Y-%m-%d")
-    
-    if not date_filter:
-        date_filter = today_date
+    if not date_filter: date_filter = today_date
 
     filtered_jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
-
-    def sort_key_func(job):
-        po_date = str(job['PO_Date'])
-        car_no_str = str(job['Car_No']).strip()
-        round_val = str(job['Round'])
-        try: car_no_int = int(car_no_str)
-        except ValueError: car_no_int = 99999 
-        return (po_date, car_no_int, round_val)
-
-    filtered_jobs = sorted(filtered_jobs, key=sort_key_func)
+    def sort_key(j):
+        try: c = int(str(j['Car_No']).strip())
+        except: c = 99999
+        return (str(j['PO_Date']), c, str(j['Round']))
+    filtered_jobs = sorted(filtered_jobs, key=sort_key)
     
     jobs_by_trip_key = {}
     total_done_jobs = 0
@@ -401,7 +394,6 @@ def manager_dashboard():
     grouped_jobs_for_stats = []
     current_group = []
     prev_key = None
-    
     late_arrivals_by_po = {}
     total_late_cars = 0
 
@@ -414,30 +406,25 @@ def manager_dashboard():
         prev_key = curr_key
         
         trip_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']))
-        if trip_key not in jobs_by_trip_key:
-            jobs_by_trip_key[trip_key] = []
+        if trip_key not in jobs_by_trip_key: jobs_by_trip_key[trip_key] = []
         jobs_by_trip_key[trip_key].append(job)
         
-        if job['Status'] == 'Done':
-            total_done_jobs += 1
+        if job['Status'] == 'Done': total_done_jobs += 1
             
         if not job.get('T1_Enter') and job['Status'] != 'Done':
             try:
                 load_date_str = job.get('Load_Date', job['PO_Date'])
                 round_str = str(job['Round']).strip()
-                plan_dt_str = f"{load_date_str} {round_str}"
-                try: plan_dt = datetime.strptime(plan_dt_str, "%Y-%m-%d %H:%M")
-                except: plan_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
+                plan_dt = datetime.strptime(f"{load_date_str} {round_str}", "%Y-%m-%d %H:%M") if ' ' in f"{load_date_str} {round_str}" else None
+                if not plan_dt: plan_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
                 
                 if now_thai > plan_dt:
                     po_key = str(job['PO_Date'])
                     if po_key not in late_arrivals_by_po: late_arrivals_by_po[po_key] = []
-                    
                     diff = now_thai - plan_dt
                     hours = int(diff.total_seconds() // 3600)
                     mins = int((diff.total_seconds() % 3600) // 60)
                     job['late_duration'] = f"{hours} ชม. {mins} น."
-                    
                     if not any(x['Car_No'] == job['Car_No'] for x in late_arrivals_by_po[po_key]):
                         late_arrivals_by_po[po_key].append(job)
                         total_late_cars += 1
@@ -445,33 +432,15 @@ def manager_dashboard():
             
     if current_group: grouped_jobs_for_stats.append(current_group)
 
-    driver_history = {} 
-    for j in raw_jobs:
-        d_name = j.get('Driver')
-        r_time = str(j.get('Round', '')).strip()
-        if d_name and r_time:
-            if d_name not in driver_history:
-                driver_history[d_name] = {'day_count': 0, 'night_count': 0}
-            try:
-                h = int(r_time.split(':')[0])
-                if 6 <= h <= 18: driver_history[d_name]['day_count'] += 1
-                else: driver_history[d_name]['night_count'] += 1
-            except: pass
-
     driver_stats = {}
     for group in grouped_jobs_for_stats:
         first = group[0]
         d_name = first['Driver']
         if not d_name: continue
-
-        if d_name not in driver_stats:
-            driver_stats[d_name] = {'total_trips': 0, 'rounds': []}
-        
+        if d_name not in driver_stats: driver_stats[d_name] = {'total_trips': 0, 'rounds': []}
         driver_stats[d_name]['total_trips'] += 1
         driver_stats[d_name]['rounds'].append({
-            'round': first['Round'],
-            'car_no': first['Car_No'],
-            'plate': first['Plate'],
+            'round': first['Round'], 'car_no': first['Car_No'], 'plate': first['Plate'],
             'branches': [j['Branch_Name'] for j in group],
             'status': 'Done' if all(j['Status'] == 'Done' for j in group) else 'Pending'
         })
@@ -479,97 +448,63 @@ def manager_dashboard():
     for d in driver_stats:
         driver_stats[d]['rounds'].sort(key=lambda x: int(str(x['car_no']).strip()) if str(x['car_no']).strip().isdigit() else 9999)
 
-    # --- [แก้ไขใหม่] Idle Drivers Logic (เช็คละเอียดแยกกะ) ---
-    # 1. หาว่าวันนี้ใครไม่ว่างช่วงไหนบ้าง
+    # --- IDLE DRIVERS LOGIC (Revised: Everyone is Hybrid) ---
     busy_day_drivers = set()
     busy_night_drivers = set()
-
     for job in filtered_jobs:
         if str(job.get('Status', '')).lower() == 'cancel': continue
         d_name = job.get('Driver')
-        r_time = str(job.get('Round', '')).strip()
         try:
-            h = int(r_time.split(':')[0])
-            if 6 <= h <= 18: busy_day_drivers.add(d_name) # ไม่ว่างกะเช้า
-            else: busy_night_drivers.add(d_name)          # ไม่ว่างกะดึก
+            h = int(str(job.get('Round', '')).split(':')[0])
+            if 6 <= h <= 18: busy_day_drivers.add(d_name)
+            else: busy_night_drivers.add(d_name)
         except: pass
 
-    # 2. เตรียม list
     idle_drivers_day = []
     idle_drivers_night = []
     idle_drivers_hybrid = []
     idle_drivers_new = []
 
-    # 3. วนลูปคนขับทุกคนเพื่อจัดกลุ่ม
     for d in drivers:
         d_name = d.get('Name')
-        history = driver_history.get(d_name) # ประวัติการวิ่ง (Day/Night count)
-        
-        # เช็คสถานะ "วันนี้"
         is_busy_day = d_name in busy_day_drivers
         is_busy_night = d_name in busy_night_drivers
-        is_fully_free = not is_busy_day and not is_busy_night
+        
+        # เงื่อนไขใหม่: ดูแค่สถานะว่าง ไม่ดูประวัติใดๆ ทั้งสิ้น
+        # 1. ว่างทั้งวัน -> ใส่ Hybrid
+        if not is_busy_day and not is_busy_night:
+            idle_drivers_hybrid.append(d)
+        # 2. ว่างแค่เช้า (เพราะมีงานดึก) -> ใส่ Day Only
+        elif not is_busy_day:
+            idle_drivers_day.append(d)
+        # 3. ว่างแค่ดึก (เพราะมีงานเช้า) -> ใส่ Night Only
+        elif not is_busy_night:
+            idle_drivers_night.append(d)
+    # ----------------------------------
 
-        if history:
-            has_day_hist = history['day_count'] > 0
-            has_night_hist = history['night_count'] > 0
-            
-            if has_day_hist and has_night_hist:
-                # Hybrid: แสดงเมื่อว่างทั้งวัน (หรือจะปรับให้แสดงถ้าว่างกะใดกะหนึ่งก็ได้)
-                if is_fully_free:
-                    idle_drivers_hybrid.append(d)
-            elif has_day_hist:
-                # Day Only: แสดงถ้า "วันนี้ยังไม่มีงานกะเช้า" (แม้จะมีงานกะดึกก็ตาม)
-                if not is_busy_day:
-                    idle_drivers_day.append(d)
-            elif has_night_hist:
-                # Night Only: แสดงถ้า "วันนี้ยังไม่มีงานกะดึก"
-                if not is_busy_night:
-                    idle_drivers_night.append(d)
-        else:
-            # พนักงานใหม่/ไม่มีประวัติ: แสดงเมื่อว่างทั้งวัน
-            if is_fully_free:
-                idle_drivers_new.append(d)
-
-    shift_status = {
-        'day': {'total': 0, 'entered': 0, 'finished': 0, 'is_enter_complete': False, 'is_job_complete': False},
-        'night': {'total': 0, 'entered': 0, 'finished': 0, 'is_enter_complete': False, 'is_job_complete': False}
-    }
+    shift_status = {'day': {'total': 0, 'entered': 0, 'finished': 0, 'is_enter_complete': False, 'is_job_complete': False},
+                    'night': {'total': 0, 'entered': 0, 'finished': 0, 'is_enter_complete': False, 'is_job_complete': False}}
     
     for trip_key, job_list in jobs_by_trip_key.items():
-        active_jobs = [j for j in job_list if str(j.get('Status', '')).lower() != 'cancel']
-        if not active_jobs: continue
-        
-        first_job = active_jobs[0]
-        r_time = str(first_job.get('Round', '')).strip()
-        
-        is_day_shift = True
-        try:
-            h = int(r_time.split(':')[0])
-            if h < 6 or h >= 19: is_day_shift = False
-        except: pass
-
-        target = shift_status['day'] if is_day_shift else shift_status['night']
+        active = [j for j in job_list if str(j.get('Status', '')).lower() != 'cancel']
+        if not active: continue
+        first = active[0]
+        is_day, _ = get_shift_info(first.get('Round'))
+        target = shift_status['day'] if is_day else shift_status['night']
         target['total'] += 1
-        
-        if str(first_job.get('T1_Enter', '')).strip() != '':
-            target['entered'] += 1
-            
-        if all(j['Status'] == 'Done' for j in active_jobs):
-            target['finished'] += 1
+        if str(first.get('T1_Enter', '')).strip(): target['entered'] += 1
+        if all(j['Status'] == 'Done' for j in active): target['finished'] += 1
 
-    for key in ['day', 'night']:
-        s = shift_status[key]
-        if s['total'] > 0:
-            if s['total'] == s['entered']: s['is_enter_complete'] = True
-            if s['total'] == s['finished']: s['is_job_complete'] = True
+    for k in shift_status:
+        if shift_status[k]['total'] > 0:
+            if shift_status[k]['total'] == shift_status[k]['entered']: shift_status[k]['is_enter_complete'] = True
+            if shift_status[k]['total'] == shift_status[k]['finished']: shift_status[k]['is_job_complete'] = True
 
     completed_trips = 0
     for trip_key, job_list in jobs_by_trip_key.items():
         if all(job['Status'] == 'Done' for job in job_list):
             completed_trips += 1
-            last_end_time = max([j['T8_EndJob'] for j in job_list if j['T8_EndJob']], default="")
-            trip_last_end_time[trip_key] = last_end_time
+            trip_last_end_time[trip_key] = max([j['T8_EndJob'] for j in job_list if j['T8_EndJob']], default="")
         else:
             trip_last_end_time[trip_key] = ""
             
@@ -578,131 +513,42 @@ def manager_dashboard():
 
     line_data_day = []
     line_data_night = []
-
     for group in grouped_jobs_for_stats:
         first = group[0]
         round_str = str(first['Round']).strip()
-        load_date_raw = str(first.get('Load_Date', first['PO_Date'])).strip()
-        
-        show_date_str = load_date_raw
-        try:
-            ld_obj = datetime.strptime(load_date_raw, "%Y-%m-%d")
-            thai_year = ld_obj.year + 543
-            show_date_str = ld_obj.strftime(f"%d/%m/{str(thai_year)[2:]}")
-        except: pass
-
-        is_day = True
-        try:
-            h = int(round_str.split(':')[0])
-            if h < 6 or h >= 19: is_day = False
-        except: pass
-
+        is_day, _ = get_shift_info(round_str)
         status_txt = "ยังไม่ถึงคลัง"
-        status_time = ""
-        found_branch_activity = False
-
-        if all(j['Status'] == 'Done' for j in group):
-            status_txt = "จบงานทุกสาขา"
-            status_time = group[-1].get('T8_EndJob', '')
-            found_branch_activity = True
-        else:
-            latest_branch_txt = ""
-            latest_branch_time = ""
-            for idx, j in enumerate(group, 1):
-                t8 = j.get('T8_EndJob')
-                t7 = j.get('T7_ArriveBranch')
-                if t8:
-                    latest_branch_txt = f"จบงานสาขา {idx}"
-                    latest_branch_time = t8
-                elif t7:
-                    latest_branch_txt = f"ถึงสาขา {idx}"
-                    latest_branch_time = t7
-            if latest_branch_txt:
-                status_txt = latest_branch_txt
-                status_time = latest_branch_time
-                found_branch_activity = True
-
-        if not found_branch_activity:
-            if first.get('T6_Exit'): status_txt, status_time = "ออกโรงงาน", first.get('T6_Exit')
-            elif first.get('T5_RecvDoc'): status_txt, status_time = "รับเอกสาร", first.get('T5_RecvDoc')
-            elif first.get('T4_SubmitDoc'): status_txt, status_time = "ยื่นเอกสาร", first.get('T4_SubmitDoc')
-            elif first.get('T3_EndLoad'): status_txt, status_time = "โหลดเสร็จ", first.get('T3_EndLoad')
-            elif first.get('T2_StartLoad'): status_txt, status_time = "กำลังโหลด", first.get('T2_StartLoad')
-            elif first.get('T1_Enter'): status_txt, status_time = "เข้าโรงงาน", first.get('T1_Enter')
+        if all(j['Status'] == 'Done' for j in group): status_txt = f"จบงานทุกสาขา ({group[-1].get('T8_EndJob', '')})"
+        elif first.get('T6_Exit'): status_txt = f"ออกโรงงาน ({first.get('T6_Exit')})"
+        elif first.get('T1_Enter'): status_txt = f"เข้าโรงงาน ({first.get('T1_Enter')})"
         
-        full_status = f"{status_txt}"
-        if status_time: full_status = f"{status_txt} ({status_time})"
-        
-        trip_data = {
-            'round': round_str,
-            'car_no': first['Car_No'],
-            'plate': first['Plate'],
-            'driver': first['Driver'],
-            'branches': [j['Branch_Name'] for j in group],
-            'load_date': show_date_str,
-            'latest_status': full_status 
-        }
-        
+        trip_data = {'round': round_str, 'car_no': first['Car_No'], 'plate': first['Plate'], 'driver': first['Driver'],
+                     'branches': [j['Branch_Name'] for j in group], 'load_date': first.get('Load_Date', first['PO_Date']), 'latest_status': status_txt}
         if is_day: line_data_day.append(trip_data)
         else: line_data_night.append(trip_data)
     
     line_data_day.sort(key=lambda x: x['round'])
-    def night_sort(item):
-        try:
-            h, m = map(int, item['round'].split(':'))
-            return (h + 24 if h < 6 else h) * 60 + m
-        except: return 99999
-    line_data_night.sort(key=night_sort)
+    line_data_night.sort(key=lambda x: (int(x['round'].split(':')[0]) + 24 if int(x['round'].split(':')[0]) < 6 else int(x['round'].split(':')[0])))
 
-    for job in filtered_jobs:
-        job['is_start_late'] = False
-        t_plan_str = str(job.get('Round', '')).strip()
-        t_act_str = str(job.get('T2_StartLoad', '')).strip()
-        if t_plan_str and t_act_str:
-            try:
-                fmt_plan = "%H:%M" if len(t_plan_str) <= 5 else "%H:%M:%S"
-                fmt_act = "%H:%M" if len(t_act_str) <= 5 else "%H:%M:%S"
-                t_plan = datetime.strptime(t_plan_str, fmt_plan)
-                t_act = datetime.strptime(t_act_str, fmt_act)
-                if (t_plan - t_act).total_seconds() > 12 * 3600: t_act += timedelta(days=1)
-                if t_act > t_plan: job['is_start_late'] = True
-            except: pass
-
-    try:
-        current_date_obj = datetime.strptime(date_filter, "%Y-%m-%d")
-        prev_date = (current_date_obj - timedelta(days=1)).strftime("%Y-%m-%d")
-        next_date = (current_date_obj + timedelta(days=1)).strftime("%Y-%m-%d")
-    except ValueError:
-        prev_date, next_date = date_filter, date_filter
-    
     all_dates = sorted(list(set([str(j['PO_Date']).strip() for j in raw_jobs])), reverse=True)
+    try:
+        curr = datetime.strptime(date_filter, "%Y-%m-%d")
+        prev = (curr - timedelta(days=1)).strftime("%Y-%m-%d")
+        next_d = (curr + timedelta(days=1)).strftime("%Y-%m-%d")
+    except: prev, next_d = date_filter, date_filter
 
     return render_template('manager.html', 
-                           jobs=filtered_jobs, 
-                           drivers=drivers, 
-                           all_dates=all_dates, 
-                           total_trips=total_trips, 
-                           completed_trips=completed_trips,
-                           total_branches=total_branches,
-                           total_done_jobs=total_done_jobs,
-                           total_running_jobs=total_running_jobs,
-                           now_time=now_thai.strftime("%H:%M"),
-                           today_date=today_date,
-                           current_filter_date=date_filter,
-                           prev_date=prev_date,
-                           next_date=next_date,
-                           trip_last_end_time=trip_last_end_time,
-                           line_data_day=line_data_day,
-                           line_data_night=line_data_night,
-                           late_arrivals_by_po=late_arrivals_by_po,
-                           total_late_cars=total_late_cars,
-                           driver_stats=driver_stats,
-                           idle_drivers_day=idle_drivers_day,
-                           idle_drivers_night=idle_drivers_night,
-                           idle_drivers_hybrid=idle_drivers_hybrid,
-                           idle_drivers_new=idle_drivers_new,
-                           shift_status=shift_status
-                           )
+                           jobs=filtered_jobs, drivers=drivers, all_dates=all_dates, 
+                           total_trips=total_trips, completed_trips=completed_trips,
+                           total_branches=total_branches, total_done_jobs=total_done_jobs,
+                           total_running_jobs=total_running_jobs, now_time=now_thai.strftime("%H:%M"),
+                           today_date=today_date, current_filter_date=date_filter,
+                           prev_date=prev, next_date=next_d, trip_last_end_time=trip_last_end_time,
+                           line_data_day=line_data_day, line_data_night=line_data_night,
+                           late_arrivals_by_po=late_arrivals_by_po, total_late_cars=total_late_cars,
+                           driver_stats=driver_stats, idle_drivers_day=idle_drivers_day,
+                           idle_drivers_night=idle_drivers_night, idle_drivers_hybrid=idle_drivers_hybrid,
+                           idle_drivers_new=idle_drivers_new, shift_status=shift_status)
 
 @app.route('/create_job', methods=['POST'])
 def create_job():

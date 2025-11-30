@@ -113,7 +113,7 @@
                         {% endfor %}
                     </div>
 
-                    <!-- [ส่วนที่เพิ่มใหม่] พื้นที่กรอกข้อมูล PO (อยู่ใต้ปุ่มกดเวลา) -->
+                    <!-- [ส่วนที่แก้ไข] พื้นที่กรอกข้อมูล PO (อยู่ใต้ปุ่มกดเวลา) -->
                     {% if job.parsed_po_details %}
                     <div class="mt-3 bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
                         <div class="bg-gray-50 px-3 py-1.5 border-b border-gray-200 flex items-center gap-2">
@@ -132,7 +132,7 @@
                                     <span class="text-xs font-bold text-gray-600 font-mono">{{ po.name }}</span>
                                 </div>
 
-                                <!-- 1. ช่องกรอกเลข Doc -->
+                                <!-- 1. ช่องกรอกเลข Doc (แก้ไขใหม่: บังคับ 6 หลัก มี 755 นำหน้า) -->
                                 <div class="flex items-center gap-2 mb-2" id="box-doc-{{ job.row_id }}-{{ loop.index }}">
                                     <div class="w-6 text-center text-gray-300 text-xs"><i class="fa-solid fa-file-invoice"></i></div>
                                     
@@ -146,12 +146,15 @@
                                         </button>
                                     {% else %}
                                         <!-- กรณีโหมดกรอกข้อมูล -->
-                                        <input type="text" id="input-doc-{{ job.row_id }}-{{ loop.index }}" 
-                                            placeholder="IN755xxxx" 
-                                            class="flex-1 text-xs border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 uppercase font-mono px-2 py-1.5 border shadow-sm"
-                                            oninput="validateInputLive(this)">
+                                        <div class="flex-1 flex items-center shadow-sm">
+                                            <span class="bg-gray-100 text-gray-500 border border-r-0 border-gray-300 rounded-l-lg px-2 py-1.5 text-xs font-mono font-bold">755</span>
+                                            <input type="text" inputmode="numeric" maxlength="6" id="input-doc-{{ job.row_id }}-{{ loop.index }}" 
+                                                placeholder="xxxxxx" 
+                                                class="w-full text-xs border-gray-300 rounded-r-lg focus:ring-indigo-500 focus:border-indigo-500 font-mono px-2 py-1.5 border border-l-0"
+                                                oninput="validateInputLive(this)">
+                                        </div>
                                         <button onclick="saveDetail('doc', '{{ job.row_id }}', '{{ po.name }}', '{{ loop.index }}')" 
-                                            class="bg-indigo-600 text-white w-7 h-7 rounded-lg shadow hover:bg-indigo-700 flex items-center justify-center transition active:scale-95">
+                                            class="bg-indigo-600 text-white w-7 h-7 rounded-lg shadow hover:bg-indigo-700 flex items-center justify-center transition active:scale-95 ml-2 flex-shrink-0">
                                             <i class="fa-solid fa-save text-xs"></i>
                                         </button>
                                     {% endif %}
@@ -161,13 +164,21 @@
                                 {% if po.doc %}
                                 <div id="edit-doc-{{ job.row_id }}-{{ loop.index }}" class="hidden flex items-center gap-2 mb-2 animate-fade-in-down">
                                     <div class="w-6 text-center text-gray-300 text-xs"><i class="fa-solid fa-file-invoice"></i></div>
-                                    <input type="text" id="input-edit-doc-{{ job.row_id }}-{{ loop.index }}" value="{{ po.doc }}"
-                                        class="flex-1 text-xs border-indigo-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 uppercase font-mono px-2 py-1.5 border shadow-sm bg-indigo-50/10">
+                                    
+                                    <div class="flex-1 flex items-center shadow-sm">
+                                        <span class="bg-gray-100 text-gray-500 border border-r-0 border-gray-300 rounded-l-lg px-2 py-1.5 text-xs font-mono font-bold">755</span>
+                                        <!-- ดึงค่ามาแสดงเฉพาะ 6 หลักหลัง (ตัด 755 ออก) เพื่อให้แก้เฉพาะเลข -->
+                                        {% set short_doc = po.doc|replace('755', '', 1) if po.doc.startswith('755') else po.doc %}
+                                        <input type="text" inputmode="numeric" maxlength="6" id="input-edit-doc-{{ job.row_id }}-{{ loop.index }}" value="{{ short_doc }}"
+                                            class="w-full text-xs border-indigo-300 rounded-r-lg focus:ring-indigo-500 focus:border-indigo-500 font-mono px-2 py-1.5 border border-l-0 bg-indigo-50/10"
+                                            oninput="validateInputLive(this)">
+                                    </div>
+
                                     <button onclick="saveDetail('doc', '{{ job.row_id }}', '{{ po.name }}', '{{ loop.index }}', true)" 
-                                        class="bg-green-600 text-white w-7 h-7 rounded-lg shadow hover:bg-green-700 flex items-center justify-center transition active:scale-95">
+                                        class="bg-green-600 text-white w-7 h-7 rounded-lg shadow hover:bg-green-700 flex items-center justify-center transition active:scale-95 flex-shrink-0">
                                         <i class="fa-solid fa-check text-xs"></i>
                                     </button>
-                                    <button onclick="toggleEdit('doc', '{{ job.row_id }}', '{{ loop.index }}')" class="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition">
+                                    <button onclick="toggleEdit('doc', '{{ job.row_id }}', '{{ loop.index }}')" class="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition flex-shrink-0">
                                         <i class="fa-solid fa-xmark text-xs"></i>
                                     </button>
                                 </div>
@@ -191,7 +202,7 @@
                                             placeholder="0.00 กก." 
                                             class="flex-1 text-xs border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 font-mono px-2 py-1.5 border shadow-sm">
                                         <button onclick="saveDetail('weight', '{{ job.row_id }}', '{{ po.name }}', '{{ loop.index }}')" 
-                                            class="bg-indigo-600 text-white w-7 h-7 rounded-lg shadow hover:bg-indigo-700 flex items-center justify-center transition active:scale-95">
+                                            class="bg-indigo-600 text-white w-7 h-7 rounded-lg shadow hover:bg-indigo-700 flex items-center justify-center transition active:scale-95 ml-2">
                                             <i class="fa-solid fa-save text-xs"></i>
                                         </button>
                                     {% endif %}
@@ -444,13 +455,17 @@
     // --- [เพิ่มใหม่] ฟังก์ชันสำหรับจัดการ PO Input (AJAX) ---
     
     function validateInputLive(input) {
-        input.value = input.value.toUpperCase();
-        if (input.value.length >= 5 && !input.value.startsWith('IN755')) {
-            input.classList.add('border-red-500', 'bg-red-50');
-            input.classList.remove('border-gray-300');
-        } else {
+        // อนุญาตเฉพาะตัวเลข
+        input.value = input.value.replace(/[^0-9]/g, '');
+        
+        // เช็คความยาว
+        if (input.value.length === 6) {
             input.classList.remove('border-red-500', 'bg-red-50');
-            input.classList.add('border-gray-300');
+            input.classList.add('border-green-500', 'bg-green-50');
+        } else {
+            input.classList.remove('border-green-500', 'bg-green-50');
+            input.classList.remove('border-gray-300'); // Remove default
+            input.classList.add('border-red-500', 'bg-red-50'); // Add error style
         }
     }
 
@@ -472,14 +487,17 @@
         const input = document.getElementById(inputId);
         let val = input.value.trim();
 
+        // Validation Logic ใหม่
         if (type === 'doc') {
-            val = val.toUpperCase();
-            if (!val.startsWith('IN755')) {
-                alert('⚠️ เลขที่เอกสารต้องขึ้นต้นด้วย IN755');
+            if (val.length !== 6) {
+                alert('⚠️ กรุณากรอกเลขท้าย 6 หลักให้ครบถ้วน (ไม่ต้องพิมพ์ 755)');
                 input.focus();
                 return;
             }
+            // อัตโนมัติเพิ่ม 755
+            val = '755' + val;
         }
+        
         if (type === 'weight') {
             if (!val || isNaN(val)) {
                 alert('⚠️ กรุณากรอกน้ำหนักให้ถูกต้อง');

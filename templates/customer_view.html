@@ -7,8 +7,9 @@
     body, h1, h2, h3, h4, h5, h6, p, span, div, table, input, select, button, textarea {
         font-family: 'Kanit', sans-serif !important;
     }
-    .table-data { font-size: 0.8rem; } 
-    .table-header { font-size: 0.75rem; }
+    /* ปรับขนาดตัวอักษรในตารางให้เหมาะสมและคมชัด */
+    .table-data { font-size: 0.85rem; } 
+    .table-header { font-size: 0.8rem; letter-spacing: 0.5px; }
     
     .custom-scrollbar::-webkit-scrollbar {
         height: 8px;
@@ -24,6 +25,11 @@
     }
     .custom-scrollbar::-webkit-scrollbar-thumb:hover {
         background: #94a3b8; 
+    }
+
+    /* เพิ่มเส้นตารางให้ชัดเจนสำหรับตอน Print/Capture */
+    #main-report-table th, #main-report-table td {
+        border-color: #e2e8f0; /* colors-slate-200 */
     }
 </style>
 
@@ -93,46 +99,45 @@
             </div>
         </div>
 
-        <div class="border rounded-lg overflow-hidden overflow-x-auto shadow-inner bg-gray-500 custom-scrollbar">
+        <div class="border rounded-lg overflow-hidden overflow-x-auto shadow-inner bg-white custom-scrollbar border-gray-200">
             <table class="w-full text-center border-collapse whitespace-nowrap table-data" id="main-report-table">
                 <thead>
                     <tr class="text-white table-header font-bold tracking-wide">
-                        <th class="px-2 py-2 bg-green-700 border-r border-green-600 sticky left-0 z-10 shadow-lg">ลำดับ</th>
-                        <th class="px-2 py-2 bg-green-600 border-r border-green-500">PO Date</th>
+                        <th class="px-2 py-2 bg-indigo-800 border-r border-indigo-700 sticky left-0 z-10 shadow-md">ลำดับ</th>
+                        <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">PO Date</th>
                         <th class="px-2 py-2 bg-blue-600 border-r border-blue-500">Load Date</th>
-                        <th class="px-2 py-2 bg-green-600 border-r border-green-500">เวลา</th>
-                        <th class="px-2 py-2 bg-green-600 border-r border-green-500 min-w-[150px]">ปลายทาง (สาขา)</th>
-                        <th class="px-2 py-2 bg-green-600 border-r border-green-500">น้ำหนัก</th>
-                        <th class="px-2 py-2 bg-green-600 border-r border-green-500">ทะเบียน</th>
-                        <th class="px-2 py-2 bg-green-600 border-r border-green-500">คนขับ</th>
-                        <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">เข้าโรงงาน</th>
-                        <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">เริ่มโหลด</th>
-                        <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">โหลดเสร็จ</th>
-                        <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">ยื่นเอกสาร</th>
-                        <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">รับเอกสาร</th>
-                        <th class="px-1 py-2 bg-[#c0504d] border-r border-[#a64d4d]">ออกโรงงาน</th>
-                        <th class="px-2 py-2 bg-[#9bbb59] border-r border-[#8aa64f]">ถึงสาขา</th>
-                        <th class="px-2 py-2 bg-[#9bbb59]">จบงาน</th>
+                        <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">เวลา</th>
+                        <th class="px-2 py-2 bg-blue-700 border-r border-blue-600 min-w-[150px]">ปลายทาง (สาขา)</th>
+                        <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">น้ำหนัก</th>
+                        <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">ทะเบียน</th>
+                        <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">คนขับ</th>
+                        <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">เข้าโรงงาน</th>
+                        <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">เริ่มโหลด</th>
+                        <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">โหลดเสร็จ</th>
+                        <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">ยื่นเอกสาร</th>
+                        <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">รับเอกสาร</th>
+                        <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">ออกโรงงาน</th>
+                        <th class="px-2 py-2 bg-emerald-600 border-r border-emerald-500">ถึงสาขา</th>
+                        <th class="px-2 py-2 bg-emerald-700">จบงาน</th>
                     </tr>
                 </thead>
                 <tbody class="text-gray-700 bg-white">
                     {% if jobs|length == 0 %}
                         <tr><td colspan="16" class="p-10 text-center text-gray-400">กรุณาเลือกวันที่ หรือ ไม่พบข้อมูล</td></tr>
                     {% else %}
-                            {% macro report_time_cell(time_val, loc_val, text_class='') %}
-                                    {% macro report_time_cell(time_val, loc_val, text_class='', tooltip_msg='') %}
-										{% if time_val %}
-										{% if loc_val %}
-											<a href="https://maps.google.com/maps?q={{ loc_val }}" target="_blank" 
-											class="inline-flex items-center justify-center gap-1 hover:bg-gray-100/80 px-1.5 py-0.5 rounded transition group cursor-pointer {{ text_class }}" 
-											title="{{ tooltip_msg if tooltip_msg else 'ดูพิกัด' }}">
-											{{ time_val }} <i class="fa-solid fa-location-dot text-[9px] opacity-30 group-hover:opacity-100 group-hover:text-blue-600"></i>
-											</a>
-							{% else %}
-											<span class="{{ text_class }} cursor-default" title="{{ tooltip_msg }}">{{ time_val }}</span>
-							{% endif %}
-							{% endif %}
-							{% endmacro %}
+                        {# --- เริ่มต้นนิยาม Macro --- #}
+                        {% macro report_time_cell(time_val, loc_val, text_class='', tooltip_msg='') %}
+                            {% if time_val %}
+                                {% if loc_val %}
+                                    <a href="https://maps.google.com/maps?q={{ loc_val }}" target="_blank" class="inline-flex items-center justify-center gap-1 hover:bg-gray-100/80 px-1.5 py-0.5 rounded transition group cursor-pointer {{ text_class }}" title="{{ tooltip_msg if tooltip_msg else 'ดูพิกัด' }}">
+                                        {{ time_val }} <i class="fa-solid fa-location-dot text-[9px] opacity-30 group-hover:opacity-100 group-hover:text-blue-600"></i>
+                                    </a>
+                                {% else %}
+                                    <span class="{{ text_class }} cursor-default" title="{{ tooltip_msg }}">{{ time_val }}</span>
+                                {% endif %}
+                            {% endif %}
+                        {% endmacro %}
+                        {# --- จบนิยาม Macro --- #}
 
                         {% for job in jobs %}
                             {% set is_same = False %}
@@ -149,44 +154,47 @@
                                 {% endif %}
                             {% endif %}
                             
-                            <tr class="border-b hover:bg-gray-50 transition">
-                                <td class="px-2 py-1 border-r font-bold bg-gray-50 sticky left-0 z-10 border-gray-200 text-indigo-900 text-center">{% if not is_same %} #{{ job.Car_No }} {% endif %}</td>
-                                <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %}{{ job.PO_Date | thai_date }}{% endif %}</td>
+                            <tr class="border-b hover:bg-gray-50 transition border-gray-100">
+                                <td class="px-2 py-1 border-r font-bold bg-gray-50 sticky left-0 z-10 border-gray-200 text-indigo-900 text-center shadow-sm">
+                                    {% if not is_same %} #{{ job.Car_No }} {% endif %}
+                                </td>
                                 
+                                <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %}{{ job.PO_Date | thai_date }}{% endif %}</td>
                                 <td class="px-2 py-1 border-r border-gray-200 text-blue-700 font-bold bg-blue-50/20">
                                     {% if not is_same %}
                                         {% set show_load = job.get('Load_Date', job.PO_Date) %}
                                         {{ show_load | thai_date }}
                                     {% endif %}
                                 </td>
-
-                                <td class="px-2 py-1 border-r border-gray-200 font-bold">{% if not is_same %}{{ job.Round }}{% endif %}</td>
+                                <td class="px-2 py-1 border-r border-gray-200 font-bold text-gray-800">{% if not is_same %}{{ job.Round }}{% endif %}</td>
                                 <td class="px-2 py-1 border-r border-gray-200 text-left pl-2 font-bold text-indigo-700 truncate max-w-[200px]" title="{{ job.Branch_Name }}">{{ job.Branch_Name }}</td>
                                 <td class="px-2 py-1 border-r border-gray-200 text-center text-gray-600 font-medium">{% if not is_same %}{{ job.get('Weight', '-') | comma_format }}{% endif %}</td>
-                                <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %} {{ job.Plate }} {% endif %}</td>
-                                <td class="px-2 py-1 border-r border-gray-200 font-medium truncate max-w-[120px]" title="{{ job.Driver }}">{% if not is_same %} {{ job.Driver }} {% endif %}</td>
-                                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T1_Enter, job.L1_Loc) }}{% endif %}</td>
-                                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T2_StartLoad, job.L2_Loc, start_load_color, job.delay_msg) }}{% endif %}</td>
-                                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T3_EndLoad, job.L3_Loc) }}{% endif %}</td>
-                                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T4_SubmitDoc, job.L4_Loc) }}{% endif %}</td>
-                                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T5_RecvDoc, job.L5_Loc) }}{% endif %}</td>
-                                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T6_Exit, job.L6_Loc) }}{% endif %}</td>
-                                <td class="px-2 py-1 border-r font-bold text-green-700 bg-green-50/50 border-gray-200">{{ report_time_cell(job.T7_ArriveBranch, job.L7_Loc, 'text-green-800') }}</td>
-                                <td class="px-2 py-1 font-bold text-red-600 bg-red-50/50">{{ report_time_cell(job.T8_EndJob, job.L8_Loc, 'text-red-700') }}</td>
+                                <td class="px-2 py-1 border-r border-gray-200 text-gray-800">{% if not is_same %} {{ job.Plate }} {% endif %}</td>
+                                <td class="px-2 py-1 border-r border-gray-200 font-medium truncate max-w-[120px] text-gray-700" title="{{ job.Driver }}">{% if not is_same %} {{ job.Driver }} {% endif %}</td>
+                                
+                                <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T1_Enter, job.L1_Loc) }}{% endif %}</td>
+                                <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T2_StartLoad, job.L2_Loc, start_load_color, job.delay_msg) }}{% endif %}</td>
+                                <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T3_EndLoad, job.L3_Loc) }}{% endif %}</td>
+                                <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T4_SubmitDoc, job.L4_Loc) }}{% endif %}</td>
+                                <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T5_RecvDoc, job.L5_Loc) }}{% endif %}</td>
+                                <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T6_Exit, job.L6_Loc) }}{% endif %}</td>
+                                
+                                <td class="px-2 py-1 border-r font-bold text-emerald-700 bg-emerald-50/40 border-gray-200">{{ report_time_cell(job.T7_ArriveBranch, job.L7_Loc, 'text-emerald-800') }}</td>
+                                <td class="px-2 py-1 font-bold text-emerald-800 bg-emerald-100/60">{{ report_time_cell(job.T8_EndJob, job.L8_Loc, 'text-emerald-900') }}</td>
                             </tr>
                         {% endfor %}
                     {% endif %}
                 </tbody>
                 
-                <tfoot class="font-bold text-sm bg-gray-100 border-t-2 border-gray-300 text-gray-800">
+                <tfoot class="font-bold text-sm bg-gray-50 border-t-2 border-gray-300 text-gray-800">
                     <tr id="summary-row-day" class="bg-white">
-                        <td colspan="8" class="border px-2 py-1 text-right">รอบกลางวัน</td>
+                        <td colspan="8" class="border px-2 py-1 text-right text-gray-600">รอบกลางวัน (คัน)</td>
                     </tr>
                     <tr id="summary-row-night" class="bg-white">
-                        <td colspan="8" class="border px-2 py-1 text-right">รอบกลางคืน</td>
+                        <td colspan="8" class="border px-2 py-1 text-right text-gray-600">รอบกลางคืน (คัน)</td>
                     </tr>
-                    <tr id="summary-row-total" class="bg-yellow-300">
-                        <td colspan="8" class="border px-2 py-1 text-right text-black">รวม</td>
+                    <tr id="summary-row-total" class="bg-yellow-100">
+                        <td colspan="8" class="border px-2 py-1 text-right text-black font-extrabold">รวม (คัน)</td>
                     </tr>
                 </tfoot>
             </table>
@@ -223,6 +231,7 @@
             const isDay = (hour >= 6 && hour <= 18);
             const target = isDay ? counts.day : counts.night;
 
+            // Col Index: 8=T1, 9=T2, ... 15=T8
             if(row.cells[8].innerText.trim()) target.t1++;
             if(row.cells[9].innerText.trim()) target.t2++;
             if(row.cells[10].innerText.trim()) target.t3++;
@@ -233,7 +242,10 @@
             if(row.cells[15].innerText.trim()) target.t8++;
         });
 
-        for(let k in counts.total) { counts.total[k] = counts.day[k] + counts.night[k]; }
+        // Sum Totals
+        for(let k in counts.total) {
+            counts.total[k] = counts.day[k] + counts.night[k];
+        }
 
         const createCells = (data, rowId) => {
             const row = document.getElementById(rowId);
@@ -243,7 +255,7 @@
             const keys = ['t1','t2','t3','t4','t5','t6','t7','t8'];
             keys.forEach(k => {
                 const td = row.insertCell();
-                td.className = "border px-1 py-1 text-center";
+                td.className = "border px-1 py-1 text-center font-medium text-gray-700";
                 td.innerText = data[k];
             });
         };
@@ -253,7 +265,7 @@
         createCells(counts.total, 'summary-row-total');
     }
 
-// --------------------------------------------------------
+    // --------------------------------------------------------
     // [FIXED] Download Full Image Function (Customer Version)
     // --------------------------------------------------------
     async function copyCustomerReportImage() {
@@ -314,16 +326,10 @@
                         tableWrapper.style.display = 'block';
                     }
 
-                    const shadows = clonedDoc.querySelectorAll('.shadow-lg, .shadow-xl, .shadow-sm, .shadow-md');
+                    const shadows = clonedDoc.querySelectorAll('.shadow-lg, .shadow-xl, .shadow-sm, .shadow-md, .shadow-inner');
                     shadows.forEach(el => {
                         el.style.boxShadow = 'none';
                         el.style.border = '1px solid #e5e7eb';
-                    });
-
-                    const textGrays = clonedDoc.querySelectorAll('.text-gray-600, .text-gray-500, .text-gray-400');
-                    textGrays.forEach(el => {
-                        el.classList.remove('text-gray-600', 'text-gray-500', 'text-gray-400');
-                        el.classList.add('text-black');
                     });
                 }
             });

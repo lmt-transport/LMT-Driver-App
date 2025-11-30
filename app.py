@@ -1611,13 +1611,20 @@ def driver_select():
             driver_info[d_name]['pending_set'].add(trip_key)
             
             try:
-                # 1. แปลงวันเวลาโหลด เพื่อใช้ Sort
-                load_date_str = job.get('Load_Date', job['PO_Date'])
-                round_str = str(job['Round']).strip()
-                job_dt_str = f"{load_date_str} {round_str}"
+                # 1. Logic ใหม่: เน้นวันที่โหลดจริง (Load Date) เป็นหลัก
+                # ดึงค่า Load Date ถ้าไม่มีให้ใช้ PO Date แทน
+                load_date_val = str(job.get('Load_Date', '')).strip()
+                if not load_date_val:
+                    load_date_val = str(job['PO_Date']).strip()
                 
-                try: job_dt = datetime.strptime(job_dt_str, "%Y-%m-%d %H:%M")
-                except ValueError: job_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
+                round_str = str(job['Round']).strip()
+                
+                # แปลงเป็น datetime เพื่อใช้คำนวณและเรียงลำดับ
+                job_dt_str = f"{load_date_val} {round_str}"
+                try: 
+                    job_dt = datetime.strptime(job_dt_str, "%Y-%m-%d %H:%M")
+                except ValueError:
+                    continue # ข้ามถ้าข้อมูลเวลาไม่สมบูรณ์
                 
                 # เอาเลขรถมาใช้เป็นเกณฑ์รอง
                 try: car_n = int(str(job['Car_No']).strip())

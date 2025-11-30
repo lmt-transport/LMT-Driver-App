@@ -105,7 +105,25 @@ def comma_format(value):
     except:
         return str(value)
 
+# [FIX] ปรับรูปแบบวันที่เป็น 30/11/2568
+def thai_date_filter(date_val):
+    """แปลงวันที่ string (YYYY-MM-DD) เป็นรูปแบบไทยตัวเลข (30/11/2568)"""
+    if not date_val: return ""
+    try:
+        if isinstance(date_val, str):
+            d = datetime.strptime(str(date_val).strip(), "%Y-%m-%d")
+        else:
+            d = date_val
+            
+        year = d.year + 543
+        # จัดรูปแบบเป็น dd/mm/yyyy
+        return f"{d.day:02d}/{d.month:02d}/{year}"
+    except:
+        return str(date_val)
+
+# Register Filters
 app.jinja_env.filters['comma_format'] = comma_format
+app.jinja_env.filters['thai_date'] = thai_date_filter  # ลงทะเบียน filter
 
 # ==========================================
 # [FIX for Vercel] ระบบจำค่าผ่าน Google Sheet

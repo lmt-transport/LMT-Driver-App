@@ -688,11 +688,24 @@
     // --------------------------------------------------------
     // Capture Image and Copy
     // --------------------------------------------------------
+// --------------------------------------------------------
+    // [FIXED] Download Full Image Function (Manager Version)
+    // --------------------------------------------------------
     async function copyReportImage() {
+        // แสดง Loading ที่ปุ่ม
+        const btnIcon = document.querySelector('button[onclick="copyReportImage()"] i');
+        const originalIconClass = btnIcon.className;
+        btnIcon.className = "fa-solid fa-spinner fa-spin"; // เปลี่ยนไอคอนเป็นหมุนๆ
+
         const captureArea = document.getElementById('report-capture-area');
         const headerTitle = document.getElementById('report-header-title');
-        const poVal = document.getElementById('report_date_filter').value;
         
+        // ดึงวันที่จาก Filter
+        let poVal = "";
+        const dateInput = document.getElementById('report_date_filter');
+        if (dateInput) poVal = dateInput.value;
+        
+        // แปลงวันที่เป็น format ไทยสำหรับหัวข้อภาพ
         let poDisplay = poVal;
         if (poVal) {
             const [y, m, d] = poVal.split('-');
@@ -701,52 +714,69 @@
         }
         document.getElementById('img-po-date').innerText = poDisplay;
 
+        // แสดงหัวข้อชั่วคราว
         headerTitle.style.display = 'block';
 
         try {
             const canvas = await html2canvas(captureArea, {
-                scale: 2, 
+                scale: 2, // ใช้ Scale 2 เพื่อประสิทธิภาพที่ดีบนมือถือ
                 backgroundColor: '#ffffff', 
                 useCORS: true,
                 logging: false,
-                windowWidth: 1280, // [FIX] Mobile Optimization
+                // จำลองหน้าจอ Desktop เพื่อให้ Layout ไม่เพี้ยน
+                windowWidth: 1440, 
+                
                 onclone: (clonedDoc) => {
                     const clonedHeader = clonedDoc.getElementById('report-header-title');
                     const clonedArea = clonedDoc.getElementById('report-capture-area');
                     
                     if(clonedHeader) clonedHeader.style.display = 'block';
                     
-                    // [FIX] Mobile Optimization
+                    // 1. บังคับขนาด Container หลักให้กว้างพอ
                     if(clonedArea) {
                         clonedArea.style.width = '1200px'; 
                         clonedArea.style.padding = '20px';
+                        clonedArea.style.height = 'auto';
+                        clonedArea.style.overflow = 'visible';
                     }
+
+                    // 2. ปลดล็อค Scrollbar ของตารางเพื่อให้ html2canvas เห็นครบทุกบรรทัด
+                    const tableWrapper = clonedDoc.querySelector('.overflow-x-auto');
+                    if(tableWrapper) {
+                        tableWrapper.classList.remove('overflow-x-auto', 'custom-scrollbar');
+                        tableWrapper.style.overflow = 'visible'; 
+                        tableWrapper.style.height = 'auto';      
+                        tableWrapper.style.maxHeight = 'none';   
+                        tableWrapper.style.width = '100%'; 
+                        tableWrapper.style.display = 'block';
+                    }
+                    
+                    // ปรับแต่งความสวยงาม (ลบเงาที่อาจจะดูแปลกๆ ในภาพนิ่ง)
+                    const shadows = clonedDoc.querySelectorAll('.shadow-lg, .shadow-xl, .shadow-sm, .shadow-md, .shadow-inner');
+                    shadows.forEach(el => {
+                        el.style.boxShadow = 'none';
+                        el.style.border = '1px solid #e5e7eb';
+                    });
                 }
             });
 
+            // ซ่อนหัวข้อกลับคืน และคืนค่าไอคอน
             headerTitle.style.display = 'none';
+            btnIcon.className = originalIconClass;
 
-            canvas.toBlob(async (blob) => {
-                if (!blob) { alert('เกิดข้อผิดพลาดในการสร้างภาพ'); return; }
-                
-                try {
-                    const item = new ClipboardItem({ "image/png": blob });
-                    await navigator.clipboard.write([item]);
-                    alert("✅ คัดลอกรูปภาพรายงานแล้ว!\n(พร้อมไอคอนสวยงาม กดวางใน Line ได้เลย)");
-                } catch (err) {
-                    console.error(err);
-                    const link = document.createElement('a');
-                    link.download = `Report_PO_${poVal}.png`;
-                    link.href = canvas.toDataURL();
-                    link.click();
-                    alert("⚠️ บราวเซอร์ไม่อนุญาตให้คัดลอกอัตโนมัติ\nระบบจึงดาวน์โหลดเป็นไฟล์ภาพให้แทนครับ");
-                }
-            });
+            // 3. ทำการดาวน์โหลดไฟล์ภาพทันที (รองรับมือถือดีกว่า Clipboard)
+            const link = document.createElement('a');
+            link.download = `Report_PO_${poVal}.jpg`;
+            link.href = canvas.toDataURL("image/jpeg", 0.9);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
 
         } catch (error) {
             console.error("Capture Error:", error);
             headerTitle.style.display = 'none';
-            alert("เกิดข้อผิดพลาดในการถ่ายภาพ");
+            btnIcon.className = originalIconClass;
+            alert("เกิดข้อผิดพลาดในการสร้างรูปภาพ กรุณาลองใหม่");
         }
     }
 

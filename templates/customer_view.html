@@ -253,13 +253,20 @@
     // --------------------------------------------------------
     // Copy Image (High Quality for Customer)
     // --------------------------------------------------------
-// --- UPDATED: Copy Image Function (Mobile Optimized) ---
+// --------------------------------------------------------
+    // [FIXED] Download Full Image Function
+    // --------------------------------------------------------
     async function copyCustomerReportImage() {
+        // แสดง Loading เพื่อให้รู้ว่ากำลังทำงาน (เพราะรูปยาวจะใช้เวลาประมวลผลแป๊บนึง)
+        const btnIcon = document.querySelector('button[onclick="copyCustomerReportImage()"] i');
+        const originalIconClass = btnIcon.className;
+        btnIcon.className = "fa-solid fa-spinner fa-spin"; // เปลี่ยนไอคอนเป็นหมุนๆ
+
         const captureArea = document.getElementById('customer-capture-area');
         const headerTitle = document.getElementById('customer-report-header');
         const poVal = document.getElementById('customer_date_filter').value;
         
-        // 1. เตรียมวันที่ไทย
+        // 1. เตรียมวันที่ไทยสำหรับหัวข้อ
         let poDisplay = poVal;
         if (poVal) {
             const [y, m, d] = poVal.split('-');
@@ -268,17 +275,17 @@
         }
         document.getElementById('img-po-date').innerText = poDisplay;
 
-        // 2. แสดงหัวข้อชั่วคราว
+        // 2. แสดงหัวข้อชั่วคราวเพื่อให้ติดในรูป
         headerTitle.style.display = 'block';
 
         try {
             const canvas = await html2canvas(captureArea, {
-                scale: 3, // ความคมชัดระดับ 3 เท่า (ชัดเปรี้ยะบนมือถือ)
+                scale: 2, // ลด Scale ลงนิดหน่อยจาก 3 เหลือ 2 เพื่อลดขนาดไฟล์และโอกาส Crash บนมือถือ (ยังชัดอยู่)
                 backgroundColor: '#ffffff', 
                 useCORS: true,
                 logging: false,
-                // *** [สำคัญสำหรับมือถือ] บังคับให้เรนเดอร์กว้าง 1200px (เหมือนจอคอม) ***
-                windowWidth: 1280, 
+                // ตั้งค่าเพื่อให้ Browser จำลองหน้าจอ desktop ตอน render
+                windowWidth: 1440, 
                 
                 onclone: (clonedDoc) => {
                     const clonedHeader = clonedDoc.getElementById('customer-report-header');
@@ -286,17 +293,30 @@
                     
                     if(clonedHeader) clonedHeader.style.display = 'block';
 
-                    // [สำคัญ] บังคับความกว้างของพื้นที่ถ่ายรูปในโลกจำลอง ให้กว้างเท่าคอม
-                    // เพื่อให้ตารางกางออกเต็มที่ ไม่ถูกบีบ
+                    // [จุดสำคัญที่แก้ปัญหาภาพตัด]
                     if(clonedArea) {
+                        // บังคับความกว้าง fixed เพื่อให้ตารางจัดระเบียบเหมือน Desktop
                         clonedArea.style.width = '1200px'; 
                         clonedArea.style.padding = '20px';
+                        // บังคับความสูงเป็น auto เพื่อให้ยืดตามเนื้อหาทั้งหมด
+                        clonedArea.style.height = 'auto';
+                        clonedArea.style.overflow = 'visible';
                     }
 
-                    // ลบเงาและปรับสีตัวอักษร (เหมือนเดิม)
+                    // หาตัว container ของตารางที่มี scrollbar แล้วสั่งปลดล็อค
+                    const tableWrapper = clonedDoc.querySelector('.overflow-x-auto');
+                    if(tableWrapper) {
+                        tableWrapper.classList.remove('overflow-x-auto', 'custom-scrollbar');
+                        tableWrapper.style.overflow = 'visible'; // ปลด scroll
+                        tableWrapper.style.height = 'auto';      // ยืดเต็มความสูง
+                        tableWrapper.style.maxHeight = 'none';   // ห้ามจำกัดความสูง
+                        tableWrapper.style.width = '100%'; 
+                        tableWrapper.style.display = 'block';
+                    }
+
+                    // ปรับแต่งความสวยงาม (ลบเงา ปรับสีตัวอักษร)
                     const shadows = clonedDoc.querySelectorAll('.shadow-lg, .shadow-xl, .shadow-sm, .shadow-md');
                     shadows.forEach(el => {
-                        el.classList.remove('shadow-lg', 'shadow-xl', 'shadow-sm', 'shadow-md');
                         el.style.boxShadow = 'none';
                         el.style.border = '1px solid #e5e7eb';
                     });
@@ -306,46 +326,26 @@
                         el.classList.remove('text-gray-600', 'text-gray-500', 'text-gray-400');
                         el.classList.add('text-black');
                     });
-
-                    // ปิด Scrollbar ในภาพถ่าย
-                    const tableDiv = clonedDoc.querySelector('.overflow-x-auto');
-                    if(tableDiv) {
-                        tableDiv.classList.remove('overflow-x-auto', 'custom-scrollbar');
-                        tableDiv.style.overflow = 'visible';
-                        tableDiv.style.width = '100%'; 
-                    }
                 }
             });
 
             // ซ่อนหัวข้อกลับคืน
             headerTitle.style.display = 'none';
+            btnIcon.className = originalIconClass; // คืนค่าไอคอนเดิม
 
-            canvas.toBlob(async (blob) => {
-                if (!blob) { alert('เกิดข้อผิดพลาดในการสร้างภาพ'); return; }
-                
-                // บนมือถือบางรุ่น การเขียน Clipboard อัตโนมัติอาจถูกบล็อก
-                // เราจึงเน้นการ "ดาวน์โหลด" หรือ "แชร์" เป็นหลักถ้าทำได้
-                try {
-                    // ลอง Copy ก่อน (เผื่อใช้บน iPad/Tablet)
-                    const item = new ClipboardItem({ "image/png": blob });
-                    await navigator.clipboard.write([item]);
-                    alert("✅ บันทึกรูปภาพแล้ว (อยู่ใน Clipboard)\nกดวางในแอป Line ได้เลยครับ");
-                } catch (err) {
-                    // ถ้า Copy ไม่ได้ (ซึ่งปกติในมือถือ Android/iOS จะเข้าเคสนี้)
-                    // ให้ดาวน์โหลดไฟล์ภาพอัตโนมัติ
-                    console.log("Clipboard not supported, downloading instead.");
-                    const link = document.createElement('a');
-                    link.download = `Tracking_Report_${poVal}.png`;
-                    link.href = canvas.toDataURL();
-                    link.click();
-                    // ไม่ต้อง Alert กวนใจ เพราะ Browser จะเด้งถามดาวน์โหลดเอง
-                }
-            });
+            // 3. ทำการดาวน์โหลดไฟล์ภาพทันที
+            const link = document.createElement('a');
+            link.download = `LMT_Report_${poVal}.jpg`;
+            link.href = canvas.toDataURL("image/jpeg", 0.9); // ใช้ JPEG quality 0.9 เพื่อให้ไฟล์ไม่ใหญ่เกินไป
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
 
         } catch (error) {
             console.error("Capture Error:", error);
             headerTitle.style.display = 'none';
-            alert("เกิดข้อผิดพลาดในการถ่ายภาพ");
+            btnIcon.className = originalIconClass;
+            alert("เกิดข้อผิดพลาดในการสร้างรูปภาพ กรุณาลองใหม่");
         }
     }
 

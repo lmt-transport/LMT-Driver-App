@@ -873,6 +873,14 @@ def export_excel():
     
 @app.route('/export_pdf')
 def export_pdf():
+    # --- Helper function for PDF: thai_date_filter is missing from the provided code, mocking it to prevent crash ---
+    def thai_date_filter(date_str):
+        try:
+            d = datetime.strptime(date_str, "%Y-%m-%d")
+            return f"{d.day} {['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][d.month-1]} {d.year+543}"
+        except: return date_str
+    # -----------------------------------------------------------------------------------------------------------------
+
     sheet = get_db()
     raw_jobs = get_cached_records(sheet, 'Jobs')
     date_filter = request.args.get('date_filter')
@@ -1170,6 +1178,14 @@ def export_pdf():
 
 @app.route('/export_pdf_summary')
 def export_pdf_summary():
+    # --- Helper function for PDF: thai_date_filter is missing from the provided code, mocking it to prevent crash ---
+    def thai_date_filter(date_str):
+        try:
+            d = datetime.strptime(date_str, "%Y-%m-%d")
+            return f"{d.day} {['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][d.month-1]} {d.year+543}"
+        except: return date_str
+    # -----------------------------------------------------------------------------------------------------------------
+
     sheet = get_db()
     raw_jobs = get_cached_records(sheet, 'Jobs')
     
@@ -1649,7 +1665,7 @@ def driver_tasks():
                 job['smart_detail'] = f"วันที่ {real_date_str} เวลา {round_str} น."
                 job['ui_class'] = {'bg': 'bg-gray-50 border-gray-100', 'text': 'text-gray-500', 'icon': 'fa-calendar-days'}
             
-            po_d = datetime.strptime(job['PO_Date'], "%Y-%m-%d")
+            po_d = datetime.strptime(job['PO_Date'], "%Y-%m-%d')
             po_th = f"{po_d.day}/{po_d.month}/{str(po_d.year+543)[2:]}"
             job['po_label'] = f"(เอกสาร PO วันที่ {po_th})"
         except Exception as e: pass
@@ -1723,12 +1739,13 @@ def update_status():
     if mode == 'update' and len(target_row_data) > 5:
         # เตรียมข้อมูลสำหรับส่งแจ้งเตือน
         # ตรวจสอบ index ให้แน่ใจว่าตรงกับ Sheet (Driver=Col E (idx 4), Plate=Col F (idx 5))
-        job_info_for_notify = 
+        job_info_for_notify = {
             'PO_Date': target_row_data[0],
             'Round': target_row_data[2],
             'Car_No': target_row_data[3],
             'Driver': target_row_data[4],
             'Plate': target_row_data[5]
+        }
 
         # 1. แจ้งเตือนรายคัน (เข้า Step 1 / ออก Step 6)
         if step == '1' or step == '6':

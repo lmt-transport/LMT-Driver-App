@@ -454,68 +454,72 @@
                                 <th class="px-2 py-2 bg-[#9bbb59]">จบงาน</th>
                             </tr>
                         </thead>
-                        <tbody class="text-gray-700 bg-white">
-                            {% if jobs|length == 0 %}
-                                <tr><td colspan="16" class="p-10 text-center text-gray-400">กรุณาเลือกวันที่ หรือ ไม่พบข้อมูล</td></tr>
-                            {% else %}
-                            {% macro report_time_cell(time_val, loc_val, text_class='') %}
-                                    {% macro report_time_cell(time_val, loc_val, text_class='', tooltip_msg='') %}
-										{% if time_val %}
-										{% if loc_val %}
-											<a href="https://maps.google.com/maps?q={{ loc_val }}" target="_blank" 
-											class="inline-flex items-center justify-center gap-1 hover:bg-gray-100/80 px-1.5 py-0.5 rounded transition group cursor-pointer {{ text_class }}" 
-											title="{{ tooltip_msg if tooltip_msg else 'ดูพิกัด' }}">
-											{{ time_val }} <i class="fa-solid fa-location-dot text-[9px] opacity-30 group-hover:opacity-100 group-hover:text-blue-600"></i>
-											</a>
-							{% else %}
-											<span class="{{ text_class }} cursor-default" title="{{ tooltip_msg }}">{{ time_val }}</span>
-							{% endif %}
-							{% endif %}
-							{% endmacro %}
+<tbody class="text-gray-700 bg-white">
+    {% if jobs|length == 0 %}
+        <tr><td colspan="16" class="p-10 text-center text-gray-400">กรุณาเลือกวันที่ หรือ ไม่พบข้อมูล</td></tr>
+    {% else %}
+        {# --- เริ่มต้นนิยาม Macro (ฟังก์ชันสร้างช่องตาราง) --- #}
+        {% macro report_time_cell(time_val, loc_val, text_class='', tooltip_msg='') %}
+            {% if time_val %}
+                {% if loc_val %}
+                    <a href="https://maps.google.com/maps?q={{ loc_val }}" target="_blank" 
+                       class="inline-flex items-center justify-center gap-1 hover:bg-gray-100/80 px-1.5 py-0.5 rounded transition group cursor-pointer {{ text_class }}" 
+                       title="{{ tooltip_msg if tooltip_msg else 'ดูพิกัด' }}">
+                        {{ time_val }} <i class="fa-solid fa-location-dot text-[9px] opacity-30 group-hover:opacity-100 group-hover:text-blue-600"></i>
+                    </a>
+                {% else %}
+                    <span class="{{ text_class }} cursor-default" title="{{ tooltip_msg }}">{{ time_val }}</span>
+                {% endif %}
+            {% endif %}
+        {% endmacro %}
+        {# --- จบนิยาม Macro (ต้องมีบรรทัดนี้!) --- #}
 
-                                {% for job in jobs %}
-                                    {% set is_same = False %}
-                                    {% if not loop.first and loop.previtem.Car_No == job.Car_No and loop.previtem.Driver == job.Driver and loop.previtem.PO_Date == job.PO_Date %}
-                                        {% set is_same = True %}
-                                    {% endif %}
-                                    
-                                    {% set start_load_color = '' %}
-                                    {% if job.T2_StartLoad %}
-                                        {% if job.is_start_late %} 
-                                            {% set start_load_color = 'text-red-600 font-bold' %}
-                                        {% else %} 
-                                            {% set start_load_color = 'text-green-600 font-bold' %} 
-                                        {% endif %}
-                                    {% endif %}
-                                    
-                                    <tr class="border-b hover:bg-gray-50 transition">
-                                        <td class="px-2 py-1 border-r font-bold bg-gray-50 sticky left-0 z-10 border-gray-200 text-indigo-900 text-center">{% if not is_same %} #{{ job.Car_No }} {% endif %}</td>
-                                        <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %}{{ job.PO_Date | thai_date }}{% endif %}</td>
-                                        
-                                        <td class="px-2 py-1 border-r border-gray-200 text-blue-700 font-bold bg-blue-50/20">
-                                            {% if not is_same %}
-                                                {% set show_load = job.get('Load_Date', job.PO_Date) %}
-                                                {{ show_load | thai_date }}
-                                            {% endif %}
-                                        </td>
+        {% for job in jobs %}
+            {% set is_same = False %}
+            {% if not loop.first and loop.previtem.Car_No == job.Car_No and loop.previtem.Driver == job.Driver and loop.previtem.PO_Date == job.PO_Date %}
+                {% set is_same = True %}
+            {% endif %}
+            
+            {% set start_load_color = '' %}
+            {% if job.T2_StartLoad %}
+                {% if job.is_start_late %} 
+                    {% set start_load_color = 'text-red-600 font-bold' %}
+                {% else %} 
+                    {% set start_load_color = 'text-green-600 font-bold' %} 
+                {% endif %}
+            {% endif %}
+            
+            <tr class="border-b hover:bg-gray-50 transition">
+                <td class="px-2 py-1 border-r font-bold bg-gray-50 sticky left-0 z-10 border-gray-200 text-indigo-900 text-center">{% if not is_same %} #{{ job.Car_No }} {% endif %}</td>
+                <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %}{{ job.PO_Date | thai_date }}{% endif %}</td>
+                
+                <td class="px-2 py-1 border-r border-gray-200 text-blue-700 font-bold bg-blue-50/20">
+                    {% if not is_same %}
+                        {% set show_load = job.get('Load_Date', job.PO_Date) %}
+                        {{ show_load | thai_date }}
+                    {% endif %}
+                </td>
 
-                                        <td class="px-2 py-1 border-r border-gray-200 font-bold">{% if not is_same %}{{ job.Round }}{% endif %}</td>
-                                        <td class="px-2 py-1 border-r border-gray-200 text-left pl-2 font-bold text-indigo-700 truncate max-w-[200px]" title="{{ job.Branch_Name }}">{{ job.Branch_Name }}</td>
-                                        <td class="px-2 py-1 border-r border-gray-200 text-center text-gray-600 font-medium">{% if not is_same %}{{ job.get('Weight', '-') | comma_format }}{% endif %}</td>
-                                        <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %} {{ job.Plate }} {% endif %}</td>
-                                        <td class="px-2 py-1 border-r border-gray-200 font-medium truncate max-w-[120px]" title="{{ job.Driver }}">{% if not is_same %} {{ job.Driver }} {% endif %}</td>
-                                        <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T1_Enter, job.L1_Loc) }}{% endif %}</td>
-                                        <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T2_StartLoad, job.L2_Loc, start_load_color, job.delay_msg) }}{% endif %}</td>
-                                        <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T3_EndLoad, job.L3_Loc) }}{% endif %}</td>
-                                        <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T4_SubmitDoc, job.L4_Loc) }}{% endif %}</td>
-                                        <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T5_RecvDoc, job.L5_Loc) }}{% endif %}</td>
-                                        <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T6_Exit, job.L6_Loc) }}{% endif %}</td>
-                                        <td class="px-2 py-1 border-r font-bold text-green-700 bg-green-50/50 border-gray-200">{{ report_time_cell(job.T7_ArriveBranch, job.L7_Loc, 'text-green-800') }}</td>
-                                        <td class="px-2 py-1 font-bold text-red-600 bg-red-50/50">{{ report_time_cell(job.T8_EndJob, job.L8_Loc, 'text-red-700') }}</td>
-                                    </tr>
-                                {% endfor %}
-                            {% endif %}
-                        </tbody>
+                <td class="px-2 py-1 border-r border-gray-200 font-bold">{% if not is_same %}{{ job.Round }}{% endif %}</td>
+                <td class="px-2 py-1 border-r border-gray-200 text-left pl-2 font-bold text-indigo-700 truncate max-w-[200px]" title="{{ job.Branch_Name }}">{{ job.Branch_Name }}</td>
+                <td class="px-2 py-1 border-r border-gray-200 text-center text-gray-600 font-medium">{% if not is_same %}{{ job.get('Weight', '-') | comma_format }}{% endif %}</td>
+                <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %} {{ job.Plate }} {% endif %}</td>
+                <td class="px-2 py-1 border-r border-gray-200 font-medium truncate max-w-[120px]" title="{{ job.Driver }}">{% if not is_same %} {{ job.Driver }} {% endif %}</td>
+                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T1_Enter, job.L1_Loc) }}{% endif %}</td>
+                
+                {# จุดเรียกใช้ Macro พร้อม Tooltip แจ้งเตือนสาย #}
+                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T2_StartLoad, job.L2_Loc, start_load_color, job.delay_msg) }}{% endif %}</td>
+                
+                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T3_EndLoad, job.L3_Loc) }}{% endif %}</td>
+                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T4_SubmitDoc, job.L4_Loc) }}{% endif %}</td>
+                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T5_RecvDoc, job.L5_Loc) }}{% endif %}</td>
+                <td class="px-1 py-1 border-r border-gray-200">{% if not is_same %}{{ report_time_cell(job.T6_Exit, job.L6_Loc) }}{% endif %}</td>
+                <td class="px-2 py-1 border-r font-bold text-green-700 bg-green-50/50 border-gray-200">{{ report_time_cell(job.T7_ArriveBranch, job.L7_Loc, 'text-green-800') }}</td>
+                <td class="px-2 py-1 font-bold text-red-600 bg-red-50/50">{{ report_time_cell(job.T8_EndJob, job.L8_Loc, 'text-red-700') }}</td>
+            </tr>
+        {% endfor %}
+    {% endif %}
+</tbody>
                         
                         <tfoot class="font-bold text-sm bg-gray-100 border-t-2 border-gray-300 text-gray-800">
                             <tr id="summary-row-day" class="bg-white">

@@ -450,9 +450,19 @@
 
             <div id="report-capture-area" class="bg-white p-2">
                 
-                <div class="mb-2 text-center font-bold text-gray-800 text-xl" id="report-header-title" style="display:none;">
-                    รายงานสรุปการจัดส่งสินค้า (PO: <span id="img-po-date"></span>)
-                </div>
+                <div id="report-header-title" style="display:none;" class="mb-4">
+    <div class="flex items-center justify-center gap-3 bg-indigo-50 border border-indigo-100 p-3 rounded-xl mx-auto w-fit shadow-sm">
+        <div class="bg-indigo-600 text-white w-10 h-10 flex items-center justify-center rounded-lg shadow-md">
+            <i class="fa-solid fa-file-invoice text-xl"></i>
+        </div>
+        <div class="text-left">
+            <div class="text-xs text-indigo-600 font-bold uppercase tracking-wider">Daily Delivery Report</div>
+            <div class="text-xl font-bold text-gray-800">
+                สรุปการจัดส่งสินค้า (PO: <span id="img-po-date" class="text-indigo-700"></span>)
+            </div>
+        </div>
+    </div>
+</div>
 
                 <div class="border rounded-lg overflow-hidden overflow-x-auto shadow-inner bg-gray-500 custom-scrollbar">
                     <table class="w-full text-center border-collapse whitespace-nowrap table-data" id="main-report-table">
@@ -710,46 +720,63 @@
     // --------------------------------------------------------
     // NEW: Capture Image and Copy
     // --------------------------------------------------------
-    async function copyReportImage() {
-        const captureArea = document.getElementById('report-capture-area');
-        const headerTitle = document.getElementById('report-header-title');
-        const poVal = document.getElementById('report_date_filter').value;
-        
-        document.getElementById('img-po-date').innerText = poVal;
-        headerTitle.style.display = 'block';
-
-        try {
-            const canvas = await html2canvas(captureArea, {
-                scale: 2, 
-                backgroundColor: '#ffffff', 
-                useCORS: true 
-            });
-
-            headerTitle.style.display = 'none';
-
-            canvas.toBlob(async (blob) => {
-                if (!blob) { alert('เกิดข้อผิดพลาดในการสร้างภาพ'); return; }
-                
-                try {
-                    const item = new ClipboardItem({ "image/png": blob });
-                    await navigator.clipboard.write([item]);
-                    alert("✅ คัดลอกรูปภาพรายงานแล้ว!\nสามารถกดวาง (Paste) ใน Line หรือ Email ได้เลย");
-                } catch (err) {
-                    console.error(err);
-                    const link = document.createElement('a');
-                    link.download = `Report_PO_${poVal}.png`;
-                    link.href = canvas.toDataURL();
-                    link.click();
-                    alert("⚠️ บราวเซอร์ไม่อนุญาตให้คัดลอกอัตโนมัติ\nระบบจึงดาวน์โหลดเป็นไฟล์ภาพให้แทนครับ");
-                }
-            });
-
-        } catch (error) {
-            console.error("Capture Error:", error);
-            headerTitle.style.display = 'none';
-            alert("เกิดข้อผิดพลาดในการถ่ายภาพ");
-        }
+	async function copyReportImage() {
+    const captureArea = document.getElementById('report-capture-area');
+    const headerTitle = document.getElementById('report-header-title');
+    const poVal = document.getElementById('report_date_filter').value;
+    
+    // --- แปลงวันที่เป็น format ไทย (เช่น 30/11/2568) ---
+    let poDisplay = poVal;
+    if (poVal) {
+        const [y, m, d] = poVal.split('-');
+        const thYear = parseInt(y) + 543;
+        poDisplay = `${d}/${m}/${thYear}`;
     }
+    document.getElementById('img-po-date').innerText = poDisplay;
+    // --------------------------------------------------------
+
+    // แสดงหัวข้อขึ้นมาเพื่อเตรียมถ่ายรูป
+    headerTitle.style.display = 'block';
+
+    try {
+        const canvas = await html2canvas(captureArea, {
+            scale: 2, // ความคมชัด
+            backgroundColor: '#ffffff',
+            useCORS: true,
+            logging: false,
+            // ปรับแต่งให้ภาพดูดีขึ้นตอนแคป
+            onclone: (clonedDoc) => {
+                const clonedHeader = clonedDoc.getElementById('report-header-title');
+                if(clonedHeader) clonedHeader.style.display = 'block'; // บังคับแสดงใน clone
+            }
+        });
+
+        // ซ่อนหัวข้อกลับคืนทันที (ในหน้าเว็บจริง)
+        headerTitle.style.display = 'none';
+
+        canvas.toBlob(async (blob) => {
+            if (!blob) { alert('เกิดข้อผิดพลาดในการสร้างภาพ'); return; }
+            
+            try {
+                const item = new ClipboardItem({ "image/png": blob });
+                await navigator.clipboard.write([item]);
+                alert("✅ คัดลอกรูปภาพรายงานแล้ว!\n(พร้อมไอคอนสวยงาม กดวางใน Line ได้เลย)");
+            } catch (err) {
+                console.error(err);
+                const link = document.createElement('a');
+                link.download = `Report_PO_${poVal}.png`;
+                link.href = canvas.toDataURL();
+                link.click();
+                alert("⚠️ บราวเซอร์ไม่อนุญาตให้คัดลอกอัตโนมัติ\nระบบจึงดาวน์โหลดเป็นไฟล์ภาพให้แทนครับ");
+            }
+        });
+
+    } catch (error) {
+        console.error("Capture Error:", error);
+        headerTitle.style.display = 'none';
+        alert("เกิดข้อผิดพลาดในการถ่ายภาพ");
+    }
+	}
 
     function autoSetLoadDate() {
         const poInput = document.getElementById('po_date_input');

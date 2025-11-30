@@ -290,12 +290,13 @@
         window.location.href = url;
     }
 
-    // --- NEW: Copy Image Function ---
+    // --- UPDATED: Copy Image Function (High Quality & High Contrast) ---
     async function copyCustomerReportImage() {
         const captureArea = document.getElementById('customer-capture-area');
         const headerTitle = document.getElementById('customer-report-header');
         const poVal = document.getElementById('customer_date_filter').value;
         
+        // แปลงวันที่ไทย
         let poDisplay = poVal;
         if (poVal) {
             const [y, m, d] = poVal.split('-');
@@ -304,20 +305,47 @@
         }
         document.getElementById('img-po-date').innerText = poDisplay;
 
+        // แสดงหัวข้อ
         headerTitle.style.display = 'block';
 
         try {
             const canvas = await html2canvas(captureArea, {
-                scale: 2, 
+                scale: 3, // เพิ่มความละเอียดเป็น 3 เท่า (ชัดกว่า Manager)
                 backgroundColor: '#ffffff', 
                 useCORS: true,
                 logging: false,
+                // *** เทคนิคสำคัญ: ปรับแต่ง HTML จำลองก่อนถ่ายภาพ ***
                 onclone: (clonedDoc) => {
                     const clonedHeader = clonedDoc.getElementById('customer-report-header');
                     if(clonedHeader) clonedHeader.style.display = 'block';
+
+                    // 1. ลบเงา (Shadow) ทั้งหมดออก เพื่อให้ภาพคมไม่ฟุ้ง
+                    const shadows = clonedDoc.querySelectorAll('.shadow-lg, .shadow-xl, .shadow-sm, .shadow-md');
+                    shadows.forEach(el => {
+                        el.classList.remove('shadow-lg', 'shadow-xl', 'shadow-sm', 'shadow-md');
+                        el.style.boxShadow = 'none';
+                        el.style.border = '1px solid #e5e7eb'; // ใส่เส้นขอบบางๆ แทนเงา
+                    });
+
+                    // 2. เปลี่ยนสีตัวอักษรสีเทา ให้เป็นสีดำสนิท (เพื่อให้อ่านง่ายในรูปภาพ)
+                    const textGrays = clonedDoc.querySelectorAll('.text-gray-600, .text-gray-500, .text-gray-400');
+                    textGrays.forEach(el => {
+                        el.classList.remove('text-gray-600', 'text-gray-500', 'text-gray-400');
+                        el.classList.add('text-black');
+                    });
+
+                    // 3. ปรับ Table Container ให้กางเต็ม ไม่ต้องมี Scrollbar
+                    const tableDiv = clonedDoc.querySelector('.overflow-x-auto');
+                    if(tableDiv) {
+                        tableDiv.classList.remove('overflow-x-auto', 'custom-scrollbar');
+                        tableDiv.style.overflow = 'visible';
+                        tableDiv.style.width = 'auto';
+                        tableDiv.style.display = 'block';
+                    }
                 }
             });
 
+            // ซ่อนหัวข้อกลับคืน
             headerTitle.style.display = 'none';
 
             canvas.toBlob(async (blob) => {
@@ -326,7 +354,7 @@
                 try {
                     const item = new ClipboardItem({ "image/png": blob });
                     await navigator.clipboard.write([item]);
-                    alert("✅ คัดลอกรูปภาพรายงานแล้ว! (กดวางใน Line ได้เลย)");
+                    alert("✅ คัดลอกรูปภาพรายงานแล้ว! (ภาพคมชัด กดวางใน Line ได้เลย)");
                 } catch (err) {
                     console.error(err);
                     const link = document.createElement('a');

@@ -64,7 +64,7 @@
 				<i class="fa-solid fa-weight-hanging text-[9px]"></i> {{ first_job.Weight | comma_format }}
 				</div>
 				{% endif %}
-                </div>
+            </div>
         </div>
 
         <div class="p-4 border-b border-gray-100">
@@ -92,7 +92,7 @@
             </div>
             
             {% for job in trip_group %}
-                <div class="relative pl-3 border-l-2 {% if job.Status == 'Done' %} border-green-400 {% else %} border-indigo-200 {% endif %}">
+                <div class="relative pl-3 border-l-2 {% if job.Status == 'Done' %} border-green-400 {% else %} border-indigo-200 {% endif %} pb-4">
                     <div class="flex justify-between items-start mb-2">
                         <div class="text-sm font-bold leading-tight {% if '(ด่วน)' in job.Branch_Name %} text-red-600 animate-pulse {% else %} text-gray-800 {% endif %}">
                             {{ loop.index }}. {{ job.Branch_Name }}
@@ -103,7 +103,7 @@
                         {% endif %}
                     </div>
                     
-                    <div class="grid grid-cols-2 gap-3">
+                    <div class="grid grid-cols-2 gap-3 mb-4">
                         {% set branch_buttons = [
                             ('7', 'ถึงสาขา', 'bg-emerald-500', 'fa-location-dot', job.T7_ArriveBranch),
                             ('8', 'จบงาน', 'bg-rose-600', 'fa-flag-checkered', job.T8_EndJob)
@@ -112,6 +112,114 @@
                             {{ render_step_button(job.row_id, driver_name, step_id, label, color, icon, val) }}
                         {% endfor %}
                     </div>
+
+                    <!-- [ส่วนที่เพิ่มใหม่] พื้นที่กรอกข้อมูล PO (อยู่ใต้ปุ่มกดเวลา) -->
+                    {% if job.parsed_po_details %}
+                    <div class="mt-3 bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                        <div class="bg-gray-50 px-3 py-1.5 border-b border-gray-200 flex items-center gap-2">
+                            <i class="fa-solid fa-clipboard-list text-gray-400 text-xs"></i>
+                            <span class="text-[10px] font-bold text-gray-500 uppercase">บันทึกข้อมูลสินค้า</span>
+                        </div>
+                        
+                        <div class="p-3 space-y-4">
+                            {% for po in job.parsed_po_details %}
+                            <div class="relative pl-3 border-l-2 border-indigo-100">
+                                <!-- หัวข้อ PO -->
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="bg-indigo-50 text-indigo-600 text-[9px] font-bold px-1.5 py-0.5 rounded border border-indigo-100">
+                                        PO
+                                    </span>
+                                    <span class="text-xs font-bold text-gray-600 font-mono">{{ po.name }}</span>
+                                </div>
+
+                                <!-- 1. ช่องกรอกเลข Doc -->
+                                <div class="flex items-center gap-2 mb-2" id="box-doc-{{ job.row_id }}-{{ loop.index }}">
+                                    <div class="w-6 text-center text-gray-300 text-xs"><i class="fa-solid fa-file-invoice"></i></div>
+                                    
+                                    {% if po.doc %}
+                                        <!-- กรณีมีข้อมูลแล้ว (แสดงผล + ปุ่มแก้) -->
+                                        <div class="flex-1 text-xs font-mono font-bold text-green-700 bg-green-50/50 px-2 py-1.5 rounded border border-green-200 border-dashed">
+                                            {{ po.doc }}
+                                        </div>
+                                        <button onclick="toggleEdit('doc', '{{ job.row_id }}', '{{ loop.index }}')" class="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-indigo-600 bg-white rounded-full border border-gray-100 shadow-sm transition">
+                                            <i class="fa-solid fa-pen-to-square text-xs"></i>
+                                        </button>
+                                    {% else %}
+                                        <!-- กรณีโหมดกรอกข้อมูล -->
+                                        <input type="text" id="input-doc-{{ job.row_id }}-{{ loop.index }}" 
+                                            placeholder="IN755xxxx" 
+                                            class="flex-1 text-xs border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 uppercase font-mono px-2 py-1.5 border shadow-sm"
+                                            oninput="validateInputLive(this)">
+                                        <button onclick="saveDetail('doc', '{{ job.row_id }}', '{{ po.name }}', '{{ loop.index }}')" 
+                                            class="bg-indigo-600 text-white w-7 h-7 rounded-lg shadow hover:bg-indigo-700 flex items-center justify-center transition active:scale-95">
+                                            <i class="fa-solid fa-save text-xs"></i>
+                                        </button>
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- ส่วนซ่อนสำหรับ Edit Mode (Doc) -->
+                                {% if po.doc %}
+                                <div id="edit-doc-{{ job.row_id }}-{{ loop.index }}" class="hidden flex items-center gap-2 mb-2 animate-fade-in-down">
+                                    <div class="w-6 text-center text-gray-300 text-xs"><i class="fa-solid fa-file-invoice"></i></div>
+                                    <input type="text" id="input-edit-doc-{{ job.row_id }}-{{ loop.index }}" value="{{ po.doc }}"
+                                        class="flex-1 text-xs border-indigo-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 uppercase font-mono px-2 py-1.5 border shadow-sm bg-indigo-50/10">
+                                    <button onclick="saveDetail('doc', '{{ job.row_id }}', '{{ po.name }}', '{{ loop.index }}', true)" 
+                                        class="bg-green-600 text-white w-7 h-7 rounded-lg shadow hover:bg-green-700 flex items-center justify-center transition active:scale-95">
+                                        <i class="fa-solid fa-check text-xs"></i>
+                                    </button>
+                                    <button onclick="toggleEdit('doc', '{{ job.row_id }}', '{{ loop.index }}')" class="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition">
+                                        <i class="fa-solid fa-xmark text-xs"></i>
+                                    </button>
+                                </div>
+                                {% endif %}
+
+                                <!-- 2. ช่องกรอกน้ำหนัก -->
+                                <div class="flex items-center gap-2" id="box-weight-{{ job.row_id }}-{{ loop.index }}">
+                                    <div class="w-6 text-center text-gray-300 text-xs"><i class="fa-solid fa-weight-hanging"></i></div>
+                                    
+                                    {% if po.weight %}
+                                        <!-- กรณีมีข้อมูลแล้ว -->
+                                        <div class="flex-1 text-xs font-mono font-bold text-blue-700 bg-blue-50/50 px-2 py-1.5 rounded border border-blue-200 border-dashed">
+                                            {{ po.weight }} กก.
+                                        </div>
+                                        <button onclick="toggleEdit('weight', '{{ job.row_id }}', '{{ loop.index }}')" class="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-indigo-600 bg-white rounded-full border border-gray-100 shadow-sm transition">
+                                            <i class="fa-solid fa-pen-to-square text-xs"></i>
+                                        </button>
+                                    {% else %}
+                                        <!-- กรณีโหมดกรอกข้อมูล -->
+                                        <input type="number" step="0.01" id="input-weight-{{ job.row_id }}-{{ loop.index }}" 
+                                            placeholder="0.00 กก." 
+                                            class="flex-1 text-xs border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 font-mono px-2 py-1.5 border shadow-sm">
+                                        <button onclick="saveDetail('weight', '{{ job.row_id }}', '{{ po.name }}', '{{ loop.index }}')" 
+                                            class="bg-indigo-600 text-white w-7 h-7 rounded-lg shadow hover:bg-indigo-700 flex items-center justify-center transition active:scale-95">
+                                            <i class="fa-solid fa-save text-xs"></i>
+                                        </button>
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- ส่วนซ่อนสำหรับ Edit Mode (Weight) -->
+                                {% if po.weight %}
+                                <div id="edit-weight-{{ job.row_id }}-{{ loop.index }}" class="hidden flex items-center gap-2 animate-fade-in-down">
+                                    <div class="w-6 text-center text-gray-300 text-xs"><i class="fa-solid fa-weight-hanging"></i></div>
+                                    <input type="number" step="0.01" id="input-edit-weight-{{ job.row_id }}-{{ loop.index }}" value="{{ po.weight }}"
+                                        class="flex-1 text-xs border-indigo-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 font-mono px-2 py-1.5 border shadow-sm bg-indigo-50/10">
+                                    <button onclick="saveDetail('weight', '{{ job.row_id }}', '{{ po.name }}', '{{ loop.index }}', true)" 
+                                        class="bg-green-600 text-white w-7 h-7 rounded-lg shadow hover:bg-green-700 flex items-center justify-center transition active:scale-95">
+                                        <i class="fa-solid fa-check text-xs"></i>
+                                    </button>
+                                    <button onclick="toggleEdit('weight', '{{ job.row_id }}', '{{ loop.index }}')" class="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition">
+                                        <i class="fa-solid fa-xmark text-xs"></i>
+                                    </button>
+                                </div>
+                                {% endif %}
+
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    <!-- จบส่วนที่เพิ่มใหม่ -->
+
                 </div>
             {% endfor %}
         </div>
@@ -308,7 +416,6 @@
                     document.getElementById(`form-${rowId}-${stepId}`).submit();
                 },
                 function(error) {
-                    // Fallback even if GPS fails
                     console.warn("GPS Error:", error);
                     document.getElementById(`form-${rowId}-${stepId}`).submit();
                 },
@@ -332,6 +439,87 @@
             
             document.getElementById(`form-${rowId}-${stepId}`).submit();
         }
+    }
+
+    // --- [เพิ่มใหม่] ฟังก์ชันสำหรับจัดการ PO Input (AJAX) ---
+    
+    function validateInputLive(input) {
+        input.value = input.value.toUpperCase();
+        if (input.value.length >= 5 && !input.value.startsWith('IN755')) {
+            input.classList.add('border-red-500', 'bg-red-50');
+            input.classList.remove('border-gray-300');
+        } else {
+            input.classList.remove('border-red-500', 'bg-red-50');
+            input.classList.add('border-gray-300');
+        }
+    }
+
+    function toggleEdit(type, rowId, idx) {
+        const box = document.getElementById(`box-${type}-${rowId}-${idx}`);
+        const edit = document.getElementById(`edit-${type}-${rowId}-${idx}`);
+        
+        if (box.classList.contains('hidden')) {
+            box.classList.remove('hidden');
+            edit.classList.add('hidden');
+        } else {
+            box.classList.add('hidden');
+            edit.classList.remove('hidden');
+        }
+    }
+
+    function saveDetail(type, rowId, poName, idx, isEdit = false) {
+        const inputId = isEdit ? `input-edit-${type}-${rowId}-${idx}` : `input-${type}-${rowId}-${idx}`;
+        const input = document.getElementById(inputId);
+        let val = input.value.trim();
+
+        if (type === 'doc') {
+            val = val.toUpperCase();
+            if (!val.startsWith('IN755')) {
+                alert('⚠️ เลขที่เอกสารต้องขึ้นต้นด้วย IN755');
+                input.focus();
+                return;
+            }
+        }
+        if (type === 'weight') {
+            if (!val || isNaN(val)) {
+                alert('⚠️ กรุณากรอกน้ำหนักให้ถูกต้อง');
+                input.focus();
+                return;
+            }
+            val = parseFloat(val).toFixed(2);
+        }
+
+        const btn = event.currentTarget; 
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        btn.disabled = true;
+
+        fetch('/save_po_detail', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                row_id: rowId,
+                po_name: poName,
+                type: type,
+                value: val
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.location.reload(); 
+            } else {
+                alert('เกิดข้อผิดพลาด: ' + data.message);
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('เชื่อมต่อ Server ไม่ได้');
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        });
     }
 </script>
 {% endblock %}

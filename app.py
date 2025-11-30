@@ -118,6 +118,43 @@ def thai_date_filter(date_val):
         return f"{d.day:02d}/{d.month:02d}/{year}"
     except:
         return str(date_val)
+        
+def parse_po_data(po_str, doc_str, weight_str):
+    """
+    แปลง String จาก Database ให้เป็น List of Dict เพื่อแสดงผล
+    Input: "PO1,PO2", "PO1:Doc1 | PO2:Doc2", "PO1:10 | PO2:20"
+    """
+    if not po_str: return []
+    
+    # แปลง PO String เป็น List
+    po_list = [p.strip() for p in po_str.split(',') if p.strip()]
+    
+    # แปลง Doc และ Weight เป็น Dictionary
+    doc_map = {}
+    if doc_str:
+        parts = doc_str.split('|')
+        for p in parts:
+            if ':' in p:
+                k, v = p.split(':', 1)
+                doc_map[k.strip()] = v.strip()
+
+    weight_map = {}
+    if weight_str:
+        parts = weight_str.split('|')
+        for p in parts:
+            if ':' in p:
+                k, v = p.split(':', 1)
+                weight_map[k.strip()] = v.strip()
+
+    # รวมร่าง
+    result = []
+    for po in po_list:
+        result.append({
+            'name': po,
+            'doc': doc_map.get(po, ''),
+            'weight': weight_map.get(po, '')
+        })
+    return result
 
 # Register Filters
 app.jinja_env.filters['comma_format'] = comma_format
@@ -1594,15 +1631,17 @@ def driver_tasks():
     if not driver_name: return redirect(url_for('driver_select'))
         
     sheet = get_db()
+    # ดึงข้อมูลทั้งหมด (ต้องมั่นใจว่าใน Sheet มี Header: PO_Nos, Doc_Result, Weight_Result แล้ว)
     raw_data = get_cached_records(sheet, 'Jobs')
     
     driver_jobs_with_id = []
     for idx, job in enumerate(raw_data):
         if job['Driver'] == driver_name:
             job_copy = job.copy()
-            job_copy['row_id'] = idx + 2
+            job_copy['row_id'] = idx + 2 # เก็บเลขแถวเพื่อใช้ Update
             driver_jobs_with_id.append(job_copy)
 
+    # จัดกลุ่มงานเป็น Trip (1 Trip มีหลายสาขาได้)
     trips = {}
     for job in driver_jobs_with_id:
         trip_key = (str(job['PO_Date']), str(job['Round']), str(job['Car_No']))
@@ -1613,6 +1652,7 @@ def driver_tasks():
     now_thai = datetime.now() + timedelta(hours=7)
     today_date = now_thai.date()
     
+    # Logic การเลือกโชว์งาน: โชว์งานที่ยังไม่เสร็จ หรือ งานเสร็จแล้วที่เป็นของวันนี้/อนาคต
     for key, job_list in trips.items():
         is_trip_fully_done = all(j['Status'] == 'Done' for j in job_list)
         show_this_trip = False
@@ -1631,30 +1671,71 @@ def driver_tasks():
         if show_this_trip:
             final_jobs_list.extend(job_list)
 
+    # เรียงลำดับงาน
     def sort_key_func(job):
         return (str(job['PO_Date']), str(job.get('Load_Date', '')), str(job['Round']))
     
     my_jobs = sorted(final_jobs_list, key=sort_key_func)
     today_date_str = now_thai.strftime("%Y-%m-%d")
 
+    # Loop เพื่อเตรียมข้อมูลสำหรับแสดงผล
     for job in my_jobs:
+        # =========================================================
+        # [ส่วนที่ 1] Parsing PO Data (สำหรับแสดงช่องกรอกข้อมูล)
+        # =========================================================
+        po_str = str(job.get('PO_Nos', '')).strip()       # Col Z
+        doc_str = str(job.get('Doc_Result', '')).strip()  # Col AA
+        weight_str = str(job.get('Weight_Result', '')).strip() # Col AB
+        
+        job['parsed_po_details'] = []
+
+        if po_str:
+            # แปลง Doc String "PO1:Doc1 | PO2:Doc2" เป็น Dict
+            doc_map = {}
+            if doc_str:
+                for p in doc_str.split('|'):
+                    if ':' in p:
+                        k, v = p.split(':', 1)
+                        doc_map[k.strip()] = v.strip()
+
+            # แปลง Weight String "PO1:10.5 | PO2:20" เป็น Dict
+            weight_map = {}
+            if weight_str:
+                for p in weight_str.split('|'):
+                    if ':' in p:
+                        k, v = p.split(':', 1)
+                        weight_map[k.strip()] = v.strip()
+
+            # สร้าง List Object เพื่อส่งไปวนลูปสร้าง Input Field ใน HTML
+            for po_item in po_str.split(','):
+                po_name = po_item.strip()
+                if po_name:
+                    job['parsed_po_details'].append({
+                        'name': po_name,
+                        'doc': doc_map.get(po_name, ''),
+                        'weight': weight_map.get(po_name, '')
+                    })
+
+        # =========================================================
+        # [ส่วนที่ 2] Smart Title & UI Decoration (คำนวณสีและสถานะ)
+        # =========================================================
         try:
             load_date_str = job.get('Load_Date', job['PO_Date'])
             round_str = str(job['Round']).strip()
             job_dt_str = f"{load_date_str} {round_str}"
+            
             try: job_dt = datetime.strptime(job_dt_str, "%Y-%m-%d %H:%M")
             except: job_dt = datetime.strptime(f"{job['PO_Date']} {round_str}", "%Y-%m-%d %H:%M")
             
-            # --- [แก้ไข] เพิ่มการคำนวณ delta_days ---
             diff = job_dt - now_thai
             hours_diff = diff.total_seconds() / 3600
             delta_days = (job_dt.date() - now_thai.date()).days
-            # -------------------------------------
 
             th_year = job_dt.year + 543
             real_date_str = f"{job_dt.day}/{job_dt.month}/{str(th_year)[2:]}"
             h = job_dt.hour
 
+            # ค่า Default
             job['smart_title'] = f"เวลา {round_str}"
             job['smart_detail'] = f"วันที่ {real_date_str}"
             job['ui_class'] = {'bg': 'bg-gray-50', 'text': 'text-gray-500', 'icon': 'fa-clock'}
@@ -1671,31 +1752,33 @@ def driver_tasks():
             
             # 2. งานภายใน 16 ชม. (โหลดวันนี้/คืนนี้)
             elif 0 < hours_diff <= 16:
-                if 6 <= h <= 12:   p, i, t = "เช้านี้", "fa-sun", "yellow"
+                if 6 <= h <= 12:    p, i, t = "เช้านี้", "fa-sun", "yellow"
                 elif 13 <= h <= 18: p, i, t = "บ่ายนี้", "fa-cloud-sun", "orange"
                 else:               p, i, t = "คืนนี้", "fa-moon", "indigo"
                 job['smart_title'] = f"โหลดสินค้า{p}"
                 job['smart_detail'] = f"เวลา {round_str} น. ของวันที่ {real_date_str}"
                 job['ui_class'] = {'bg': f'bg-{t}-50 border-{t}-100 ring-1 ring-{t}-50', 'text': f'text-{t}-600', 'icon': i}
             
-            # 3. [แก้ไข] งานวันพรุ่งนี้ (เช็ค delta_days == 1)
+            # 3. งานวันพรุ่งนี้
             elif delta_days == 1:
                 period = "คืนพรุ่งนี้" if (h >= 19 or h <= 5) else "วันพรุ่งนี้"
                 job['smart_title'] = f"⏩ เตรียมโหลด{period}"
                 job['smart_detail'] = f"เวลา {round_str} น. ของวันที่ {real_date_str}"
                 job['ui_class'] = {'bg': 'bg-blue-50 border-blue-100', 'text': 'text-blue-600', 'icon': 'fa-calendar-day'}
             
-            # 4. งานล่วงหน้า (มะรืนเป็นต้นไป)
+            # 4. งานล่วงหน้า
             else:
                 job['smart_title'] = f"📅 งานล่วงหน้า"
                 job['smart_detail'] = f"วันที่ {real_date_str} เวลา {round_str} น."
                 job['ui_class'] = {'bg': 'bg-gray-50 border-gray-100', 'text': 'text-gray-500', 'icon': 'fa-calendar-days'}
             
-            # --- แก้ไขจาก "%Y-%m-%d' เป็น "%Y-%m-%d" ---
+            # PO Label
             po_d = datetime.strptime(job['PO_Date'], "%Y-%m-%d")
             po_th = f"{po_d.day}/{po_d.month}/{str(po_d.year+543)[2:]}"
             job['po_label'] = f"(เอกสาร PO วันที่ {po_th})"
-        except Exception as e: pass
+            
+        except Exception as e: 
+            pass
 
     return render_template('driver_tasks.html', name=driver_name, jobs=my_jobs, today_date=today_date_str)
 
@@ -1825,6 +1908,51 @@ def update_driver():
             return json.dumps({'status': 'error', 'message': 'ไม่พบรายการงานที่ตรงกัน'})
     except Exception as e:
         print(f"Error updating driver: {e}")
+        return json.dumps({'status': 'error', 'message': str(e)})
+        
+@app.route('/save_po_detail', methods=['POST'])
+def save_po_detail():
+    try:
+        data = request.json
+        row_id = int(data.get('row_id'))
+        po_name = data.get('po_name')
+        val_type = data.get('type') # 'doc' หรือ 'weight'
+        value = data.get('value')
+        
+        sheet = get_db()
+        ws = sheet.worksheet('Jobs')
+        
+        # อ่านข้อมูลเดิมมาก่อน
+        # Col 27 (AA) = Doc, Col 28 (AB) = Weight
+        target_col = 27 if val_type == 'doc' else 28
+        current_val = ws.cell(row_id, target_col).value or ""
+        
+        # แปลงเป็น Map
+        val_map = {}
+        if current_val:
+            parts = current_val.split('|')
+            for p in parts:
+                if ':' in p:
+                    k, v = p.split(':', 1)
+                    val_map[k.strip()] = v.strip()
+        
+        # อัพเดทค่าใหม่
+        val_map[po_name] = value
+        
+        # แปลงกลับเป็น String "PO:Val | PO:Val"
+        new_str_parts = []
+        for k, v in val_map.items():
+            if v: # เก็บเฉพาะที่มีค่า
+                new_str_parts.append(f"{k}:{v}")
+        
+        new_str = " | ".join(new_str_parts)
+        
+        # บันทึก
+        ws.update_cell(row_id, target_col, new_str)
+        invalidate_cache('Jobs')
+        
+        return json.dumps({'status': 'success', 'value': value})
+    except Exception as e:
         return json.dumps({'status': 'error', 'message': str(e)})
 
 @app.route('/')

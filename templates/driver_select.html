@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {% extends "layout.html" %}
 {% block content %}
 
@@ -95,4 +96,103 @@
     </div>
 </div>
 
+=======
+{% extends "layout.html" %}
+{% block content %}
+
+<div class="max-w-md mx-auto py-10 px-4">
+    
+    <div class="text-center mb-6">
+        <h2 class="text-2xl font-bold text-gray-800 mb-2">
+            <i class="fa-solid fa-user-astronaut text-indigo-600"></i> เลือกชื่อพนักงานขับรถ
+        </h2>
+        <p class="text-sm text-gray-500">กรุณาเลือกชื่อของท่านเพื่อเข้าสู่ระบบบันทึกเวลา</p>
+    </div>
+
+    <div class="mb-8">
+        <a href="/calendar" class="group block relative overflow-hidden rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 p-4 shadow-lg transition-all duration-300 hover:shadow-orange-200 hover:-translate-y-1">
+            <div class="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-white opacity-10 blur-xl group-hover:opacity-20 transition"></div>
+            
+            <div class="flex items-center justify-between relative z-10">
+                <div class="flex items-center gap-4">
+                    <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-white/20 text-white shadow-inner backdrop-blur-sm">
+                        <i class="fa-regular fa-calendar-days text-2xl"></i>
+                    </div>
+                    <div class="text-white">
+                        <div class="text-lg font-bold leading-tight">ปฏิทินงานรายเดือน</div>
+                        <div class="text-xs text-orange-50 opacity-90">เช็คตารางงาน / เวรประจำวัน</div>
+                    </div>
+                </div>
+                <div class="h-8 w-8 rounded-full bg-white/10 flex items-center justify-center text-white group-hover:bg-white group-hover:text-orange-600 transition">
+                    <i class="fa-solid fa-chevron-right text-sm"></i>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <div class="space-y-3">
+        {% for name in active_drivers %}
+            {% set info = driver_info[name] %}
+            <a href="{{ url_for('driver_tasks', name=name) }}" 
+               class="block bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:border-indigo-500 hover:shadow-md transition duration-200 group relative overflow-hidden">
+                
+                {% if info.urgent_msg %}
+                    <div class="absolute top-0 right-0 {{ info.urgent_color }} text-[10px] px-2 py-0.5 rounded-bl-lg font-bold shadow-sm z-10">
+                        {{ info.urgent_msg }} {{ info.urgent_time }}
+                    </div>
+                {% endif %}
+
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition">
+                            <i class="fa-solid fa-user text-lg"></i>
+                        </div>
+                        <div>
+                            <div class="font-bold text-gray-800 group-hover:text-indigo-700 text-lg">{{ name }}</div>
+                            <div class="text-xs text-gray-400 group-hover:text-indigo-400">แตะเพื่อดูงาน</div>
+                        </div>
+                    </div>
+                    {% if info.pending_count > 0 %}
+                        <div class="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-sm animate-pulse">
+                            {{ info.pending_count }} งาน
+                        </div>
+                    {% else %}
+                        <i class="fa-solid fa-chevron-right text-gray-300 group-hover:text-indigo-500"></i>
+                    {% endif %}
+                </div>
+            </a>
+        {% endfor %}
+    </div>
+
+    {% if hidden_drivers|length > 0 %}
+    <div class="mt-8">
+        <button onclick="document.getElementById('hidden-list').classList.toggle('hidden'); this.querySelector('i').classList.toggle('fa-chevron-down'); this.querySelector('i').classList.toggle('fa-chevron-up');" 
+                class="w-full py-3 bg-gray-100 text-gray-500 rounded-lg text-sm font-medium hover:bg-gray-200 transition flex items-center justify-center gap-2">
+            <span>แสดงพนักงานที่ไม่มีงานเร็วๆ นี้ ({{ hidden_drivers|length }})</span>
+            <i class="fa-solid fa-chevron-down text-xs"></i>
+        </button>
+
+        <div id="hidden-list" class="hidden mt-3 space-y-3 opacity-80 scale-95 origin-top transition-all duration-300">
+            {% for name in hidden_drivers %}
+                <a href="{{ url_for('driver_tasks', name=name) }}" 
+                   class="block bg-gray-50 p-3 rounded-xl border border-transparent hover:border-gray-300 hover:bg-white transition flex items-center justify-between grayscale hover:grayscale-0">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-400">
+                            <i class="fa-regular fa-user"></i>
+                        </div>
+                        <div class="font-medium text-gray-600">{{ name }}</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-gray-300 text-xs"></i>
+                </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="mt-10 text-center">
+        <a href="/" class="text-sm text-gray-400 hover:text-gray-600 underline">กลับหน้าหลัก</a>
+    </div>
+</div>
+
+>>>>>>> dfc8aaf7307f9831d48891aba005ab024ff56669
 {% endblock %}

@@ -2058,7 +2058,8 @@ def monthly_calendar():
     raw_drivers = get_cached_records(sheet, 'Drivers')
     all_driver_names = [d['Name'] for d in raw_drivers if d.get('Name')]
 
-    # เปลี่ยนโครงสร้างการเก็บข้อมูล: จาก set() เป็น dict() เพื่อนับจำนวน
+    # เก็บข้อมูลเป็น Set เพื่อกันซ้ำ (Trip ID)
+    # โครงสร้าง: calendar_data[day] = { 'day': { 'DriverName': {set_of_trip_ids} }, ... }
     calendar_data = {}
 
     for job in raw_jobs:
@@ -2083,7 +2084,6 @@ def monthly_calendar():
             day_key = job_dt.day
             
             if day_key not in calendar_data:
-                # เปลี่ยนเป็น dict เพื่อนับจำนวนงาน { 'นาย A': 1, 'นาย B': 2 }
                 calendar_data[day_key] = {'day_drivers': {}, 'night_drivers': {}}
             
             is_day = True
@@ -2092,13 +2092,18 @@ def monthly_calendar():
             
             driver_name = job['Driver']
             
-            # นับจำนวนงานเพิ่มทีละ 1
+            # สร้าง Unique ID สำหรับเที่ยววิ่งนี้ (เช่น "11:00_14")
+            # ถ้าเป็นรอบเดียวกัน คันเดียวกัน แม้จะมีหลายสาขา ID นี้จะเหมือนเดิม
+            trip_id = f"{time_str}_{job.get('Car_No', '')}"
+
             if is_day:
-                current_count = calendar_data[day_key]['day_drivers'].get(driver_name, 0)
-                calendar_data[day_key]['day_drivers'][driver_name] = current_count + 1
+                if driver_name not in calendar_data[day_key]['day_drivers']:
+                    calendar_data[day_key]['day_drivers'][driver_name] = set()
+                calendar_data[day_key]['day_drivers'][driver_name].add(trip_id)
             else:
-                current_count = calendar_data[day_key]['night_drivers'].get(driver_name, 0)
-                calendar_data[day_key]['night_drivers'][driver_name] = current_count + 1
+                if driver_name not in calendar_data[day_key]['night_drivers']:
+                    calendar_data[day_key]['night_drivers'][driver_name] = set()
+                calendar_data[day_key]['night_drivers'][driver_name].add(trip_id)
                 
         except Exception as e: 
             continue
@@ -2107,22 +2112,23 @@ def monthly_calendar():
     final_data = {}
     for d in range(1, 32):
         if d in calendar_data:
-            # แปลง Dictionary เป็น List of Objects: [{'name': 'A', 'count': 1}, {'name': 'B', 'count': 2}]
             day_active_dict = calendar_data[d]['day_drivers']
             night_active_dict = calendar_data[d]['night_drivers']
             
-            # สร้าง List สำหรับ Active โดยเรียงตามชื่อ
+            # แปลง Set ให้เป็นจำนวนนับ (len)
+            # ถ้ามี 2 สาขา แต่ trip_id เดียวกัน set จะมีขนาดแค่ 1 -> นับเป็น 1 รอบ (ถูกต้อง)
+            # ถ้ามี 2 รอบ (11:00 และ 18:30) trip_id จะต่างกัน -> นับเป็น 2 รอบ (ถูกต้อง)
+            
             day_active = sorted(
-                [{'name': k, 'count': v} for k, v in day_active_dict.items()], 
+                [{'name': k, 'count': len(v)} for k, v in day_active_dict.items()], 
                 key=lambda x: x['name']
             )
             
             night_active = sorted(
-                [{'name': k, 'count': v} for k, v in night_active_dict.items()], 
+                [{'name': k, 'count': len(v)} for k, v in night_active_dict.items()], 
                 key=lambda x: x['name']
             )
             
-            # หา Standby (เทียบกับ keys ของ dict)
             active_day_names = set(day_active_dict.keys())
             active_night_names = set(night_active_dict.keys())
             
@@ -2134,7 +2140,7 @@ def monthly_calendar():
                 'night_active': night_active,
                 'day_standby': day_standby,
                 'night_standby': night_standby,
-                'day_count': len(day_active),   # นับจำนวนคน (ไม่ใช่จำนวนเที่ยว)
+                'day_count': len(day_active),
                 'night_count': len(night_active)
             }
 

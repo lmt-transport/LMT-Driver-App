@@ -172,14 +172,24 @@
         document.getElementById('modalMonth').innerText = month + " " + year;
         
         // Helper to create badges
-        const createBadge = (name, type) => {
+        const createBadge = (item, type) => {
             const div = document.createElement('div');
+            
             if(type === 'active') {
+                // item คือ Object {name: "ชื่อ", count: 2}
                 div.className = "text-xs bg-white border border-green-200 text-gray-700 px-2.5 py-1.5 rounded-lg shadow-sm font-medium flex items-center gap-1.5";
-                div.innerHTML = `<i class="fa-solid fa-truck-fast text-[10px] text-green-500"></i> ${name}`;
+                
+                let countBadge = '';
+                // [NEW] ถ้ามีงานมากกว่า 1 รอบ ให้แสดง Badge สีแดง
+                if (item.count > 1) {
+                    countBadge = `<span class="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full ml-1 shadow-sm">x${item.count} รอบ</span>`;
+                }
+
+                div.innerHTML = `<i class="fa-solid fa-truck-fast text-[10px] text-green-500"></i> ${item.name} ${countBadge}`;
             } else {
+                // item คือ String "ชื่อ" (สำหรับ Standby)
                 div.className = "text-[10px] bg-gray-50 border border-gray-200 text-gray-500 px-2 py-1 rounded-md";
-                div.innerHTML = name;
+                div.innerHTML = item;
             }
             return div;
         };
@@ -191,10 +201,12 @@
             
             elActive.innerHTML = '';
             elStandby.innerHTML = '';
+            
+            // นับจำนวนคน (List length)
             elCount.innerText = (activeList ? activeList.length : 0) + " คน";
 
             if (activeList && activeList.length > 0) {
-                activeList.forEach(name => elActive.appendChild(createBadge(name, 'active')));
+                activeList.forEach(item => elActive.appendChild(createBadge(item, 'active')));
             } else {
                 elActive.innerHTML = '<span class="text-xs text-gray-300 italic pl-1">- ไม่มีงาน -</span>';
             }
@@ -207,6 +219,7 @@
         };
 
         // Populate Data
+        // data.day_active ตอนนี้เป็น List of Objects แล้ว
         updateSection('listDayActive', 'listDayStandby', 'badgeDayCount', data.day_active, data.day_standby);
         updateSection('listNightActive', 'listNightStandby', 'badgeNightCount', data.night_active, data.night_standby);
 

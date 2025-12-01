@@ -2027,22 +2027,16 @@ def save_po_detail():
     except Exception as e:
         return json.dumps({'status': 'error', 'message': str(e)})
         
-# ... (โค้ดเดิมด้านบน)
-
-# ==========================================
-# [NEW] Monthly Calendar Feature
-# ==========================================
-import calendar
 
 # ==========================================
 # [UPDATED] Monthly Calendar with Midnight Crossover
 # ==========================================
+# ค้นหา route '/calendar' และแทนที่ฟังก์ชัน monthly_calendar ด้วยโค้ดนี้ครับ
+
 @app.route('/calendar')
 def monthly_calendar():
-    # อนุญาตให้คนขับเข้าดูได้ (ไม่ต้อง Login) หรือจะเปิด comment บรรทัดล่างถ้าต้องการล็อค
     # if 'user' not in session: return redirect(url_for('manager_login'))
     
-    # 1. รับค่าเดือน/ปี จาก Query Param
     now = datetime.now() + timedelta(hours=7)
     try:
         year = int(request.args.get('year', now.year))
@@ -2050,8 +2044,7 @@ def monthly_calendar():
     except:
         year, month = now.year, now.month
 
-    # 2. เตรียมข้อมูลปฏิทิน
-    cal = calendar.Calendar(firstweekday=6) # 6 = Sunday
+    cal = calendar.Calendar(firstweekday=6)
     month_days = cal.monthdayscalendar(year, month)
     
     thai_months = [
@@ -2060,83 +2053,91 @@ def monthly_calendar():
     ]
     month_name = thai_months[month]
 
-    # 3. ดึงข้อมูล
     sheet = get_db()
     raw_jobs = get_cached_records(sheet, 'Jobs')
     raw_drivers = get_cached_records(sheet, 'Drivers')
     all_driver_names = [d['Name'] for d in raw_drivers if d.get('Name')]
 
-    # 4. ประมวลผลข้อมูลลง Dictionary
+    # เปลี่ยนโครงสร้างการเก็บข้อมูล: จาก set() เป็น dict() เพื่อนับจำนวน
     calendar_data = {}
 
     for job in raw_jobs:
         if str(job.get('Status', '')).lower() == 'cancel': continue
         
-        # 4.1 หาวันที่และเวลาของงาน
         date_str = job.get('Load_Date', '').strip()
         if not date_str: date_str = str(job['PO_Date']).strip()
-        
         time_str = str(job['Round']).strip()
         
         try:
-            # แปลงเป็น datetime object เพื่อคำนวณ
-            # สมมติเวลาถ้าไม่มีให้เป็น 12:00 (กลางวัน) เพื่อกัน Error
             if not time_str: time_str = "12:00"
-            
             fmt_time = "%H:%M" if len(time_str) <= 5 else "%H:%M:%S"
             job_dt = datetime.strptime(f"{date_str} {time_str}", f"%Y-%m-%d {fmt_time}")
             
-            # ======================================================
-            # [LOGIC สำคัญ] Midnight Crossover
-            # ถ้าเวลาคือ 00:00 - 05:59 ให้ถือว่าเป็น "กะดึกของเมื่อวาน"
-            # ======================================================
+            # Logic: Midnight Crossover
             if 0 <= job_dt.hour < 6:
                 job_dt = job_dt - timedelta(days=1)
             
-            # ตรวจสอบว่าหลังจากปัดวันแล้ว ยังอยู่ในเดือน/ปี ที่เลือกหรือไม่
             if job_dt.year != year or job_dt.month != month:
                 continue
                 
-            day_key = job_dt.day # ใช้เลขวันที่ (ที่ปัดแล้ว) เป็น Key
+            day_key = job_dt.day
             
             if day_key not in calendar_data:
-                calendar_data[day_key] = {'day_drivers': set(), 'night_drivers': set()}
+                # เปลี่ยนเป็น dict เพื่อนับจำนวนงาน { 'นาย A': 1, 'นาย B': 2 }
+                calendar_data[day_key] = {'day_drivers': {}, 'night_drivers': {}}
             
-            # จัดกลุ่ม Day/Night (ใช้เวลาเดิมในการดูว่าเป็น Day/Night)
-            # แต่เนื่องจากเราปัดเวลา 00:00-05:59 มาลงวันที่นี้แล้ว มันคือกะ Night แน่นอน
             is_day = True
             h = int(time_str.split(':')[0])
             if h < 6 or h >= 19: is_day = False
             
             driver_name = job['Driver']
+            
+            # นับจำนวนงานเพิ่มทีละ 1
             if is_day:
-                calendar_data[day_key]['day_drivers'].add(driver_name)
+                current_count = calendar_data[day_key]['day_drivers'].get(driver_name, 0)
+                calendar_data[day_key]['day_drivers'][driver_name] = current_count + 1
             else:
-                calendar_data[day_key]['night_drivers'].add(driver_name)
+                current_count = calendar_data[day_key]['night_drivers'].get(driver_name, 0)
+                calendar_data[day_key]['night_drivers'][driver_name] = current_count + 1
                 
         except Exception as e: 
             continue
 
-    # 5. จัดรูปแบบข้อมูลสุดท้าย (หา Standby)
+    # จัดรูปแบบข้อมูลสุดท้าย
     final_data = {}
     for d in range(1, 32):
         if d in calendar_data:
-            day_active = sorted(list(calendar_data[d]['day_drivers']))
-            night_active = sorted(list(calendar_data[d]['night_drivers']))
+            # แปลง Dictionary เป็น List of Objects: [{'name': 'A', 'count': 1}, {'name': 'B', 'count': 2}]
+            day_active_dict = calendar_data[d]['day_drivers']
+            night_active_dict = calendar_data[d]['night_drivers']
             
-            day_standby = sorted(list(set(all_driver_names) - set(day_active)))
-            night_standby = sorted(list(set(all_driver_names) - set(night_active)))
+            # สร้าง List สำหรับ Active โดยเรียงตามชื่อ
+            day_active = sorted(
+                [{'name': k, 'count': v} for k, v in day_active_dict.items()], 
+                key=lambda x: x['name']
+            )
+            
+            night_active = sorted(
+                [{'name': k, 'count': v} for k, v in night_active_dict.items()], 
+                key=lambda x: x['name']
+            )
+            
+            # หา Standby (เทียบกับ keys ของ dict)
+            active_day_names = set(day_active_dict.keys())
+            active_night_names = set(night_active_dict.keys())
+            
+            day_standby = sorted(list(set(all_driver_names) - active_day_names))
+            night_standby = sorted(list(set(all_driver_names) - active_night_names))
             
             final_data[d] = {
                 'day_active': day_active,
                 'night_active': night_active,
                 'day_standby': day_standby,
                 'night_standby': night_standby,
-                'day_count': len(day_active),
+                'day_count': len(day_active),   # นับจำนวนคน (ไม่ใช่จำนวนเที่ยว)
                 'night_count': len(night_active)
             }
 
-    # คำนวณ Prev/Next Month
     prev_month = month - 1 if month > 1 else 12
     prev_year = year if month > 1 else year - 1
     next_month = month + 1 if month < 12 else 1

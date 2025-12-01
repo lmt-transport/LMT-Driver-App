@@ -10,6 +10,7 @@ import os
 import gspread.utils 
 import json
 import time
+import calendar
 import requests 
 from openpyxl import load_workbook
 from openpyxl.styles import Font, Border, Side, PatternFill, Alignment
@@ -2025,6 +2026,133 @@ def save_po_detail():
         return json.dumps({'status': 'success', 'value': value})
     except Exception as e:
         return json.dumps({'status': 'error', 'message': str(e)})
+        
+# ... (โค้ดเดิมด้านบน)
+
+# ==========================================
+# [NEW] Monthly Calendar Feature
+# ==========================================
+import calendar
+
+# ==========================================
+# [UPDATED] Monthly Calendar with Midnight Crossover
+# ==========================================
+@app.route('/calendar')
+def monthly_calendar():
+    # อนุญาตให้คนขับเข้าดูได้ (ไม่ต้อง Login) หรือจะเปิด comment บรรทัดล่างถ้าต้องการล็อค
+    # if 'user' not in session: return redirect(url_for('manager_login'))
+    
+    # 1. รับค่าเดือน/ปี จาก Query Param
+    now = datetime.now() + timedelta(hours=7)
+    try:
+        year = int(request.args.get('year', now.year))
+        month = int(request.args.get('month', now.month))
+    except:
+        year, month = now.year, now.month
+
+    # 2. เตรียมข้อมูลปฏิทิน
+    cal = calendar.Calendar(firstweekday=6) # 6 = Sunday
+    month_days = cal.monthdayscalendar(year, month)
+    
+    thai_months = [
+        "", "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+        "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
+    ]
+    month_name = thai_months[month]
+
+    # 3. ดึงข้อมูล
+    sheet = get_db()
+    raw_jobs = get_cached_records(sheet, 'Jobs')
+    raw_drivers = get_cached_records(sheet, 'Drivers')
+    all_driver_names = [d['Name'] for d in raw_drivers if d.get('Name')]
+
+    # 4. ประมวลผลข้อมูลลง Dictionary
+    calendar_data = {}
+
+    for job in raw_jobs:
+        if str(job.get('Status', '')).lower() == 'cancel': continue
+        
+        # 4.1 หาวันที่และเวลาของงาน
+        date_str = job.get('Load_Date', '').strip()
+        if not date_str: date_str = str(job['PO_Date']).strip()
+        
+        time_str = str(job['Round']).strip()
+        
+        try:
+            # แปลงเป็น datetime object เพื่อคำนวณ
+            # สมมติเวลาถ้าไม่มีให้เป็น 12:00 (กลางวัน) เพื่อกัน Error
+            if not time_str: time_str = "12:00"
+            
+            fmt_time = "%H:%M" if len(time_str) <= 5 else "%H:%M:%S"
+            job_dt = datetime.strptime(f"{date_str} {time_str}", f"%Y-%m-%d {fmt_time}")
+            
+            # ======================================================
+            # [LOGIC สำคัญ] Midnight Crossover
+            # ถ้าเวลาคือ 00:00 - 05:59 ให้ถือว่าเป็น "กะดึกของเมื่อวาน"
+            # ======================================================
+            if 0 <= job_dt.hour < 6:
+                job_dt = job_dt - timedelta(days=1)
+            
+            # ตรวจสอบว่าหลังจากปัดวันแล้ว ยังอยู่ในเดือน/ปี ที่เลือกหรือไม่
+            if job_dt.year != year or job_dt.month != month:
+                continue
+                
+            day_key = job_dt.day # ใช้เลขวันที่ (ที่ปัดแล้ว) เป็น Key
+            
+            if day_key not in calendar_data:
+                calendar_data[day_key] = {'day_drivers': set(), 'night_drivers': set()}
+            
+            # จัดกลุ่ม Day/Night (ใช้เวลาเดิมในการดูว่าเป็น Day/Night)
+            # แต่เนื่องจากเราปัดเวลา 00:00-05:59 มาลงวันที่นี้แล้ว มันคือกะ Night แน่นอน
+            is_day = True
+            h = int(time_str.split(':')[0])
+            if h < 6 or h >= 19: is_day = False
+            
+            driver_name = job['Driver']
+            if is_day:
+                calendar_data[day_key]['day_drivers'].add(driver_name)
+            else:
+                calendar_data[day_key]['night_drivers'].add(driver_name)
+                
+        except Exception as e: 
+            continue
+
+    # 5. จัดรูปแบบข้อมูลสุดท้าย (หา Standby)
+    final_data = {}
+    for d in range(1, 32):
+        if d in calendar_data:
+            day_active = sorted(list(calendar_data[d]['day_drivers']))
+            night_active = sorted(list(calendar_data[d]['night_drivers']))
+            
+            day_standby = sorted(list(set(all_driver_names) - set(day_active)))
+            night_standby = sorted(list(set(all_driver_names) - set(night_active)))
+            
+            final_data[d] = {
+                'day_active': day_active,
+                'night_active': night_active,
+                'day_standby': day_standby,
+                'night_standby': night_standby,
+                'day_count': len(day_active),
+                'night_count': len(night_active)
+            }
+
+    # คำนวณ Prev/Next Month
+    prev_month = month - 1 if month > 1 else 12
+    prev_year = year if month > 1 else year - 1
+    next_month = month + 1 if month < 12 else 1
+    next_year = year if month < 12 else year + 1
+
+    return render_template(
+        'calendar.html',
+        calendar_matrix=month_days,
+        data=final_data,
+        year=year,
+        month=month,
+        month_name=month_name,
+        prev_year=prev_year, prev_month=prev_month,
+        next_year=next_year, next_month=next_month,
+        current_day=now.day if (now.year==year and now.month==month) else None
+    )
 
 @app.route('/')
 def index(): return render_template('index.html')

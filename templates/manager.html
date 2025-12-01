@@ -34,6 +34,14 @@
     #main-report-table th, #main-report-table td {
         border-color: #e2e8f0; /* colors-slate-200 */
     }
+    
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(5px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in-up {
+        animation: fadeInUp 0.3s ease-out forwards;
+    }
 </style>
 
 <div class="w-full max-w-[99%] mx-auto pb-10">
@@ -68,6 +76,11 @@
     <div class="flex space-x-2 mb-6 overflow-x-auto no-scrollbar pb-1">
         <button onclick="switchTab('tab-monitor')" id="btn-monitor" class="tab-btn flex-1 py-3 px-4 bg-indigo-600 text-white rounded-lg shadow font-medium transition hover:bg-indigo-700 whitespace-nowrap text-sm"><i class="fa-solid fa-satellite-dish mr-2"></i> ติดตามงาน (Monitor)</button>
         <button onclick="switchTab('tab-drivers')" id="btn-drivers" class="tab-btn flex-1 py-3 px-4 bg-white text-gray-600 rounded-lg shadow font-medium transition hover:bg-gray-100 whitespace-nowrap text-sm"><i class="fa-solid fa-id-card mr-2"></i> สรุปงานคนขับ (Dashboard)</button>
+        
+        <a href="/calendar" class="tab-btn flex-1 py-3 px-4 bg-white text-gray-600 rounded-lg shadow font-medium transition hover:bg-gray-100 whitespace-nowrap text-sm text-center flex items-center justify-center decoration-0">
+            <i class="fa-regular fa-calendar-days mr-2 text-orange-500"></i> ปฏิทินงาน
+        </a>
+
         <button onclick="switchTab('tab-create')" id="btn-create" class="tab-btn flex-1 py-3 px-4 bg-white text-gray-600 rounded-lg shadow font-medium transition hover:bg-gray-100 whitespace-nowrap text-sm"><i class="fa-solid fa-plus-circle mr-2"></i> สร้างงานใหม่</button>
         <button onclick="switchTab('tab-report')" id="btn-report" class="tab-btn flex-1 py-3 px-4 bg-white text-gray-600 rounded-lg shadow font-medium transition hover:bg-gray-100 whitespace-nowrap text-sm"><i class="fa-solid fa-table mr-2"></i> รายงาน (Excel Report)</button>
     </div>
@@ -380,28 +393,45 @@
                 <div class="bg-gray-100 p-3 rounded-lg flex items-center gap-2 text-sm text-gray-600 border border-gray-200"><i class="fa-solid fa-car-side"></i> ทะเบียนรถ: <input type="text" id="plate_input" name="plate_license" readonly class="bg-transparent font-bold text-gray-800 w-full focus:outline-none"></div>
                 <hr class="border-gray-100">
 
-                <!-- [ส่วนที่เพิ่มใหม่] ช่องกรอก PO List -->
                 <div class="mb-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
                     <label class="block text-sm font-bold text-blue-800 mb-2">
                         <i class="fa-solid fa-list-ol"></i> รายการ PO (Copy จาก Excel มาวางได้เลย)
                     </label>
-                    <textarea name="po_list_input" rows="4" 
+                    <textarea name="po_list_input" rows="3" 
                         class="w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm"
-                        placeholder="ตัวอย่าง:&#10;PO.9740778268&#10;PO.9740778225&#10;(วางหลายบรรทัด ระบบจะรวมให้อัตโนมัติ)"></textarea>
-                    <p class="text-xs text-gray-500 mt-1">* 1 สาขาสามารถมีหลาย PO ได้ ระบบจะส่งรายการนี้ไปให้คนขับตรวจสอบ</p>
+                        placeholder="ตัวอย่าง:
+PO.9740778268
+PO.9740778225"></textarea>
                 </div>
-                <!-- จบส่วนที่เพิ่มใหม่ -->
 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">สาขาปลายทาง</label>
-                    <div id="branch-container" class="space-y-3">
-                        <div class="flex gap-2">
-                            <span class="bg-indigo-100 text-indigo-600 px-3 py-2 rounded-lg font-bold text-sm flex items-center shadow-sm">1</span>
-                            <input type="text" name="branches" placeholder="สาขาที่ 1" required class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border"><button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 px-2 transition"><i class="fa-solid fa-trash"></i></button>
+                    
+                    <div class="mb-4 bg-purple-50 p-4 rounded-lg border border-purple-100">
+                        <label class="block text-sm font-bold text-purple-800 mb-2">
+                            <i class="fa-solid fa-paste"></i> วางรายชื่อสาขาที่นี่ (Copy จาก Excel)
+                        </label>
+                        <textarea id="branch_paste_area" rows="3" 
+                            oninput="parseBranches(this)"
+                            class="w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-purple-500 focus:border-purple-500 font-mono text-sm placeholder-gray-400"
+                            placeholder="วางข้อมูลที่นี่... ระบบจะสร้างแถวให้อัตโนมัติ
+เช่น:
+TFMสาขาตลาดแสงศิริ
+TFMสาขาซอยบางแวก"></textarea>
+                        <p class="text-[10px] text-purple-600 mt-1">* เมื่อวางข้อมูลแล้ว รายชื่อจะถูกแปลงเป็นช่องกรอกด้านล่างอัตโนมัติ</p>
+                    </div>
+
+                    <div id="branch-container" class="space-y-3 pl-2 border-l-2 border-gray-200">
+                        <div class="flex gap-2 group">
+                            <span class="bg-gray-100 text-gray-500 px-3 py-2 rounded-lg font-bold text-sm flex items-center shadow-sm w-8 justify-center">1</span>
+                            <input type="text" name="branches" placeholder="ระบุชื่อสาขา" required class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border">
+                            <button type="button" onclick="this.parentElement.remove(); reIndexBranches();" class="text-gray-300 hover:text-red-500 px-2 transition"><i class="fa-solid fa-trash"></i></button>
                         </div>
                     </div>
-                    <button type="button" onclick="addBranchField()" class="mt-3 text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition"><i class="fa-solid fa-circle-plus text-lg"></i> เพิ่มสาขา</button>
+                    
+                    <button type="button" onclick="addBranchField()" class="mt-3 text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition"><i class="fa-solid fa-circle-plus text-lg"></i> เพิ่มสาขาเอง</button>
                 </div>
+
                 <div class="pt-4"><button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition shadow-lg">บันทึกงานทั้งหมด</button></div>
             </form>
         </div>
@@ -843,13 +873,47 @@
         if (plateInput) plateInput.value = plate || "";
     }
 
+    function parseBranches(textarea) {
+        const text = textarea.value;
+        if (!text.trim()) return;
+
+        const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+        const container = document.getElementById('branch-container');
+        
+        container.innerHTML = ''; 
+
+        lines.forEach((line, index) => {
+            const count = index + 1;
+            const div = document.createElement('div');
+            div.className = 'flex gap-2 group animate-fade-in-up';
+            div.innerHTML = `
+                <span class="bg-indigo-100 text-indigo-600 px-3 py-2 rounded-lg font-bold text-sm flex items-center shadow-sm w-8 justify-center">${count}</span>
+                <input type="text" name="branches" value="${line.trim()}" required class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border bg-white">
+                <button type="button" onclick="this.parentElement.remove(); reIndexBranches();" class="text-gray-300 hover:text-red-500 px-2 transition"><i class="fa-solid fa-trash"></i></button>
+            `;
+            container.appendChild(div);
+        });
+    }
+
     function addBranchField() {
         const container = document.getElementById('branch-container');
         const count = container.children.length + 1;
         const div = document.createElement('div');
-        div.className = 'flex gap-2';
-        div.innerHTML = `<span class="bg-indigo-100 text-indigo-600 px-3 py-2 rounded-lg font-bold text-sm flex items-center shadow-sm">${count}</span><input type="text" name="branches" placeholder="ระบุชื่อสาขาที่ ${count}" required class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border"><button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 px-2 transition"><i class="fa-solid fa-trash"></i></button>`;
+        div.className = 'flex gap-2 group animate-fade-in-up';
+        div.innerHTML = `
+            <span class="bg-gray-100 text-gray-500 px-3 py-2 rounded-lg font-bold text-sm flex items-center shadow-sm w-8 justify-center">${count}</span>
+            <input type="text" name="branches" placeholder="ระบุชื่อสาขาเพิ่ม" required class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border">
+            <button type="button" onclick="this.parentElement.remove(); reIndexBranches();" class="text-gray-300 hover:text-red-500 px-2 transition"><i class="fa-solid fa-trash"></i></button>
+        `;
         container.appendChild(div);
+    }
+
+    function reIndexBranches() {
+        const container = document.getElementById('branch-container');
+        Array.from(container.children).forEach((div, index) => {
+            const span = div.querySelector('span');
+            if(span) span.innerText = index + 1;
+        });
     }
 
     function copyCustomerLink() {

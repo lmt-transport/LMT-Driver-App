@@ -1,0 +1,236 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<style>
+    .cal-cell { min-height: 80px; transition: all 0.2s; }
+    .cal-cell:active { transform: scale(0.95); }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    /* Animation for Modal */
+    .slide-up-enter { transform: translateY(100%); opacity: 0; }
+    .slide-up-enter-active { transform: translateY(0); opacity: 1; transition: all 0.3s ease-out; }
+    .slide-up-exit { transform: translateY(0); opacity: 1; }
+    .slide-up-exit-active { transform: translateY(100%); opacity: 0; transition: all 0.3s ease-in; }
+</style>
+
+<div class="max-w-4xl mx-auto pb-20">
+    
+    <div class="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 sticky top-0 z-20">
+        
+        <a href="{{ '/manager' if session.get('user') else '/driver' }}" 
+           class="group flex items-center justify-center w-10 h-10 rounded-full bg-white border border-gray-200 shadow-sm text-gray-500 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-200 active:scale-95"
+           title="{{ 'กลับหน้าผู้จัดการ' if session.get('user') else 'กลับหน้าเลือกชื่อ' }}">
+            <i class="fa-solid fa-arrow-left text-lg group-hover:-translate-x-0.5 transition-transform"></i>
+        </a>
+        
+        <div class="flex items-center gap-4">
+            <a href="/calendar?year={{ prev_year }}&month={{ prev_month }}" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-600 hover:bg-indigo-100 hover:text-indigo-600 transition border border-transparent hover:border-indigo-200">
+                <i class="fa-solid fa-chevron-left text-xs"></i>
+            </a>
+            <div class="text-center min-w-[100px]">
+                <h2 class="text-lg font-bold text-gray-800 leading-tight">{{ month_name }}</h2>
+                <p class="text-xs text-gray-500 font-medium">{{ year + 543 }}</p>
+            </div>
+            <a href="/calendar?year={{ next_year }}&month={{ next_month }}" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-600 hover:bg-indigo-100 hover:text-indigo-600 transition border border-transparent hover:border-indigo-200">
+                <i class="fa-solid fa-chevron-right text-xs"></i>
+            </a>
+        </div>
+        
+        <div class="w-10"></div> 
+    </div>
+
+    <div class="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
+        <div class="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
+            {% for day in ['อา','จ','อ','พ','พฤ','ศ','ส'] %}
+            <div class="py-3 text-center text-xs font-bold {{ 'text-red-500' if loop.index0 == 0 else 'text-gray-500' }}">
+                {{ day }}
+            </div>
+            {% endfor %}
+        </div>
+
+        {% for week in calendar_matrix %}
+        <div class="grid grid-cols-7 border-b border-gray-100 last:border-b-0">
+            {% for day in week %}
+                {% if day == 0 %}
+                    <div class="bg-gray-50/50 min-h-[80px]"></div>
+                {% else %}
+                    {% set info = data.get(day, {}) %}
+                    {% set is_today = (current_day == day) %}
+                    
+                    <div onclick="openDayDetail('{{ day }}', '{{ month_name }}', '{{ year + 543 }}', {{ info | tojson | forceescape }})" 
+                         class="cal-cell relative p-1 border-r border-gray-100 last:border-r-0 cursor-pointer hover:bg-indigo-50/30 {{ 'bg-blue-50/50' if is_today else '' }}">
+                        
+                        <div class="flex justify-between items-start">
+                            <span class="text-sm font-medium {{ 'text-white bg-blue-600 w-6 h-6 flex items-center justify-center rounded-full shadow-sm' if is_today else 'text-gray-700 ml-1' }}">
+                                {{ day }}
+                            </span>
+                        </div>
+
+                        <div class="mt-2 flex flex-col gap-1 px-1">
+                            {% if info.day_count and info.day_count > 0 %}
+                            <div class="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded-md border border-yellow-200 font-bold truncate">
+                                <i class="fa-solid fa-sun text-yellow-500 mr-0.5"></i> {{ info.day_count }}
+                            </div>
+                            {% endif %}
+                            
+                            {% if info.night_count and info.night_count > 0 %}
+                            <div class="text-[10px] bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded-md border border-indigo-200 font-bold truncate">
+                                <i class="fa-solid fa-moon text-indigo-500 mr-0.5"></i> {{ info.night_count }}
+                            </div>
+                            {% endif %}
+
+                            {% if not info.day_count and not info.night_count %}
+                                <div class="h-4"></div> {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div class="flex justify-center gap-4 mt-4 text-xs text-gray-500">
+        <div class="flex items-center gap-1"><span class="w-3 h-3 bg-yellow-100 border border-yellow-300 rounded"></span> กะเช้า</div>
+        <div class="flex items-center gap-1"><span class="w-3 h-3 bg-indigo-100 border border-indigo-300 rounded"></span> กะดึก</div>
+    </div>
+</div>
+
+<div id="dayModal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onclick="closeDayDetail()"></div>
+    <div id="modalContent" class="absolute bottom-0 left-0 w-full bg-white rounded-t-2xl shadow-2xl transform transition-transform duration-300 max-h-[85vh] overflow-hidden flex flex-col md:relative md:max-w-lg md:mx-auto md:top-1/2 md:-translate-y-1/2 md:rounded-2xl">
+        
+        <div class="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center sticky top-0 z-10">
+            <div>
+                <h3 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <span id="modalDate" class="text-indigo-600"></span> 
+                    <span id="modalMonth"></span>
+                </h3>
+                <p class="text-xs text-gray-500 mt-0.5">ตารางงานและกำลังพล</p>
+            </div>
+            <button onclick="closeDayDetail()" class="w-8 h-8 rounded-full bg-gray-200 text-gray-500 hover:bg-gray-300 flex items-center justify-center transition">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+
+        <div class="p-6 overflow-y-auto custom-scrollbar space-y-6">
+            
+            <div>
+                <div class="flex items-center gap-2 mb-3">
+                    <div class="bg-yellow-100 text-yellow-600 w-8 h-8 rounded-lg flex items-center justify-center shadow-sm">
+                        <i class="fa-solid fa-sun text-lg"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-gray-800">กะกลางวัน (Day Shift)</h4>
+                        <p class="text-[10px] text-gray-500">06:00 - 18:59 น.</p>
+                    </div>
+                    <span id="badgeDayCount" class="ml-auto text-xs font-bold bg-gray-100 px-2 py-1 rounded-full text-gray-600">0 คน</span>
+                </div>
+                
+                <div class="mb-2">
+                    <p class="text-xs font-bold text-green-600 mb-1 pl-1"><i class="fa-solid fa-check-circle"></i> มีงานวิ่ง</p>
+                    <div id="listDayActive" class="flex flex-wrap gap-2"></div>
+                </div>
+                <div>
+                    <p class="text-xs font-bold text-gray-400 mb-1 pl-1"><i class="fa-solid fa-user-clock"></i> ว่าง/สำรอง (Standby)</p>
+                    <div id="listDayStandby" class="flex flex-wrap gap-1.5 opacity-80"></div>
+                </div>
+            </div>
+
+            <hr class="border-gray-100">
+
+            <div>
+                <div class="flex items-center gap-2 mb-3">
+                    <div class="bg-indigo-100 text-indigo-600 w-8 h-8 rounded-lg flex items-center justify-center shadow-sm">
+                        <i class="fa-solid fa-moon text-lg"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-gray-800">กะกลางคืน (Night Shift)</h4>
+                        <p class="text-[10px] text-gray-500">19:00 - 05:59 น.</p>
+                    </div>
+                    <span id="badgeNightCount" class="ml-auto text-xs font-bold bg-gray-100 px-2 py-1 rounded-full text-gray-600">0 คน</span>
+                </div>
+                
+                <div class="mb-2">
+                    <p class="text-xs font-bold text-green-600 mb-1 pl-1"><i class="fa-solid fa-check-circle"></i> มีงานวิ่ง</p>
+                    <div id="listNightActive" class="flex flex-wrap gap-2"></div>
+                </div>
+                <div>
+                    <p class="text-xs font-bold text-gray-400 mb-1 pl-1"><i class="fa-solid fa-user-clock"></i> ว่าง/สำรอง (Standby)</p>
+                    <div id="listNightStandby" class="flex flex-wrap gap-1.5 opacity-80"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    function openDayDetail(day, month, year, data) {
+        // Set Header
+        document.getElementById('modalDate').innerText = day;
+        document.getElementById('modalMonth').innerText = month + " " + year;
+        
+        // Helper to create badges
+        const createBadge = (name, type) => {
+            const div = document.createElement('div');
+            if(type === 'active') {
+                div.className = "text-xs bg-white border border-green-200 text-gray-700 px-2.5 py-1.5 rounded-lg shadow-sm font-medium flex items-center gap-1.5";
+                div.innerHTML = `<i class="fa-solid fa-truck-fast text-[10px] text-green-500"></i> ${name}`;
+            } else {
+                div.className = "text-[10px] bg-gray-50 border border-gray-200 text-gray-500 px-2 py-1 rounded-md";
+                div.innerHTML = name;
+            }
+            return div;
+        };
+
+        const updateSection = (activeId, standbyId, countId, activeList, standbyList) => {
+            const elActive = document.getElementById(activeId);
+            const elStandby = document.getElementById(standbyId);
+            const elCount = document.getElementById(countId);
+            
+            elActive.innerHTML = '';
+            elStandby.innerHTML = '';
+            elCount.innerText = (activeList ? activeList.length : 0) + " คน";
+
+            if (activeList && activeList.length > 0) {
+                activeList.forEach(name => elActive.appendChild(createBadge(name, 'active')));
+            } else {
+                elActive.innerHTML = '<span class="text-xs text-gray-300 italic pl-1">- ไม่มีงาน -</span>';
+            }
+
+            if (standbyList && standbyList.length > 0) {
+                standbyList.forEach(name => elStandby.appendChild(createBadge(name, 'standby')));
+            } else {
+                elStandby.innerHTML = '<span class="text-xs text-gray-300 italic pl-1">- ไม่มีคนว่าง -</span>';
+            }
+        };
+
+        // Populate Data
+        updateSection('listDayActive', 'listDayStandby', 'badgeDayCount', data.day_active, data.day_standby);
+        updateSection('listNightActive', 'listNightStandby', 'badgeNightCount', data.night_active, data.night_standby);
+
+        // Show Modal
+        const modal = document.getElementById('dayModal');
+        const content = document.getElementById('modalContent');
+        modal.classList.remove('hidden');
+        
+        // Simple Animate
+        content.classList.remove('translate-y-full', 'opacity-0');
+        content.classList.add('translate-y-0', 'opacity-100');
+    }
+
+    function closeDayDetail() {
+        const modal = document.getElementById('dayModal');
+        const content = document.getElementById('modalContent');
+        
+        content.classList.remove('translate-y-0', 'opacity-100');
+        content.classList.add('translate-y-full', 'opacity-0');
+        
+        setTimeout(() => {
+            modal.classList.add('hidden');
+        }, 200);
+    }
+</script>
+
+{% endblock %}

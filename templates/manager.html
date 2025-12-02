@@ -687,7 +687,7 @@ TFMสาขาซอยบางแวก"></textarea>
     });
 
     // --------------------------------------------------------
-    // Calculate Summary Table (Day/Night Total)
+    // Calculate Summary Table (Day/Night Total) - GROUPED LOGIC
     // --------------------------------------------------------
     function calculateSummaryTable() {
         let counts = {
@@ -697,31 +697,65 @@ TFMสาขาซอยบางแวก"></textarea>
         };
 
         const rows = document.querySelectorAll("#main-report-table tbody tr");
-        
-        rows.forEach(row => {
-            const timeCell = row.cells[3]?.innerText.trim() || ""; 
-            if(!timeCell) return;
+        let currentGroup = [];
+        let allGroups = [];
 
-            const hour = parseInt(timeCell.split(':')[0]);
-            const isDay = (hour >= 6 && hour <= 18);
+        // 1. จัดกลุ่ม (Grouping) โดยดูจาก Column แรก (ลำดับรถ)
+        // ถ้ามีข้อความ = คันใหม่, ถ้าว่าง = สาขาต่อเนื่อง
+        rows.forEach(row => {
+            const firstCellText = row.cells[0].innerText.trim();
+            if (firstCellText !== "") {
+                if (currentGroup.length > 0) allGroups.push(currentGroup);
+                currentGroup = [row];
+            } else {
+                if (currentGroup.length > 0) currentGroup.push(row);
+            }
+        });
+        if (currentGroup.length > 0) allGroups.push(currentGroup);
+
+        // 2. คำนวณ (Calculation)
+        allGroups.forEach(group => {
+            if (group.length === 0) return;
+            const firstRow = group[0];
+            const lastRow = group[group.length - 1]; // แถวสุดท้ายของ Trip (Last Branch)
+
+            // หา Day/Night จาก Column Index 3 (Round)
+            const timeText = firstRow.cells[3].innerText.trim();
+            let isDay = true;
+            if (timeText) {
+                const hour = parseInt(timeText.split(':')[0]);
+                isDay = (hour >= 6 && hour <= 18);
+            }
             const target = isDay ? counts.day : counts.night;
 
-            // Col Index: 8=T1, 9=T2, ... 15=T8
-            if(row.cells[8].innerText.trim()) target.t1++;
-            if(row.cells[9].innerText.trim()) target.t2++;
-            if(row.cells[10].innerText.trim()) target.t3++;
-            if(row.cells[11].innerText.trim()) target.t4++;
-            if(row.cells[12].innerText.trim()) target.t5++;
-            if(row.cells[13].innerText.trim()) target.t6++;
-            if(row.cells[14].innerText.trim()) target.t7++;
-            if(row.cells[15].innerText.trim()) target.t8++;
+            // Mapping Column Index (0-based) ใน manager.html:
+            // 8: Enter (T1)
+            // 9: StartLoad (T2)
+            // 10: EndLoad (T3)
+            // 11: SubmitDoc (T4)
+            // 12: RecvDoc (T5)
+            // 13: Exit (T6)
+            // 14: ArriveBranch (T7) - เช็คจาก lastRow
+            // 15: EndJob (T8) - เช็คจาก lastRow
+
+            if (firstRow.cells[8].innerText.trim()) target.t1++;
+            if (firstRow.cells[9].innerText.trim()) target.t2++;
+            if (firstRow.cells[10].innerText.trim()) target.t3++;
+            if (firstRow.cells[11].innerText.trim()) target.t4++;
+            if (firstRow.cells[12].innerText.trim()) target.t5++;
+            if (firstRow.cells[13].innerText.trim()) target.t6++;
+
+            // [Logic Fix] นับ T7, T8 เฉพาะเมื่อสาขาสุดท้ายจบแล้วเท่านั้น
+            if (lastRow.cells[14].innerText.trim()) target.t7++;
+            if (lastRow.cells[15].innerText.trim()) target.t8++;
         });
 
-        // Sum Totals
+        // 3. รวมผลรวม (Sum Total)
         for(let k in counts.total) {
             counts.total[k] = counts.day[k] + counts.night[k];
         }
 
+        // 4. แสดงผล (Render)
         const createCells = (data, rowId) => {
             const row = document.getElementById(rowId);
             if(!row) return;

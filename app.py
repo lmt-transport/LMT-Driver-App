@@ -20,6 +20,8 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'lmt_driver_app_secret_key_2024')
 CORS(app)
 
+SPREADSHEET_ID = '15kJuEyhIaIjxZsqvPIxhOqzTrB1eY62KDHRjNITcRkM'  # <--- นำ ID มาใส่ในเครื่องหมายคำพูดนี้ เช่น '1AbCd-EfGhIj...'
+
 # ==========================================
 # [CONFIG] ตั้งค่า Discord Webhook
 # ==========================================
@@ -371,7 +373,7 @@ def check_late_and_notify(sheet):
         print(f"Late Check Error: {e}")
 
 # ======================================================
-# [FIXED] get_db Function with Retry Logic for Error 500
+# [FIXED] get_db Function with Retry Logic & ID Support
 # ======================================================
 def get_db():
     scope = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets', "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
@@ -392,25 +394,20 @@ def get_db():
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            # --------------------------------------------------------------------------
-            # [แนะนำ] ให้เปลี่ยนบรรทัดล่างนี้เป็น client.open_by_key("YOUR_SHEET_ID")
-            # โดยเอา ID จาก URL ของ Google Sheet มาใส่แทน "DriverLogApp" จะเสถียรกว่ามาก
-            # --------------------------------------------------------------------------
-            sheet = client.open("15kJuEyhIaIjxZsqvPIxhOqzTrB1eY62KDHRjNITcRkM")
-            return sheet
-        except gspread.exceptions.APIError as e:
-            # ถ้าเป็นรอบสุดท้ายแล้วยัง Error ให้โยน Error ออกไป
+            if SPREADSHEET_ID and len(SPREADSHEET_ID) > 10:
+                return client.open_by_key(SPREADSHEET_ID)
+            else:
+                return client.open("DriverLogApp")
+        except Exception as e:
             if attempt == max_retries - 1:
                 print(f"Failed to connect to Google Sheet after {max_retries} attempts: {e}")
                 raise e
-            # ถ้ายังไม่ครบ ให้รอสักครู่แล้วลองใหม่
             print(f"Google Sheet API Error (Attempt {attempt+1}/{max_retries}). Retrying...")
-            time.sleep(2) # รอ 2 วินาที
+            time.sleep(2)
             
     return None
 
-# --- Routes ---
-
+# [Updated Login Route with Better Error Handling]
 @app.route('/manager_login', methods=['GET', 'POST'])
 def manager_login():
     if request.method == 'POST':
@@ -424,7 +421,11 @@ def manager_login():
                     session['user'] = username
                     return redirect(url_for('manager_dashboard'))
             return render_template('login.html', error="ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง")
-        except Exception as e: return render_template('login.html', error=f"Error: {str(e)}")
+        except Exception as e: 
+            err_msg = str(e)
+            if "<Response [200]>" in err_msg or "500" in err_msg:
+                err_msg = "ระบบ Google Sheets ขัดข้องชั่วคราว กรุณาลองใหม่ หรือตั้งค่า Spreadsheet ID ในโค้ด"
+            return render_template('login.html', error=f"Error: {err_msg}")
     return render_template('login.html')
 
 @app.route('/manager')

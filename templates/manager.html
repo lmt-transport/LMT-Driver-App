@@ -34,14 +34,6 @@
     #main-report-table th, #main-report-table td {
         border-color: #e2e8f0; /* colors-slate-200 */
     }
-    
-    @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(5px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    .animate-fade-in-up {
-        animation: fadeInUp 0.3s ease-out forwards;
-    }
 </style>
 
 <div class="w-full max-w-[99%] mx-auto pb-10">
@@ -76,11 +68,6 @@
     <div class="flex space-x-2 mb-6 overflow-x-auto no-scrollbar pb-1">
         <button onclick="switchTab('tab-monitor')" id="btn-monitor" class="tab-btn flex-1 py-3 px-4 bg-indigo-600 text-white rounded-lg shadow font-medium transition hover:bg-indigo-700 whitespace-nowrap text-sm"><i class="fa-solid fa-satellite-dish mr-2"></i> ติดตามงาน (Monitor)</button>
         <button onclick="switchTab('tab-drivers')" id="btn-drivers" class="tab-btn flex-1 py-3 px-4 bg-white text-gray-600 rounded-lg shadow font-medium transition hover:bg-gray-100 whitespace-nowrap text-sm"><i class="fa-solid fa-id-card mr-2"></i> สรุปงานคนขับ (Dashboard)</button>
-        
-        <a href="/calendar" class="tab-btn flex-1 py-3 px-4 bg-white text-gray-600 rounded-lg shadow font-medium transition hover:bg-gray-100 whitespace-nowrap text-sm text-center flex items-center justify-center decoration-0">
-            <i class="fa-regular fa-calendar-days mr-2 text-orange-500"></i> ปฏิทินงาน
-        </a>
-
         <button onclick="switchTab('tab-create')" id="btn-create" class="tab-btn flex-1 py-3 px-4 bg-white text-gray-600 rounded-lg shadow font-medium transition hover:bg-gray-100 whitespace-nowrap text-sm"><i class="fa-solid fa-plus-circle mr-2"></i> สร้างงานใหม่</button>
         <button onclick="switchTab('tab-report')" id="btn-report" class="tab-btn flex-1 py-3 px-4 bg-white text-gray-600 rounded-lg shadow font-medium transition hover:bg-gray-100 whitespace-nowrap text-sm"><i class="fa-solid fa-table mr-2"></i> รายงาน (Excel Report)</button>
     </div>
@@ -212,6 +199,7 @@
         </div>
     </div>
 
+    <!-- Drivers Tab -->
     <div id="tab-drivers" class="tab-content hidden">
        <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 md:p-6 shadow-inner">
             <div class="flex justify-between items-center mb-6">
@@ -220,6 +208,7 @@
                     สรุปงานรายบุคคล (PO: {{ current_filter_date | thai_date }})
                 </h3>
             </div>
+
             <div class="mb-8 bg-white rounded-xl shadow-sm border border-gray-100 p-4">
                 <h4 class="font-bold text-gray-700 mb-3 flex items-center gap-2">
                     <i class="fa-solid fa-user-clock text-green-500"></i> พนักงานที่ว่างงาน (Available)
@@ -361,6 +350,7 @@
         </div>
     </div>
 
+    <!-- Create Tab -->
     <div id="tab-create" class="tab-content hidden">
          <div class="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-8 border border-gray-100">
             <h3 class="text-xl font-bold text-gray-800 mb-6 border-b pb-2 flex items-center gap-2"><i class="fa-solid fa-pen-to-square text-indigo-600"></i> สร้างใบงานใหม่</h3>
@@ -391,54 +381,38 @@
                     </select>
                 </div>
                 <div class="bg-gray-100 p-3 rounded-lg flex items-center gap-2 text-sm text-gray-600 border border-gray-200"><i class="fa-solid fa-car-side"></i> ทะเบียนรถ: <input type="text" id="plate_input" name="plate_license" readonly class="bg-transparent font-bold text-gray-800 w-full focus:outline-none"></div>
-                <hr class="border-gray-100">
-
-                <div class="mb-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
-                    <label class="block text-sm font-bold text-blue-800 mb-2">
-                        <i class="fa-solid fa-list-ol"></i> รายการ PO (Copy จาก Excel มาวางได้เลย)
+                
+                <!-- [NEW] Textarea for Multiple PO Input -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                        รายการ PO (1 บรรทัดต่อ 1 PO) 
+                        <span class="text-xs text-gray-400 font-normal"> *ระบบจะนำไปสร้างเป็นรายการให้คนขับกรอกข้อมูล</span>
                     </label>
-                    <textarea name="po_list_input" rows="3" 
-                        class="w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm"
-                        placeholder="ตัวอย่าง:
-PO.9740778268
-PO.9740778225"></textarea>
+                    <textarea name="po_list_input" rows="3" class="w-full rounded-lg border-gray-300 shadow-sm p-2.5 border focus:ring-indigo-500 focus:border-indigo-500" placeholder="ตัวอย่าง:
+PO81002345
+PO81002346"></textarea>
                 </div>
 
+                <hr class="border-gray-100">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">สาขาปลายทาง</label>
-                    
-                    <div class="mb-4 bg-purple-50 p-4 rounded-lg border border-purple-100">
-                        <label class="block text-sm font-bold text-purple-800 mb-2">
-                            <i class="fa-solid fa-paste"></i> วางรายชื่อสาขาที่นี่ (Copy จาก Excel)
-                        </label>
-                        <textarea id="branch_paste_area" rows="3" 
-                            oninput="parseBranches(this)"
-                            class="w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-purple-500 focus:border-purple-500 font-mono text-sm placeholder-gray-400"
-                            placeholder="วางข้อมูลที่นี่... ระบบจะสร้างแถวให้อัตโนมัติ
-เช่น:
-TFMสาขาตลาดแสงศิริ
-TFMสาขาซอยบางแวก"></textarea>
-                        <p class="text-[10px] text-purple-600 mt-1">* เมื่อวางข้อมูลแล้ว รายชื่อจะถูกแปลงเป็นช่องกรอกด้านล่างอัตโนมัติ</p>
-                    </div>
-
-                    <div id="branch-container" class="space-y-3 pl-2 border-l-2 border-gray-200">
-                        <div class="flex gap-2 group">
-                            <span class="bg-gray-100 text-gray-500 px-3 py-2 rounded-lg font-bold text-sm flex items-center shadow-sm w-8 justify-center">1</span>
-                            <input type="text" name="branches" placeholder="ระบุชื่อสาขา" required class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border">
-                            <button type="button" onclick="this.parentElement.remove(); reIndexBranches();" class="text-gray-300 hover:text-red-500 px-2 transition"><i class="fa-solid fa-trash"></i></button>
+                    <div id="branch-container" class="space-y-3">
+                        <div class="flex gap-2">
+                            <span class="bg-indigo-100 text-indigo-600 px-3 py-2 rounded-lg font-bold text-sm flex items-center shadow-sm">1</span>
+                            <input type="text" name="branches" placeholder="ระบุชื่อสาขาที่ 1" required class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border"><button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 px-2 transition"><i class="fa-solid fa-trash"></i></button>
                         </div>
                     </div>
-                    
-                    <button type="button" onclick="addBranchField()" class="mt-3 text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition"><i class="fa-solid fa-circle-plus text-lg"></i> เพิ่มสาขาเอง</button>
+                    <button type="button" onclick="addBranchField()" class="mt-3 text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition"><i class="fa-solid fa-circle-plus text-lg"></i> เพิ่มสาขา</button>
                 </div>
-
                 <div class="pt-4"><button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition shadow-lg">บันทึกงานทั้งหมด</button></div>
             </form>
         </div>
     </div>
 
+    <!-- Report Tab -->
     <div id="tab-report" class="tab-content">
         <div class="bg-white rounded-xl shadow-lg p-4 border border-gray-100">
+            <!-- Header Tools -->
             <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 bg-gray-50 p-3 rounded-lg border border-gray-200">
                 <h3 class="font-bold text-gray-800 flex items-center gap-2 text-lg"><div class="bg-green-100 p-2 rounded text-green-700"><i class="fa-solid fa-file-csv"></i></div> สรุปรายงานประจำวัน</h3>
                 <form method="GET" action="/manager" class="flex flex-wrap gap-2 w-full md:w-auto items-center justify-end">
@@ -464,6 +438,7 @@ TFMสาขาซอยบางแวก"></textarea>
                 </form>
             </div>
 
+            <!-- Area for Capture -->
             <div id="report-capture-area" class="bg-white p-2">
                 
                 <div id="report-header-title" style="display:none;" class="mb-4">
@@ -486,25 +461,29 @@ TFMสาขาซอยบางแวก"></textarea>
                             <tr class="text-white table-header font-bold tracking-wide">
                                 <th class="px-2 py-2 bg-indigo-800 border-r border-indigo-700 sticky left-0 z-10 shadow-md">ลำดับ</th>
                                 <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">PO Date</th>
-                                <th class="px-2 py-2 bg-blue-600 border-r border-blue-500">วันที่โหลด</th>
-                                <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">รอบโหลด</th>
+                                <th class="px-2 py-2 bg-blue-600 border-r border-blue-500">Load Date</th>
+                                <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">เวลา</th>
                                 <th class="px-2 py-2 bg-blue-700 border-r border-blue-600 min-w-[150px]">ปลายทาง (สาขา)</th>
                                 <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">น้ำหนัก</th>
                                 <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">ทะเบียน</th>
                                 <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">คนขับ</th>
+                                <!-- Process Columns: Amber Theme -->
                                 <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">เข้าโรงงาน</th>
                                 <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">เริ่มโหลด</th>
                                 <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">โหลดเสร็จ</th>
                                 <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">ยื่นเอกสาร</th>
                                 <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">รับเอกสาร</th>
                                 <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">ออกโรงงาน</th>
+                                <!-- Success Columns: Green Theme -->
                                 <th class="px-2 py-2 bg-emerald-600 border-r border-emerald-500">ถึงสาขา</th>
-                                <th class="px-2 py-2 bg-emerald-700">จบงาน</th>
+                                <th class="px-2 py-2 bg-emerald-700 border-r border-emerald-600">จบงาน</th>
+                                <!-- [NEW] Doc Status Column -->
+                                <th class="px-2 py-2 bg-gray-700 text-white">สถานะเอกสาร</th>
                             </tr>
                         </thead>
                         <tbody class="text-gray-700 bg-white">
                             {% if jobs|length == 0 %}
-                                <tr><td colspan="16" class="p-10 text-center text-gray-400">กรุณาเลือกวันที่ หรือ ไม่พบข้อมูล</td></tr>
+                                <tr><td colspan="17" class="p-10 text-center text-gray-400">กรุณาเลือกวันที่ หรือ ไม่พบข้อมูล</td></tr>
                             {% else %}
                                 {# Define Macro #}
                                 {% macro report_time_cell(time_val, loc_val, text_class='', tooltip_msg='') %}
@@ -538,10 +517,12 @@ TFMสาขาซอยบางแวก"></textarea>
                                     {% endif %}
                                     
                                     <tr class="border-b hover:bg-gray-50 transition border-gray-100">
+                                        <!-- Column 1: Car No -->
                                         <td class="px-2 py-1 border-r font-bold bg-gray-50 sticky left-0 z-10 border-gray-200 text-indigo-900 text-center shadow-sm">
                                             {% if not is_same %} #{{ job.Car_No }} {% endif %}
                                         </td>
                                         
+                                        <!-- Columns 2-8: Job Info -->
                                         <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %}{{ job.PO_Date | thai_date }}{% endif %}</td>
                                         <td class="px-2 py-1 border-r border-gray-200 text-blue-700 font-bold bg-blue-50/20">
                                             {% if not is_same %}
@@ -555,6 +536,7 @@ TFMสาขาซอยบางแวก"></textarea>
                                         <td class="px-2 py-1 border-r border-gray-200 text-gray-800">{% if not is_same %} {{ job.Plate }} {% endif %}</td>
                                         <td class="px-2 py-1 border-r border-gray-200 font-medium truncate max-w-[120px] text-gray-700" title="{{ job.Driver }}">{% if not is_same %} {{ job.Driver }} {% endif %}</td>
                                         
+                                        <!-- Columns 9-14: Process (Amber Theme) -->
                                         <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T1_Enter, job.L1_Loc) }}{% endif %}</td>
                                         <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T2_StartLoad, job.L2_Loc, start_load_color, job.delay_msg) }}{% endif %}</td>
                                         <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T3_EndLoad, job.L3_Loc) }}{% endif %}</td>
@@ -562,8 +544,33 @@ TFMสาขาซอยบางแวก"></textarea>
                                         <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T5_RecvDoc, job.L5_Loc) }}{% endif %}</td>
                                         <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T6_Exit, job.L6_Loc) }}{% endif %}</td>
                                         
+                                        <!-- Columns 15-16: Success (Green Theme) -->
                                         <td class="px-2 py-1 border-r font-bold text-emerald-700 bg-emerald-50/40 border-gray-200">{{ report_time_cell(job.T7_ArriveBranch, job.L7_Loc, 'text-emerald-800') }}</td>
-                                        <td class="px-2 py-1 font-bold text-emerald-800 bg-emerald-100/60">{{ report_time_cell(job.T8_EndJob, job.L8_Loc, 'text-emerald-900') }}</td>
+                                        <td class="px-2 py-1 border-r font-bold text-emerald-800 bg-emerald-100/60 border-gray-200">{{ report_time_cell(job.T8_EndJob, job.L8_Loc, 'text-emerald-900') }}</td>
+                                        
+                                        <!-- [NEW] Column 17: Doc Status Logic -->
+                                        <td class="px-2 py-1 text-center bg-gray-50 border-gray-200">
+                                            {% if not is_same %}
+                                                {# Calculate Doc Status for this Trip #}
+                                                {% set ns_doc = namespace(total=0, recorded=0) %}
+                                                {% for j in jobs %}
+                                                    {% if j.PO_Date == job.PO_Date and j.Car_No == job.Car_No and j.Round == job.Round %}
+                                                        {% set ns_doc.total = ns_doc.total + 1 %}
+                                                        {% if j.get('Doc_Result') and j.get('Doc_Result')|string|trim|length > 0 %}
+                                                            {% set ns_doc.recorded = ns_doc.recorded + 1 %}
+                                                        {% endif %}
+                                                    {% endif %}
+                                                {% endfor %}
+
+                                                {% if ns_doc.recorded == ns_doc.total and ns_doc.total > 0 %}
+                                                    <span class="inline-flex items-center gap-1 bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-green-200 shadow-sm"><i class="fa-solid fa-check-circle"></i> ครบทุกสาขา</span>
+                                                {% elif ns_doc.recorded == 0 %}
+                                                    <span class="inline-flex items-center gap-1 bg-gray-100 text-gray-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-gray-200"><i class="fa-regular fa-circle"></i> รอการบันทึก</span>
+                                                {% else %}
+                                                    <span class="inline-flex items-center gap-1 bg-orange-100 text-orange-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-orange-200 shadow-sm"><i class="fa-solid fa-circle-exclamation"></i> ขาด {{ ns_doc.total - ns_doc.recorded }} สาขา</span>
+                                                {% endif %}
+                                            {% endif %}
+                                        </td>
                                     </tr>
                                 {% endfor %}
                             {% endif %}
@@ -687,7 +694,7 @@ TFMสาขาซอยบางแวก"></textarea>
     });
 
     // --------------------------------------------------------
-    // Calculate Summary Table (Day/Night Total) - GROUPED LOGIC
+    // Calculate Summary Table (Day/Night Total)
     // --------------------------------------------------------
     function calculateSummaryTable() {
         let counts = {
@@ -697,65 +704,31 @@ TFMสาขาซอยบางแวก"></textarea>
         };
 
         const rows = document.querySelectorAll("#main-report-table tbody tr");
-        let currentGroup = [];
-        let allGroups = [];
-
-        // 1. จัดกลุ่ม (Grouping) โดยดูจาก Column แรก (ลำดับรถ)
-        // ถ้ามีข้อความ = คันใหม่, ถ้าว่าง = สาขาต่อเนื่อง
+        
         rows.forEach(row => {
-            const firstCellText = row.cells[0].innerText.trim();
-            if (firstCellText !== "") {
-                if (currentGroup.length > 0) allGroups.push(currentGroup);
-                currentGroup = [row];
-            } else {
-                if (currentGroup.length > 0) currentGroup.push(row);
-            }
-        });
-        if (currentGroup.length > 0) allGroups.push(currentGroup);
+            const timeCell = row.cells[3]?.innerText.trim() || ""; 
+            if(!timeCell) return;
 
-        // 2. คำนวณ (Calculation)
-        allGroups.forEach(group => {
-            if (group.length === 0) return;
-            const firstRow = group[0];
-            const lastRow = group[group.length - 1]; // แถวสุดท้ายของ Trip (Last Branch)
-
-            // หา Day/Night จาก Column Index 3 (Round)
-            const timeText = firstRow.cells[3].innerText.trim();
-            let isDay = true;
-            if (timeText) {
-                const hour = parseInt(timeText.split(':')[0]);
-                isDay = (hour >= 6 && hour <= 18);
-            }
+            const hour = parseInt(timeCell.split(':')[0]);
+            const isDay = (hour >= 6 && hour <= 18);
             const target = isDay ? counts.day : counts.night;
 
-            // Mapping Column Index (0-based) ใน manager.html:
-            // 8: Enter (T1)
-            // 9: StartLoad (T2)
-            // 10: EndLoad (T3)
-            // 11: SubmitDoc (T4)
-            // 12: RecvDoc (T5)
-            // 13: Exit (T6)
-            // 14: ArriveBranch (T7) - เช็คจาก lastRow
-            // 15: EndJob (T8) - เช็คจาก lastRow
-
-            if (firstRow.cells[8].innerText.trim()) target.t1++;
-            if (firstRow.cells[9].innerText.trim()) target.t2++;
-            if (firstRow.cells[10].innerText.trim()) target.t3++;
-            if (firstRow.cells[11].innerText.trim()) target.t4++;
-            if (firstRow.cells[12].innerText.trim()) target.t5++;
-            if (firstRow.cells[13].innerText.trim()) target.t6++;
-
-            // [Logic Fix] นับ T7, T8 เฉพาะเมื่อสาขาสุดท้ายจบแล้วเท่านั้น
-            if (lastRow.cells[14].innerText.trim()) target.t7++;
-            if (lastRow.cells[15].innerText.trim()) target.t8++;
+            // Col Index: 8=T1, 9=T2, ... 15=T8
+            if(row.cells[8].innerText.trim()) target.t1++;
+            if(row.cells[9].innerText.trim()) target.t2++;
+            if(row.cells[10].innerText.trim()) target.t3++;
+            if(row.cells[11].innerText.trim()) target.t4++;
+            if(row.cells[12].innerText.trim()) target.t5++;
+            if(row.cells[13].innerText.trim()) target.t6++;
+            if(row.cells[14].innerText.trim()) target.t7++;
+            if(row.cells[15].innerText.trim()) target.t8++;
         });
 
-        // 3. รวมผลรวม (Sum Total)
+        // Sum Totals
         for(let k in counts.total) {
             counts.total[k] = counts.day[k] + counts.night[k];
         }
 
-        // 4. แสดงผล (Render)
         const createCells = (data, rowId) => {
             const row = document.getElementById(rowId);
             if(!row) return;
@@ -907,47 +880,13 @@ TFMสาขาซอยบางแวก"></textarea>
         if (plateInput) plateInput.value = plate || "";
     }
 
-    function parseBranches(textarea) {
-        const text = textarea.value;
-        if (!text.trim()) return;
-
-        const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-        const container = document.getElementById('branch-container');
-        
-        container.innerHTML = ''; 
-
-        lines.forEach((line, index) => {
-            const count = index + 1;
-            const div = document.createElement('div');
-            div.className = 'flex gap-2 group animate-fade-in-up';
-            div.innerHTML = `
-                <span class="bg-indigo-100 text-indigo-600 px-3 py-2 rounded-lg font-bold text-sm flex items-center shadow-sm w-8 justify-center">${count}</span>
-                <input type="text" name="branches" value="${line.trim()}" required class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border bg-white">
-                <button type="button" onclick="this.parentElement.remove(); reIndexBranches();" class="text-gray-300 hover:text-red-500 px-2 transition"><i class="fa-solid fa-trash"></i></button>
-            `;
-            container.appendChild(div);
-        });
-    }
-
     function addBranchField() {
         const container = document.getElementById('branch-container');
         const count = container.children.length + 1;
         const div = document.createElement('div');
-        div.className = 'flex gap-2 group animate-fade-in-up';
-        div.innerHTML = `
-            <span class="bg-gray-100 text-gray-500 px-3 py-2 rounded-lg font-bold text-sm flex items-center shadow-sm w-8 justify-center">${count}</span>
-            <input type="text" name="branches" placeholder="ระบุชื่อสาขาเพิ่ม" required class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border">
-            <button type="button" onclick="this.parentElement.remove(); reIndexBranches();" class="text-gray-300 hover:text-red-500 px-2 transition"><i class="fa-solid fa-trash"></i></button>
-        `;
+        div.className = 'flex gap-2';
+        div.innerHTML = `<span class="bg-indigo-100 text-indigo-600 px-3 py-2 rounded-lg font-bold text-sm flex items-center shadow-sm">${count}</span><input type="text" name="branches" placeholder="ระบุชื่อสาขาที่ ${count}" required class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border"><button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 px-2 transition"><i class="fa-solid fa-trash"></i></button>`;
         container.appendChild(div);
-    }
-
-    function reIndexBranches() {
-        const container = document.getElementById('branch-container');
-        Array.from(container.children).forEach((div, index) => {
-            const span = div.querySelector('span');
-            if(span) span.innerText = index + 1;
-        });
     }
 
     function copyCustomerLink() {

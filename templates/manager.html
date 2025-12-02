@@ -34,6 +34,14 @@
     #main-report-table th, #main-report-table td {
         border-color: #e2e8f0; /* colors-slate-200 */
     }
+    
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(5px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in-up {
+        animation: fadeInUp 0.3s ease-out forwards;
+    }
 </style>
 
 <div class="w-full max-w-[99%] mx-auto pb-10">
@@ -88,23 +96,35 @@
                 </form>
             </div>
             <div class="overflow-x-auto custom-scrollbar">
-                <table class="w-full text-left text-gray-600 table-data">
-                    <thead class="text-gray-700 uppercase bg-gray-100 border-b table-header">
-                        <tr>
-                            <th class="px-4 py-3 text-center">สถานะ</th>
-                            <th class="px-4 py-3">PO Date / วันที่โหลด</th>
-                            <th class="px-4 py-3">เที่ยววิ่ง (คันที่)</th>
-                            <th class="px-4 py-3">คนขับ / ทะเบียน</th>
-                            <th class="px-4 py-3 text-center">เวลาโหลด</th>
-                            <th class="px-4 py-3 text-center">เข้าโรงงาน</th>
-                            <th class="px-4 py-3 text-center">ออกโรงงาน</th>
-                            <th class="px-4 py-3 text-center">จบงาน (ล่าสุด)</th>
-                            <th class="px-4 py-3 text-center">จัดการ</th>
+                <table class="w-full text-center border-collapse whitespace-nowrap table-data" id="main-report-table">
+                    <thead>
+                        <tr class="text-white table-header font-bold tracking-wide">
+                            <th class="px-2 py-2 bg-indigo-800 border-r border-indigo-700 sticky left-0 z-10 shadow-md">ลำดับ</th>
+                            <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">PO Date</th>
+                            <th class="px-2 py-2 bg-blue-600 border-r border-blue-500">Load Date</th>
+                            <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">เวลา</th>
+                            <th class="px-2 py-2 bg-blue-700 border-r border-blue-600 min-w-[150px]">ปลายทาง (สาขา)</th>
+                            <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">น้ำหนัก</th>
+                            <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">ทะเบียน</th>
+                            <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">คนขับ</th>
+                            <!-- Process Columns: Amber Theme -->
+                            <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">เข้าโรงงาน</th>
+                            <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">เริ่มโหลด</th>
+                            <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">โหลดเสร็จ</th>
+                            <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">ยื่นเอกสาร</th>
+                            <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">รับเอกสาร</th>
+                            <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">ออกโรงงาน</th>
+                            <!-- Success Columns: Green Theme -->
+                            <th class="px-2 py-2 bg-emerald-600 border-r border-emerald-500">ถึงสาขา</th>
+                            <th class="px-2 py-2 bg-emerald-700 border-r border-emerald-600">จบงาน</th>
+                            <!-- [NEW] สถานะเอกสาร -->
+                            <th class="px-2 py-2 bg-gray-700">สถานะเอกสาร</th>
+                            <th class="px-4 py-3 text-center bg-gray-100 text-gray-700 border-l border-gray-200">จัดการ</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-gray-100">
+                    <tbody class="divide-y divide-gray-100 text-gray-700 bg-white">
                         {% if jobs|length == 0 %}
-                            <tr><td colspan="9" class="p-10 text-center text-gray-400">ไม่พบข้อมูลงานในวันที่เลือก</td></tr>
+                            <tr><td colspan="18" class="p-10 text-center text-gray-400">กรุณาเลือกวันที่ หรือ ไม่พบข้อมูล</td></tr>
                         {% endif %}
                         
                         <script>
@@ -118,97 +138,167 @@
                             {% endfor %}
                         </script>
 
+                        {# Define Macro #}
+                        {% macro report_time_cell(time_val, loc_val, text_class='', tooltip_msg='') %}
+                            {% if time_val %}
+                                {% if loc_val %}
+                                    <a href="https://maps.google.com/maps?q={{ loc_val }}" target="_blank" 
+                                       class="inline-flex items-center justify-center gap-1 hover:bg-gray-100/80 px-1.5 py-0.5 rounded transition group cursor-pointer {{ text_class }}" 
+                                       title="{{ tooltip_msg if tooltip_msg else 'ดูพิกัด' }}">
+                                        {{ time_val }} <i class="fa-solid fa-location-dot text-[9px] opacity-30 group-hover:opacity-100 group-hover:text-blue-600"></i>
+                                    </a>
+                                {% else %}
+                                    <span class="{{ text_class }} cursor-default" title="{{ tooltip_msg }}">{{ time_val }}</span>
+                                {% endif %}
+                            {% endif %}
+                        {% endmacro %}
+                        {# End Macro #}
+
                         {% for job in jobs %}
-                            {% if loop.first or (loop.previtem.Car_No != job.Car_No or loop.previtem.PO_Date != job.PO_Date or loop.previtem.Round != job.Round) %}
-                                {% set trip_key_tuple = (job.PO_Date|string, job.Car_No|string, job.Round|string) %}
-                                {% set last_end_time = trip_last_end_time.get(trip_key_tuple, "") %}
+                            {% set is_same = False %}
+                            {% if not loop.first and loop.previtem.Car_No == job.Car_No and loop.previtem.Driver == job.Driver and loop.previtem.PO_Date == job.PO_Date %}
+                                {% set is_same = True %}
+                            {% endif %}
+                            
+                            {% set trip_key_tuple = (job.PO_Date|string, job.Car_No|string, job.Round|string) %}
+                            
+                            {# คำนวณ Trip Branches #}
+                            {% set trip_branches = [] %}
+                            {% for j in jobs %}
+                                {% if j.PO_Date == job.PO_Date and j.Car_No == job.Car_No and j.Round == job.Round %}
+                                    {% set _ = trip_branches.append(j.Branch_Name) %}
+                                {% endif %}
+                            {% endfor %}
+
+                            {% set start_load_color = '' %}
+                            {% if job.T2_StartLoad %}
+                                {% if job.is_start_late %} 
+                                    {% set start_load_color = 'text-red-600 font-bold' %}
+                                {% else %} 
+                                    {% set start_load_color = 'text-green-600 font-bold' %} 
+                                {% endif %}
+                            {% endif %}
+                            
+                            <tr class="border-b hover:bg-gray-50 transition border-gray-100 group/row">
+                                <!-- Column 1: Car No -->
+                                <td class="px-2 py-1 border-r font-bold bg-gray-50 sticky left-0 z-10 border-gray-200 text-indigo-900 text-center shadow-sm">
+                                    {% if not is_same %} #{{ job.Car_No }} {% endif %}
+                                </td>
                                 
-                                {% set ns = namespace(remaining=0) %}
-                                {% set trip_branches = [] %}
-                                {% for j in jobs %}
-                                    {% if j.PO_Date == job.PO_Date and j.Car_No == job.Car_No and j.Round == job.Round %}
-                                        {% set _ = trip_branches.append(j.Branch_Name) %}
-                                        {% if not j.T8_EndJob %}
-                                            {% set ns.remaining = ns.remaining + 1 %}
+                                <!-- Columns 2-8: Job Info -->
+                                <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %}{{ job.PO_Date | thai_date }}{% endif %}</td>
+                                <td class="px-2 py-1 border-r border-gray-200 text-blue-700 font-bold bg-blue-50/20">
+                                    {% if not is_same %}
+                                        {% set show_load = job.get('Load_Date', job.PO_Date) %}
+                                        {{ show_load | thai_date }}
+                                    {% endif %}
+                                </td>
+                                <td class="px-2 py-1 border-r border-gray-200 font-bold text-gray-800">{% if not is_same %}{{ job.Round }}{% endif %}</td>
+                                <td class="px-2 py-1 border-r border-gray-200 text-left pl-2 font-bold text-indigo-700 truncate max-w-[200px]" title="{{ job.Branch_Name }}">{{ job.Branch_Name }}</td>
+                                <td class="px-2 py-1 border-r border-gray-200 text-center text-gray-600 font-medium">{% if not is_same %}{{ job.get('Weight', '-') | comma_format }}{% endif %}</td>
+                                <td class="px-2 py-1 border-r border-gray-200 text-gray-800">{% if not is_same %} {{ job.Plate }} {% endif %}</td>
+                                <td class="px-2 py-1 border-r border-gray-200 font-medium truncate max-w-[120px] text-gray-700" title="{{ job.Driver }}">{% if not is_same %} {{ job.Driver }} {% endif %}</td>
+                                
+                                <!-- Columns 9-14: Process -->
+                                <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T1_Enter, job.L1_Loc) }}{% endif %}</td>
+                                <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T2_StartLoad, job.L2_Loc, start_load_color, job.delay_msg) }}{% endif %}</td>
+                                <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T3_EndLoad, job.L3_Loc) }}{% endif %}</td>
+                                <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T4_SubmitDoc, job.L4_Loc) }}{% endif %}</td>
+                                <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T5_RecvDoc, job.L5_Loc) }}{% endif %}</td>
+                                <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T6_Exit, job.L6_Loc) }}{% endif %}</td>
+                                
+                                <!-- Columns 15-16: Success -->
+                                <td class="px-2 py-1 border-r font-bold text-emerald-700 bg-emerald-50/40 border-gray-200">{{ report_time_cell(job.T7_ArriveBranch, job.L7_Loc, 'text-emerald-800') }}</td>
+                                <td class="px-2 py-1 border-r font-bold text-emerald-800 bg-emerald-100/60 border-gray-200">{{ report_time_cell(job.T8_EndJob, job.L8_Loc, 'text-emerald-900') }}</td>
+                                
+                                <!-- [NEW] Doc Status Column -->
+                                <td class="px-2 py-1 text-center bg-gray-50 border-gray-200">
+                                    {% if not is_same %}
+                                        {# Logic คำนวณสถานะเอกสารของทั้ง Trip #}
+                                        {% set ns_doc = namespace(total=0, recorded=0) %}
+                                        {% for j in jobs %}
+                                            {% if j.PO_Date == job.PO_Date and j.Car_No == job.Car_No and j.Round == job.Round %}
+                                                {% set ns_doc.total = ns_doc.total + 1 %}
+                                                {% if j.get('Doc_Result') and j.get('Doc_Result')|string|trim|length > 0 %}
+                                                    {% set ns_doc.recorded = ns_doc.recorded + 1 %}
+                                                {% endif %}
+                                            {% endif %}
+                                        {% endfor %}
+
+                                        {% if ns_doc.recorded == ns_doc.total and ns_doc.total > 0 %}
+                                            <span class="inline-flex items-center gap-1 bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-green-200 shadow-sm"><i class="fa-solid fa-check-circle"></i> ครบ</span>
+                                        {% elif ns_doc.recorded == 0 %}
+                                            <span class="inline-flex items-center gap-1 bg-gray-100 text-gray-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-gray-200"><i class="fa-regular fa-circle"></i> รอ</span>
+                                        {% else %}
+                                            <span class="inline-flex items-center gap-1 bg-orange-100 text-orange-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-orange-200 shadow-sm"><i class="fa-solid fa-circle-exclamation"></i> ขาด {{ ns_doc.total - ns_doc.recorded }}</span>
                                         {% endif %}
                                     {% endif %}
-                                {% endfor %}
-                                
-                                {% set status_badge = '<span class="inline-flex items-center gap-1 bg-gray-200 text-gray-700 text-[10px] md:text-xs font-bold px-2 py-1 rounded-full border border-gray-300 whitespace-nowrap">ยังไม่ถึงคลัง</span>' %}
-                                
-                                {% if last_end_time %}
-                                    {% set status_badge = '<span class="inline-flex items-center gap-1 bg-green-600 text-white text-[10px] md:text-xs font-bold px-3 py-1 rounded-full shadow-sm whitespace-nowrap"><i class="fa-solid fa-flag-checkered"></i> จบงาน</span>' %}
-                                {% elif job.T6_Exit %}
-                                    {% set status_badge = '<span class="inline-flex items-center gap-1 bg-amber-100 text-amber-700 text-[10px] md:text-xs font-bold px-3 py-1 rounded-full border border-amber-200 shadow-sm whitespace-nowrap"><i class="fa-solid fa-truck-arrow-right"></i> ส่งอีก ' ~ ns.remaining ~ ' สาขา</span>' %}
-                                {% elif job.T1_Enter %}
-                                    {% set status_badge = '<span class="inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 text-[10px] md:text-xs font-bold px-3 py-1 rounded-full border border-indigo-200 whitespace-nowrap"><i class="fa-solid fa-warehouse"></i> ถึงคลังแล้ว</span>' %}
-                                {% endif %}
-                                
-                                <tr class="hover:bg-indigo-50/30 transition group/row">
-                                    <td class="px-4 py-3 text-center">{{ status_badge | safe }}</td>
-                                    <td class="px-4 py-3 whitespace-nowrap">
-                                        <div class="font-bold text-gray-800">{{ job.PO_Date | thai_date }}</div>
-                                        {% set show_load = job.get('Load_Date', job.PO_Date) %}
-                                        <div class="text-xs text-blue-600 font-medium bg-blue-50 px-1 rounded inline-block mt-0.5">โหลด: {{ show_load | thai_date }}</div>
-                                    </td>
-                                    <td class="px-4 py-3 whitespace-nowrap font-bold text-gray-800">
-                                        คันที่ #{{ job.Car_No }}
-                                    </td>
-                                    <td class="px-4 py-3">
-                                        <div class="font-medium text-gray-900">{{ job.Driver }}</div>
-                                        <div class="text-xs text-gray-500 bg-gray-100 inline-block px-1.5 py-0.5 rounded mt-1">{{ job.Plate }}</div>
-                                    </td>
-                                    <td class="px-4 py-3 text-center font-bold text-indigo-700 text-base">{{ job.Round }}</td>
-                                    <td class="px-4 py-3 text-center">{% if job.T1_Enter %}<span class="text-indigo-600 font-bold">{{ job.T1_Enter }}</span>{% else %}<span class="text-gray-300">-</span>{% endif %}</td>
-                                    <td class="px-4 py-3 text-center">{% if job.T6_Exit %}<span class="text-blue-600 font-bold">{{ job.T6_Exit }}</span>{% else %}<span class="text-gray-300">-</span>{% endif %}</td>
-                                    <td class="px-4 py-3 text-center">{% if last_end_time %}<span class="text-green-600 font-bold">{{ last_end_time }}</span>{% else %}<span class="text-gray-300">-</span>{% endif %}</td>
-                                    <td class="px-4 py-3 text-center flex justify-center gap-2 items-center">
-                                        {% if job.L1_Loc %}
-                                            <a href="https://www.google.com/maps/search/?api=1&query={{ job.L1_Loc }}" target="_blank" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800 transition shadow-sm" title="ดูพิกัด"><i class="fa-solid fa-location-dot"></i></a>
-                                        {% endif %}
-                                        
-                                        {% set modal_info = {
-                                            'carNo': job.Car_No,
-                                            'poDate': job.PO_Date | thai_date,
-                                            'loadDate': show_load | thai_date,
-                                            'roundTime': job.Round,
-                                            'branches': trip_branches,
-                                            'oldDriver': job.Driver,
-                                            'oldPlate': job.Plate
-                                        } %}
-                                        <button 
-                                            data-info='{{ modal_info | tojson | forceescape }}'
-                                            onclick="openChangeDriverModal(this)"
-                                            class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-50 text-orange-500 hover:bg-orange-100 hover:text-orange-700 transition shadow-sm" title="แจ้งเปลี่ยนคนขับ/ทะเบียน">
-                                            <i class="fa-solid fa-right-left"></i>
-                                        </button>
+                                </td>
 
-                                        <form action="/delete_job" method="POST" onsubmit="return confirm('⚠️ ยืนยันการลบเที่ยววิ่งนี้?');">
-                                            <input type="hidden" name="po_date" value="{{ job.PO_Date }}">
-                                            <input type="hidden" name="round_time" value="{{ job.Round }}">
-                                            <input type="hidden" name="car_no" value="{{ job.Car_No }}">
-                                            <button type="submit" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition shadow-sm" title="ลบงาน"><i class="fa-solid fa-trash-can"></i></button>
-                                        </form>
-                                    </td>
-                                </tr>
-                            {% endif %}
+                                <!-- Manage Column -->
+                                <td class="px-4 py-3 text-center flex justify-center gap-2 items-center bg-white border-l border-gray-100">
+                                    {% if job.L1_Loc %}
+                                        <a href="https://www.google.com/maps/search/?api=1&query={{ job.L1_Loc }}" target="_blank" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800 transition shadow-sm" title="ดูพิกัด"><i class="fa-solid fa-location-dot"></i></a>
+                                    {% endif %}
+                                    
+                                    {% set show_load = job.get('Load_Date', job.PO_Date) %}
+                                    {% set modal_info = {
+                                        'carNo': job.Car_No,
+                                        'poDate': job.PO_Date | thai_date,
+                                        'loadDate': show_load | thai_date,
+                                        'roundTime': job.Round,
+                                        'branches': trip_branches,
+                                        'oldDriver': job.Driver,
+                                        'oldPlate': job.Plate
+                                    } %}
+                                    <button 
+                                        data-info='{{ modal_info | tojson | forceescape }}'
+                                        onclick="openChangeDriverModal(this)"
+                                        class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-50 text-orange-500 hover:bg-orange-100 hover:text-orange-700 transition shadow-sm" title="แจ้งเปลี่ยนคนขับ/ทะเบียน">
+                                        <i class="fa-solid fa-right-left"></i>
+                                    </button>
+
+                                    <form action="/delete_job" method="POST" onsubmit="return confirm('⚠️ ยืนยันการลบเที่ยววิ่งนี้?');">
+                                        <input type="hidden" name="po_date" value="{{ job.PO_Date }}">
+                                        <input type="hidden" name="round_time" value="{{ job.Round }}">
+                                        <input type="hidden" name="car_no" value="{{ job.Car_No }}">
+                                        <button type="submit" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition shadow-sm" title="ลบงาน"><i class="fa-solid fa-trash-can"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
                         {% endfor %}
                     </tbody>
+                    
+                    <tfoot class="font-bold text-sm bg-gray-50 border-t-2 border-gray-300 text-gray-800">
+                        <tr id="summary-row-day" class="bg-white">
+                            <!-- [FIXED] Updated Colspan -->
+                            <td colspan="9" class="border px-2 py-1 text-right text-gray-600">รอบกลางวัน (คัน)</td>
+                        </tr>
+                        <tr id="summary-row-night" class="bg-white">
+                            <!-- [FIXED] Updated Colspan -->
+                            <td colspan="9" class="border px-2 py-1 text-right text-gray-600">รอบกลางคืน (คัน)</td>
+                        </tr>
+                        <tr id="summary-row-total" class="bg-yellow-100">
+                            <!-- [FIXED] Updated Colspan -->
+                            <td colspan="9" class="border px-2 py-1 text-right text-black font-extrabold">รวม (คัน)</td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
         </div>
     </div>
 
-    <!-- Drivers Tab -->
+    <!-- Drivers Tab (เหมือนเดิม) -->
     <div id="tab-drivers" class="tab-content hidden">
        <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 md:p-6 shadow-inner">
+            <!-- (Code ส่วน Drivers คงเดิม) -->
             <div class="flex justify-between items-center mb-6">
                 <h3 class="font-bold text-gray-800 text-xl flex items-center gap-2">
                     <div class="bg-indigo-100 p-2 rounded text-indigo-700"><i class="fa-solid fa-users-viewfinder"></i></div> 
                     สรุปงานรายบุคคล (PO: {{ current_filter_date | thai_date }})
                 </h3>
             </div>
-
+            <!-- ... Content ... -->
             <div class="mb-8 bg-white rounded-xl shadow-sm border border-gray-100 p-4">
                 <h4 class="font-bold text-gray-700 mb-3 flex items-center gap-2">
                     <i class="fa-solid fa-user-clock text-green-500"></i> พนักงานที่ว่างงาน (Available)
@@ -350,7 +440,7 @@
         </div>
     </div>
 
-    <!-- Create Tab -->
+    <!-- Create Tab (Updated) -->
     <div id="tab-create" class="tab-content hidden">
          <div class="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-8 border border-gray-100">
             <h3 class="text-xl font-bold text-gray-800 mb-6 border-b pb-2 flex items-center gap-2"><i class="fa-solid fa-pen-to-square text-indigo-600"></i> สร้างใบงานใหม่</h3>
@@ -381,35 +471,54 @@
                     </select>
                 </div>
                 <div class="bg-gray-100 p-3 rounded-lg flex items-center gap-2 text-sm text-gray-600 border border-gray-200"><i class="fa-solid fa-car-side"></i> ทะเบียนรถ: <input type="text" id="plate_input" name="plate_license" readonly class="bg-transparent font-bold text-gray-800 w-full focus:outline-none"></div>
-                
+                <hr class="border-gray-100">
+
                 <!-- [NEW] Textarea for Multiple PO Input -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">
-                        รายการ PO (1 บรรทัดต่อ 1 PO) 
-                        <span class="text-xs text-gray-400 font-normal"> *ระบบจะนำไปสร้างเป็นรายการให้คนขับกรอกข้อมูล</span>
+                <div class="mb-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
+                    <label class="block text-sm font-bold text-blue-800 mb-2">
+                        <i class="fa-solid fa-list-ol"></i> รายการ PO (Copy จาก Excel มาวางได้เลย)
                     </label>
-                    <textarea name="po_list_input" rows="3" class="w-full rounded-lg border-gray-300 shadow-sm p-2.5 border focus:ring-indigo-500 focus:border-indigo-500" placeholder="ตัวอย่าง:
-PO81002345
-PO81002346"></textarea>
+                    <textarea name="po_list_input" rows="3" 
+                        class="w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm"
+                        placeholder="ตัวอย่าง:
+PO.9740778268
+PO.9740778225"></textarea>
                 </div>
 
-                <hr class="border-gray-100">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">สาขาปลายทาง</label>
-                    <div id="branch-container" class="space-y-3">
-                        <div class="flex gap-2">
-                            <span class="bg-indigo-100 text-indigo-600 px-3 py-2 rounded-lg font-bold text-sm flex items-center shadow-sm">1</span>
-                            <input type="text" name="branches" placeholder="ระบุชื่อสาขาที่ 1" required class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border"><button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 px-2 transition"><i class="fa-solid fa-trash"></i></button>
+                    
+                    <!-- [NEW] Textarea for Branch Paste -->
+                    <div class="mb-4 bg-purple-50 p-4 rounded-lg border border-purple-100">
+                        <label class="block text-sm font-bold text-purple-800 mb-2">
+                            <i class="fa-solid fa-paste"></i> วางรายชื่อสาขาที่นี่ (Copy จาก Excel)
+                        </label>
+                        <textarea id="branch_paste_area" rows="3" 
+                            oninput="parseBranches(this)"
+                            class="w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-purple-500 focus:border-purple-500 font-mono text-sm placeholder-gray-400"
+                            placeholder="วางข้อมูลที่นี่... ระบบจะสร้างแถวให้อัตโนมัติ
+เช่น:
+TFMสาขาตลาดแสงศิริ
+TFMสาขาซอยบางแวก"></textarea>
+                        <p class="text-[10px] text-purple-600 mt-1">* เมื่อวางข้อมูลแล้ว รายชื่อจะถูกแปลงเป็นช่องกรอกด้านล่างอัตโนมัติ</p>
+                    </div>
+
+                    <div id="branch-container" class="space-y-3 pl-2 border-l-2 border-gray-200">
+                        <div class="flex gap-2 group">
+                            <span class="bg-gray-100 text-gray-500 px-3 py-2 rounded-lg font-bold text-sm flex items-center shadow-sm w-8 justify-center">1</span>
+                            <input type="text" name="branches" placeholder="ระบุชื่อสาขา" required class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border bg-white">
+                            <button type="button" onclick="this.parentElement.remove(); reIndexBranches();" class="text-gray-300 hover:text-red-500 px-2 transition"><i class="fa-solid fa-trash"></i></button>
                         </div>
                     </div>
-                    <button type="button" onclick="addBranchField()" class="mt-3 text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition"><i class="fa-solid fa-circle-plus text-lg"></i> เพิ่มสาขา</button>
+                    
+                    <button type="button" onclick="addBranchField()" class="mt-3 text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition"><i class="fa-solid fa-circle-plus text-lg"></i> เพิ่มสาขาเอง</button>
                 </div>
+
                 <div class="pt-4"><button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition shadow-lg">บันทึกงานทั้งหมด</button></div>
             </form>
         </div>
     </div>
 
-    <!-- Report Tab -->
     <div id="tab-report" class="tab-content">
         <div class="bg-white rounded-xl shadow-lg p-4 border border-gray-100">
             <!-- Header Tools -->
@@ -546,7 +655,7 @@ PO81002346"></textarea>
                                         
                                         <!-- Columns 15-16: Success (Green Theme) -->
                                         <td class="px-2 py-1 border-r font-bold text-emerald-700 bg-emerald-50/40 border-gray-200">{{ report_time_cell(job.T7_ArriveBranch, job.L7_Loc, 'text-emerald-800') }}</td>
-                                        <td class="px-2 py-1 border-r font-bold text-emerald-800 bg-emerald-100/60 border-gray-200">{{ report_time_cell(job.T8_EndJob, job.L8_Loc, 'text-emerald-900') }}</td>
+                                        <td class="px-2 py-1 font-bold text-emerald-800 bg-emerald-100/60 border-r border-gray-200">{{ report_time_cell(job.T8_EndJob, job.L8_Loc, 'text-emerald-900') }}</td>
                                         
                                         <!-- [NEW] Column 17: Doc Status Logic -->
                                         <td class="px-2 py-1 text-center bg-gray-50 border-gray-200">
@@ -563,11 +672,11 @@ PO81002346"></textarea>
                                                 {% endfor %}
 
                                                 {% if ns_doc.recorded == ns_doc.total and ns_doc.total > 0 %}
-                                                    <span class="inline-flex items-center gap-1 bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-green-200 shadow-sm"><i class="fa-solid fa-check-circle"></i> ครบทุกสาขา</span>
+                                                    <span class="inline-flex items-center gap-1 bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-green-200 shadow-sm"><i class="fa-solid fa-check-circle"></i> ครบ</span>
                                                 {% elif ns_doc.recorded == 0 %}
-                                                    <span class="inline-flex items-center gap-1 bg-gray-100 text-gray-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-gray-200"><i class="fa-regular fa-circle"></i> รอการบันทึก</span>
+                                                    <span class="inline-flex items-center gap-1 bg-gray-100 text-gray-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-gray-200"><i class="fa-regular fa-circle"></i> รอ</span>
                                                 {% else %}
-                                                    <span class="inline-flex items-center gap-1 bg-orange-100 text-orange-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-orange-200 shadow-sm"><i class="fa-solid fa-circle-exclamation"></i> ขาด {{ ns_doc.total - ns_doc.recorded }} สาขา</span>
+                                                    <span class="inline-flex items-center gap-1 bg-orange-100 text-orange-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-orange-200 shadow-sm"><i class="fa-solid fa-circle-exclamation"></i> ขาด {{ ns_doc.total - ns_doc.recorded }}</span>
                                                 {% endif %}
                                             {% endif %}
                                         </td>
@@ -578,13 +687,16 @@ PO81002346"></textarea>
                         
                         <tfoot class="font-bold text-sm bg-gray-50 border-t-2 border-gray-300 text-gray-800">
                             <tr id="summary-row-day" class="bg-white">
-                                <td colspan="8" class="border px-2 py-1 text-right text-gray-600">รอบกลางวัน (คัน)</td>
+                                <!-- Updated Colspan -->
+                                <td colspan="9" class="border px-2 py-1 text-right text-gray-600">รอบกลางวัน (คัน)</td>
                             </tr>
                             <tr id="summary-row-night" class="bg-white">
-                                <td colspan="8" class="border px-2 py-1 text-right text-gray-600">รอบกลางคืน (คัน)</td>
+                                <!-- Updated Colspan -->
+                                <td colspan="9" class="border px-2 py-1 text-right text-gray-600">รอบกลางคืน (คัน)</td>
                             </tr>
                             <tr id="summary-row-total" class="bg-yellow-100">
-                                <td colspan="8" class="border px-2 py-1 text-right text-black font-extrabold">รวม (คัน)</td>
+                                <!-- Updated Colspan -->
+                                <td colspan="9" class="border px-2 py-1 text-right text-black font-extrabold">รวม (คัน)</td>
                             </tr>
                         </tfoot>
                     </table>
@@ -596,9 +708,9 @@ PO81002346"></textarea>
     </div>
 </div>
 
+<!-- Change Driver Modal -->
 <div id="changeDriverModal" class="modal opacity-0 pointer-events-none fixed w-full h-full top-0 left-0 flex items-center justify-center z-50">
     <div class="modal-overlay absolute w-full h-full bg-gray-900 opacity-50" onclick="closeChangeDriverModal()"></div>
-    
     <div class="modal-container bg-white w-11/12 md:max-w-4xl mx-auto rounded-xl shadow-2xl z-50 overflow-y-auto max-h-[90vh]">
         <div class="modal-content py-4 text-left px-6">
             <div class="flex justify-between items-center pb-3 border-b">
@@ -607,7 +719,7 @@ PO81002346"></textarea>
                     <i class="fa-solid fa-xmark text-2xl text-gray-500 hover:text-gray-700"></i>
                 </div>
             </div>
-
+            <!-- Modal Body (Same as before) -->
             <div class="my-5 grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
                     <h4 class="font-bold text-gray-600 mb-3 border-b pb-1">ข้อมูลเดิม (Current)</h4>
@@ -626,10 +738,8 @@ PO81002346"></textarea>
                         <p><span class="font-bold">เบอร์โทร:</span> <span id="md_oldPhone" class="text-gray-500">-</span></p>
                     </div>
                 </div>
-
                 <div class="bg-white p-4 rounded-lg border-2 border-orange-100 shadow-inner">
                     <h4 class="font-bold text-orange-600 mb-3 border-b pb-1">ข้อมูลใหม่ (New)</h4>
-                    
                     <div class="space-y-3">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">เลือกคนขับใหม่</label>
@@ -640,22 +750,11 @@ PO81002346"></textarea>
                                 {% endfor %}
                             </select>
                         </div>
-
                         <div class="grid grid-cols-2 gap-3 bg-orange-50 p-3 rounded text-sm">
-                            <div>
-                                <span class="block text-xs text-gray-500">ทะเบียนใหม่</span>
-                                <span id="md_newPlate" class="font-bold text-gray-800">-</span>
-                            </div>
-                            <div>
-                                <span class="block text-xs text-gray-500">เบอร์โทร</span>
-                                <span id="md_newPhone" class="font-bold text-gray-800">-</span>
-                            </div>
-                            <div class="col-span-2">
-                                <span class="block text-xs text-gray-500">เลขบัตรประชาชน</span>
-                                <span id="md_newID" class="font-bold text-gray-800">-</span>
-                            </div>
+                            <div><span class="block text-xs text-gray-500">ทะเบียนใหม่</span><span id="md_newPlate" class="font-bold text-gray-800">-</span></div>
+                            <div><span class="block text-xs text-gray-500">เบอร์โทร</span><span id="md_newPhone" class="font-bold text-gray-800">-</span></div>
+                            <div class="col-span-2"><span class="block text-xs text-gray-500">เลขบัตรประชาชน</span><span id="md_newID" class="font-bold text-gray-800">-</span></div>
                         </div>
-
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">เนื่องจากสาเหตุ</label>
                             <textarea id="md_reason" rows="2" class="w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 p-2 border" placeholder="เช่น รถเสีย, คนขับลาป่วย..."></textarea>
@@ -663,17 +762,10 @@ PO81002346"></textarea>
                     </div>
                 </div>
             </div>
-
             <div class="flex justify-end pt-2 gap-3 border-t mt-4">
                 <button onclick="closeChangeDriverModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium">ปิด</button>
-                
-                <button id="btn-save-driver" onclick="saveChangeDriverToDB()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow flex items-center gap-2">
-                    <i class="fa-solid fa-floppy-disk"></i> บันทึกลงระบบ
-                </button>
-
-                <button onclick="copyChangeDriverText()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold shadow flex items-center gap-2">
-                    <i class="fa-regular fa-copy"></i> คัดลอกข้อความ
-                </button>
+                <button id="btn-save-driver" onclick="saveChangeDriverToDB()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow flex items-center gap-2"><i class="fa-solid fa-floppy-disk"></i> บันทึกลงระบบ</button>
+                <button onclick="copyChangeDriverText()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold shadow flex items-center gap-2"><i class="fa-regular fa-copy"></i> คัดลอกข้อความ</button>
             </div>
         </div>
     </div>
@@ -685,16 +777,13 @@ PO81002346"></textarea>
         const tabParam = urlParams.get('tab');
         const savedTab = localStorage.getItem('activeTab') || 'tab-monitor';
         if(tabParam) switchTab('tab-' + tabParam); else switchTab(savedTab);
-        
         const timeEl = document.getElementById('report-time');
         if (timeEl) timeEl.innerText = new Date().toLocaleString('th-TH');
-
-        // คำนวณสรุปท้ายตารางเมื่อโหลดเสร็จ
         setTimeout(calculateSummaryTable, 500);
     });
 
     // --------------------------------------------------------
-    // Calculate Summary Table (Day/Night Total)
+    // Calculate Summary Table (Day/Night Total) - GROUPED LOGIC
     // --------------------------------------------------------
     function calculateSummaryTable() {
         let counts = {
@@ -704,30 +793,45 @@ PO81002346"></textarea>
         };
 
         const rows = document.querySelectorAll("#main-report-table tbody tr");
-        
-        rows.forEach(row => {
-            const timeCell = row.cells[3]?.innerText.trim() || ""; 
-            if(!timeCell) return;
+        let currentGroup = [];
+        let allGroups = [];
 
-            const hour = parseInt(timeCell.split(':')[0]);
-            const isDay = (hour >= 6 && hour <= 18);
+        // Group rows by Trip
+        rows.forEach(row => {
+            const firstCellText = row.cells[0].innerText.trim();
+            if (firstCellText !== "") {
+                if (currentGroup.length > 0) allGroups.push(currentGroup);
+                currentGroup = [row];
+            } else {
+                if (currentGroup.length > 0) currentGroup.push(row);
+            }
+        });
+        if (currentGroup.length > 0) allGroups.push(currentGroup);
+
+        allGroups.forEach(group => {
+            if (group.length === 0) return;
+            const firstRow = group[0];
+            const lastRow = group[group.length - 1]; 
+
+            const timeText = firstRow.cells[3].innerText.trim();
+            let isDay = true;
+            if (timeText) {
+                const hour = parseInt(timeText.split(':')[0]);
+                isDay = (hour >= 6 && hour <= 18);
+            }
             const target = isDay ? counts.day : counts.night;
 
-            // Col Index: 8=T1, 9=T2, ... 15=T8
-            if(row.cells[8].innerText.trim()) target.t1++;
-            if(row.cells[9].innerText.trim()) target.t2++;
-            if(row.cells[10].innerText.trim()) target.t3++;
-            if(row.cells[11].innerText.trim()) target.t4++;
-            if(row.cells[12].innerText.trim()) target.t5++;
-            if(row.cells[13].innerText.trim()) target.t6++;
-            if(row.cells[14].innerText.trim()) target.t7++;
-            if(row.cells[15].innerText.trim()) target.t8++;
+            if (firstRow.cells[8].innerText.trim()) target.t1++;
+            if (firstRow.cells[9].innerText.trim()) target.t2++;
+            if (firstRow.cells[10].innerText.trim()) target.t3++;
+            if (firstRow.cells[11].innerText.trim()) target.t4++;
+            if (firstRow.cells[12].innerText.trim()) target.t5++;
+            if (firstRow.cells[13].innerText.trim()) target.t6++;
+            if (lastRow.cells[14].innerText.trim()) target.t7++;
+            if (lastRow.cells[15].innerText.trim()) target.t8++;
         });
 
-        // Sum Totals
-        for(let k in counts.total) {
-            counts.total[k] = counts.day[k] + counts.night[k];
-        }
+        for(let k in counts.total) { counts.total[k] = counts.day[k] + counts.night[k]; }
 
         const createCells = (data, rowId) => {
             const row = document.getElementById(rowId);
@@ -740,6 +844,9 @@ PO81002346"></textarea>
                 td.className = "border px-1 py-1 text-center font-medium text-gray-700";
                 td.innerText = data[k];
             });
+            // Add empty cell for Doc Status column
+            const td = row.insertCell();
+            td.className = "border px-1 py-1 bg-gray-50";
         };
 
         createCells(counts.day, 'summary-row-day');
@@ -748,22 +855,20 @@ PO81002346"></textarea>
     }
 
     // --------------------------------------------------------
-    // [FIXED] Download Full Image Function (Manager Version)
+    // Download Full Image Function (Auto-Width)
     // --------------------------------------------------------
     async function copyReportImage() {
         const btnIcon = document.querySelector('button[onclick="copyReportImage()"] i');
         const originalIconClass = btnIcon.className;
-        btnIcon.className = "fa-solid fa-spinner fa-spin"; // เปลี่ยนไอคอนเป็นหมุนๆ
+        btnIcon.className = "fa-solid fa-spinner fa-spin"; 
 
         const captureArea = document.getElementById('report-capture-area');
         const headerTitle = document.getElementById('report-header-title');
         
-        // ดึงวันที่จาก Filter
         let poVal = "";
         const dateInput = document.getElementById('report_date_filter');
         if (dateInput) poVal = dateInput.value;
         
-        // เตรียมวันที่ไทย
         let poDisplay = poVal;
         if (poVal) {
             const [y, m, d] = poVal.split('-');
@@ -772,14 +877,11 @@ PO81002346"></textarea>
         }
         document.getElementById('img-po-date').innerText = poDisplay;
 
-        // แสดงหัวข้อชั่วคราว
         headerTitle.style.display = 'block';
 
-        // 1. [สำคัญ] วัดความกว้างจริงของตารางก่อน เพื่อตั้งค่า Canvas
-        // บวกเพิ่ม 40px เผื่อขอบซ้ายขวา
         const tableElement = document.getElementById('main-report-table');
         const realTableWidth = tableElement.scrollWidth + 40; 
-        const targetWidth = Math.max(realTableWidth, 1200); // อย่างน้อยต้องกว้าง 1200px
+        const targetWidth = Math.max(realTableWidth, 1200); 
 
         try {
             const canvas = await html2canvas(captureArea, {
@@ -787,7 +889,6 @@ PO81002346"></textarea>
                 backgroundColor: '#ffffff', 
                 useCORS: true,
                 logging: false,
-                // [แก้จุดที่ 1] ตั้งค่าหน้าจอจำลองให้กว้างเท่ากับตารางจริง
                 windowWidth: targetWidth,
                 width: targetWidth, 
                 
@@ -797,7 +898,6 @@ PO81002346"></textarea>
                     
                     if(clonedHeader) clonedHeader.style.display = 'block';
                     
-                    // [แก้จุดที่ 2] บังคับ Container ให้กว้างเท่าที่คำนวณไว้ ไม่ล็อคที่ 1200px แล้ว
                     if(clonedArea) {
                         clonedArea.style.width = targetWidth + 'px'; 
                         clonedArea.style.padding = '20px';
@@ -805,7 +905,6 @@ PO81002346"></textarea>
                         clonedArea.style.overflow = 'visible';
                     }
 
-                    // ปลดล็อค Scrollbar และขยายตารางให้เต็ม
                     const tableWrapper = clonedDoc.querySelector('.overflow-x-auto');
                     if(tableWrapper) {
                         tableWrapper.classList.remove('overflow-x-auto', 'custom-scrollbar');
@@ -816,7 +915,6 @@ PO81002346"></textarea>
                         tableWrapper.style.display = 'block';
                     }
                     
-                    // ปรับแต่งความสวยงาม (ลบเงา)
                     const shadows = clonedDoc.querySelectorAll('.shadow-lg, .shadow-xl, .shadow-sm, .shadow-md, .shadow-inner');
                     shadows.forEach(el => {
                         el.style.boxShadow = 'none';
@@ -880,13 +978,47 @@ PO81002346"></textarea>
         if (plateInput) plateInput.value = plate || "";
     }
 
+    function parseBranches(textarea) {
+        const text = textarea.value;
+        if (!text.trim()) return;
+
+        const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+        const container = document.getElementById('branch-container');
+        
+        container.innerHTML = ''; 
+
+        lines.forEach((line, index) => {
+            const count = index + 1;
+            const div = document.createElement('div');
+            div.className = 'flex gap-2 group animate-fade-in-up';
+            div.innerHTML = `
+                <span class="bg-indigo-100 text-indigo-600 px-3 py-2 rounded-lg font-bold text-sm flex items-center shadow-sm w-8 justify-center">${count}</span>
+                <input type="text" name="branches" value="${line.trim()}" required class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border bg-white">
+                <button type="button" onclick="this.parentElement.remove(); reIndexBranches();" class="text-gray-300 hover:text-red-500 px-2 transition"><i class="fa-solid fa-trash"></i></button>
+            `;
+            container.appendChild(div);
+        });
+    }
+
     function addBranchField() {
         const container = document.getElementById('branch-container');
         const count = container.children.length + 1;
         const div = document.createElement('div');
-        div.className = 'flex gap-2';
-        div.innerHTML = `<span class="bg-indigo-100 text-indigo-600 px-3 py-2 rounded-lg font-bold text-sm flex items-center shadow-sm">${count}</span><input type="text" name="branches" placeholder="ระบุชื่อสาขาที่ ${count}" required class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border"><button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 px-2 transition"><i class="fa-solid fa-trash"></i></button>`;
+        div.className = 'flex gap-2 group animate-fade-in-up';
+        div.innerHTML = `
+            <span class="bg-gray-100 text-gray-500 px-3 py-2 rounded-lg font-bold text-sm flex items-center shadow-sm w-8 justify-center">${count}</span>
+            <input type="text" name="branches" placeholder="ระบุชื่อสาขาเพิ่ม" required class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border">
+            <button type="button" onclick="this.parentElement.remove(); reIndexBranches();" class="text-gray-300 hover:text-red-500 px-2 transition"><i class="fa-solid fa-trash"></i></button>
+        `;
         container.appendChild(div);
+    }
+
+    function reIndexBranches() {
+        const container = document.getElementById('branch-container');
+        Array.from(container.children).forEach((div, index) => {
+            const span = div.querySelector('span');
+            if(span) span.innerText = index + 1;
+        });
     }
 
     function copyCustomerLink() {

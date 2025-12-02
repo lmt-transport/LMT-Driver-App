@@ -1096,7 +1096,9 @@ def export_pdf():
                 self.cell(0, 6, f'วันที่เอกสาร: {po_date_thai} | พิมพ์เมื่อ: {print_date}', align='C', new_x="LMARGIN", new_y="NEXT")
                 self.ln(4)
 
-                cols = [10, 30, 35, 16, 45, 12, 16, 35, 16, 16, 22, 22]
+                # --- [PROGRAMMER #1 FIX] Optimized Column Widths (Sum = 280) ---
+                cols = [12, 28, 40, 15, 55, 15, 15, 30, 15, 15, 20, 20]
+                # -------------------------------------------------------------
                 headers = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', 'นน.', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
                 self.set_fill_color(44, 62, 80)
                 self.set_text_color(255, 255, 255)
@@ -1119,7 +1121,9 @@ def export_pdf():
     pdf.set_margins(7, 10, 7)
     pdf.add_page()
     
-    cols = [10, 30, 35, 16, 45, 12, 16, 35, 16, 16, 22, 22]
+    # --- [PROGRAMMER #1 FIX] Optimized Column Widths (Sum = 280) ---
+    cols = [12, 28, 40, 15, 55, 15, 15, 30, 15, 15, 20, 20]
+    # -------------------------------------------------------------
     
     for group in grouped_jobs:
         group_total_height = 0
@@ -1204,13 +1208,17 @@ def export_pdf():
                 pdf.set_draw_color(200, 200, 200)
                 pdf.set_line_width(0.1)
                 
-            pdf.line(7, y_top, 282, y_top)
+            # --- [PROGRAMMER #1 FIX] Adjusted Line End to match sum width (287) ---
+            pdf.line(7, y_top, 287, y_top) 
+            # --------------------------------------------------------------------
 
             if is_last_in_group:
                 y_bottom = pdf.get_y()
                 pdf.set_draw_color(0, 0, 0)
                 pdf.set_line_width(0.3)
-                pdf.line(7, y_bottom, 282, y_bottom)
+                # --- [PROGRAMMER #1 FIX] Adjusted Line End to match sum width (287) ---
+                pdf.line(7, y_bottom, 287, y_bottom)
+                # --------------------------------------------------------------------
 
             pdf.set_draw_color(0, 0, 0)
             pdf.set_line_width(0.2)
@@ -1219,7 +1227,7 @@ def export_pdf():
     pdf.add_page()
     
     sum_headers = ['รอบงาน', 'จำนวน', 'เข้าโรงงาน', 'เข้าโหลด', 'โหลดเสร็จ', 'ยื่นเอกสาร', 'รับเอกสาร', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
-    sum_cols = [45, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25] 
+    sum_cols = [45, 25, 25, 25, 25, 25, 25, 25, 25, 25] 
     total_table_width = sum(sum_cols)
     start_x = (297 - total_table_width) / 2 
     

@@ -979,6 +979,7 @@ def export_excel():
     
 @app.route('/export_pdf')
 def export_pdf():
+    # Helper Function สำหรับแปลงวันที่
     def thai_date_filter(date_str):
         try:
             d = datetime.strptime(date_str, "%Y-%m-%d")
@@ -988,6 +989,7 @@ def export_pdf():
     sheet = get_db()
     raw_jobs = get_cached_records(sheet, 'Jobs')
     date_filter = request.args.get('date_filter')
+    
     if date_filter:
         jobs = [j for j in raw_jobs if str(j['PO_Date']).strip() == str(date_filter).strip()]
     else:
@@ -1003,13 +1005,15 @@ def export_pdf():
 
     jobs = sorted(jobs, key=sort_key_func)
 
-    def create_counter(): return {'total': 0, 't1': 0, 't2': 0, 't3': 0, 't6': 0, 't7': 0, 't8': 0}
+    # [FIX 1] เพิ่ม t4 และ t5 ในตัวนับ
+    def create_counter(): return {'total': 0, 't1': 0, 't2': 0, 't3': 0, 't4': 0, 't5': 0, 't6': 0, 't7': 0, 't8': 0}
     sum_day = create_counter()
     sum_night = create_counter()
     grouped_jobs = []
     current_group = []
     prev_key = None
     
+    # Grouping Logic
     for job in jobs:
         curr_key = (str(job['PO_Date']), str(job['Car_No']), str(job['Round']), str(job['Driver']))
         if curr_key != prev_key and prev_key is not None:
@@ -1041,6 +1045,7 @@ def export_pdf():
             
     if current_group: grouped_jobs.append(current_group)
 
+    # Counting Logic
     for group in grouped_jobs:
         if not group: continue
         first_job = group[0]
@@ -1053,9 +1058,13 @@ def export_pdf():
 
         target_sum = sum_day if is_day_shift else sum_night
         target_sum['total'] += 1
+        
+        # [FIX 2] เก็บสถิติให้ครบทุกช่อง T1-T8
         if first_job.get('T1_Enter'): target_sum['t1'] += 1
         if first_job.get('T2_StartLoad'): target_sum['t2'] += 1
         if first_job.get('T3_EndLoad'): target_sum['t3'] += 1
+        if first_job.get('T4_SubmitDoc'): target_sum['t4'] += 1
+        if first_job.get('T5_RecvDoc'): target_sum['t5'] += 1
         if first_job.get('T6_Exit'): target_sum['t6'] += 1
         
         if any(str(j.get('T7_ArriveBranch', '')).strip() != '' for j in group): target_sum['t7'] += 1
@@ -1096,9 +1105,7 @@ def export_pdf():
                 self.cell(0, 6, f'วันที่เอกสาร: {po_date_thai} | พิมพ์เมื่อ: {print_date}', align='C', new_x="LMARGIN", new_y="NEXT")
                 self.ln(4)
 
-                # --- [PROGRAMMER #1 FIX] Optimized Column Widths (Sum = 280) ---
                 cols = [12, 28, 40, 15, 55, 15, 15, 30, 15, 15, 20, 20]
-                # -------------------------------------------------------------
                 headers = ['คันที่', 'ทะเบียน', 'คนขับ', 'เวลาโหลด', 'ปลายทาง', 'นน.', 'เข้าโรงงาน', 'เริ่มโหลด', 'โหลดเสร็จ', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
                 self.set_fill_color(44, 62, 80)
                 self.set_text_color(255, 255, 255)
@@ -1121,10 +1128,9 @@ def export_pdf():
     pdf.set_margins(7, 10, 7)
     pdf.add_page()
     
-    # --- [PROGRAMMER #1 FIX] Optimized Column Widths (Sum = 280) ---
     cols = [12, 28, 40, 15, 55, 15, 15, 30, 15, 15, 20, 20]
-    # -------------------------------------------------------------
     
+    # Detail Table
     for group in grouped_jobs:
         group_total_height = 0
         for job in group:
@@ -1208,26 +1214,26 @@ def export_pdf():
                 pdf.set_draw_color(200, 200, 200)
                 pdf.set_line_width(0.1)
                 
-            # --- [PROGRAMMER #1 FIX] Adjusted Line End to match sum width (287) ---
             pdf.line(7, y_top, 287, y_top) 
-            # --------------------------------------------------------------------
 
             if is_last_in_group:
                 y_bottom = pdf.get_y()
                 pdf.set_draw_color(0, 0, 0)
                 pdf.set_line_width(0.3)
-                # --- [PROGRAMMER #1 FIX] Adjusted Line End to match sum width (287) ---
                 pdf.line(7, y_bottom, 287, y_bottom)
-                # --------------------------------------------------------------------
 
             pdf.set_draw_color(0, 0, 0)
             pdf.set_line_width(0.2)
 
+    # Summary Page Logic
     pdf.is_summary_page = True
     pdf.add_page()
     
+    # [FIX 3] Header ครบทุกช่องตามที่ต้องการ (10 คอลัมน์)
     sum_headers = ['รอบงาน', 'จำนวน', 'เข้าโรงงาน', 'เข้าโหลด', 'โหลดเสร็จ', 'ยื่นเอกสาร', 'รับเอกสาร', 'ออกโรงงาน', 'ถึงสาขา', 'จบงาน']
-    sum_cols = [45, 25, 25, 25, 25, 25, 25, 25, 25, 25] 
+    # ปรับความกว้างให้พอดีหน้ากระดาษ A4 Landscape (รวม 275mm)
+    sum_cols = [40, 25, 25, 25, 25, 25, 25, 25, 30, 30] 
+    
     total_table_width = sum(sum_cols)
     start_x = (297 - total_table_width) / 2 
     
@@ -1265,9 +1271,14 @@ def export_pdf():
         row_h = 12
         pdf.cell(sum_cols[0], row_h, label, border=1, align='C', fill=True)
         
+        # [FIX 4] ใส่ข้อมูลให้ครบ t4 และ t5 ใน List
         vals = []
         if row_type == 'header': vals = data
-        else: vals = [str(data['total']), str(data['t1']), str(data['t2']), str(data['t3']), str(data['t6']), str(data['t7']), str(data['t8'])]
+        else: 
+            vals = [
+                str(data['total']), str(data['t1']), str(data['t2']), str(data['t3']), 
+                str(data['t4']), str(data['t5']), str(data['t6']), str(data['t7']), str(data['t8'])
+            ]
 
         for i, val in enumerate(vals):
             pdf.cell(sum_cols[i+1], row_h, val, border=1, align='C', fill=True)
@@ -1286,7 +1297,7 @@ def export_pdf():
 
     pdf_bytes = pdf.output()
     filename = f"Summary_{date_filter if date_filter else 'All'}.pdf"
-    return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename) 
+    return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
 
 @app.route('/export_pdf_summary')
 def export_pdf_summary():

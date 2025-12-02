@@ -76,11 +76,6 @@
     <div class="flex space-x-2 mb-6 overflow-x-auto no-scrollbar pb-1">
         <button onclick="switchTab('tab-monitor')" id="btn-monitor" class="tab-btn flex-1 py-3 px-4 bg-indigo-600 text-white rounded-lg shadow font-medium transition hover:bg-indigo-700 whitespace-nowrap text-sm"><i class="fa-solid fa-satellite-dish mr-2"></i> ติดตามงาน (Monitor)</button>
         <button onclick="switchTab('tab-drivers')" id="btn-drivers" class="tab-btn flex-1 py-3 px-4 bg-white text-gray-600 rounded-lg shadow font-medium transition hover:bg-gray-100 whitespace-nowrap text-sm"><i class="fa-solid fa-id-card mr-2"></i> สรุปงานคนขับ (Dashboard)</button>
-        
-        <a href="/calendar" class="tab-btn flex-1 py-3 px-4 bg-white text-gray-600 rounded-lg shadow font-medium transition hover:bg-gray-100 whitespace-nowrap text-sm text-center flex items-center justify-center decoration-0">
-            <i class="fa-regular fa-calendar-days mr-2 text-orange-500"></i> ปฏิทินงาน
-        </a>
-
         <button onclick="switchTab('tab-create')" id="btn-create" class="tab-btn flex-1 py-3 px-4 bg-white text-gray-600 rounded-lg shadow font-medium transition hover:bg-gray-100 whitespace-nowrap text-sm"><i class="fa-solid fa-plus-circle mr-2"></i> สร้างงานใหม่</button>
         <button onclick="switchTab('tab-report')" id="btn-report" class="tab-btn flex-1 py-3 px-4 bg-white text-gray-600 rounded-lg shadow font-medium transition hover:bg-gray-100 whitespace-nowrap text-sm"><i class="fa-solid fa-table mr-2"></i> รายงาน (Excel Report)</button>
     </div>
@@ -112,12 +107,14 @@
                             <th class="px-4 py-3 text-center">เข้าโรงงาน</th>
                             <th class="px-4 py-3 text-center">ออกโรงงาน</th>
                             <th class="px-4 py-3 text-center">จบงาน (ล่าสุด)</th>
+                            <!-- [คงเดิม] คอลัมน์สถานะเอกสารในหน้า Monitor -->
+                            <th class="px-4 py-3 text-center text-gray-800 bg-gray-200 border-l border-gray-300">สถานะเอกสาร</th>
                             <th class="px-4 py-3 text-center">จัดการ</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
                         {% if jobs|length == 0 %}
-                            <tr><td colspan="9" class="p-10 text-center text-gray-400">ไม่พบข้อมูลงานในวันที่เลือก</td></tr>
+                            <tr><td colspan="10" class="p-10 text-center text-gray-400">ไม่พบข้อมูลงานในวันที่เลือก</td></tr>
                         {% endif %}
                         
                         <script>
@@ -175,6 +172,28 @@
                                     <td class="px-4 py-3 text-center">{% if job.T1_Enter %}<span class="text-indigo-600 font-bold">{{ job.T1_Enter }}</span>{% else %}<span class="text-gray-300">-</span>{% endif %}</td>
                                     <td class="px-4 py-3 text-center">{% if job.T6_Exit %}<span class="text-blue-600 font-bold">{{ job.T6_Exit }}</span>{% else %}<span class="text-gray-300">-</span>{% endif %}</td>
                                     <td class="px-4 py-3 text-center">{% if last_end_time %}<span class="text-green-600 font-bold">{{ last_end_time }}</span>{% else %}<span class="text-gray-300">-</span>{% endif %}</td>
+                                    
+                                    <!-- [คงเดิม] คอลัมน์สถานะเอกสารในหน้า Monitor -->
+                                    <td class="px-4 py-3 text-center bg-gray-50/50 border-l border-r border-gray-100">
+                                        {% set ns_doc = namespace(total=0, recorded=0) %}
+                                        {% for j in jobs %}
+                                            {% if j.PO_Date == job.PO_Date and j.Car_No == job.Car_No and j.Round == job.Round %}
+                                                {% set ns_doc.total = ns_doc.total + 1 %}
+                                                {% if j.get('Doc_Result') and j.get('Doc_Result')|string|trim|length > 0 %}
+                                                    {% set ns_doc.recorded = ns_doc.recorded + 1 %}
+                                                {% endif %}
+                                            {% endif %}
+                                        {% endfor %}
+
+                                        {% if ns_doc.recorded == ns_doc.total and ns_doc.total > 0 %}
+                                            <span class="inline-flex items-center gap-1 bg-green-100 text-green-700 text-[10px] md:text-xs font-bold px-2 py-1 rounded-full border border-green-200 shadow-sm"><i class="fa-solid fa-check-circle"></i> ครบ</span>
+                                        {% elif ns_doc.recorded == 0 %}
+                                            <span class="inline-flex items-center gap-1 bg-gray-100 text-gray-400 text-[10px] md:text-xs font-bold px-2 py-1 rounded-full border border-gray-200 shadow-sm">-</span>
+                                        {% else %}
+                                            <span class="inline-flex items-center gap-1 bg-orange-100 text-orange-600 text-[10px] md:text-xs font-bold px-2 py-1 rounded-full border border-orange-200 shadow-sm"><i class="fa-solid fa-file-circle-exclamation"></i> ขาด {{ ns_doc.total - ns_doc.recorded }}</span>
+                                        {% endif %}
+                                    </td>
+
                                     <td class="px-4 py-3 text-center flex justify-center gap-2 items-center">
                                         {% if job.L1_Loc %}
                                             <a href="https://www.google.com/maps/search/?api=1&query={{ job.L1_Loc }}" target="_blank" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800 transition shadow-sm" title="ดูพิกัด"><i class="fa-solid fa-location-dot"></i></a>
@@ -464,10 +483,11 @@ TFMสาขาซอยบางแวก"></textarea>
                 </form>
             </div>
 
+            <!-- Area for Capture -->
             <div id="report-capture-area" class="bg-white p-2">
                 
                 <div id="report-header-title" style="display:none;" class="mb-4">
-                    <div class="flex items-center justify-center gap-3 bg-indigo-50 border border-indigo-100 p-3 rounded-xl mx-auto w-fit shadow-sm">
+                    <div class="flex items-center justify-center gap-3 bg-indigo-50 border border-indigo-100 p-3 rounded-xl mx-auto w-full max-w-3xl shadow-sm">
                         <div class="bg-indigo-600 text-white w-10 h-10 flex items-center justify-center rounded-lg shadow-md">
                             <i class="fa-solid fa-file-invoice text-xl"></i>
                         </div>
@@ -486,20 +506,22 @@ TFMสาขาซอยบางแวก"></textarea>
                             <tr class="text-white table-header font-bold tracking-wide">
                                 <th class="px-2 py-2 bg-indigo-800 border-r border-indigo-700 sticky left-0 z-10 shadow-md">ลำดับ</th>
                                 <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">PO Date</th>
-                                <th class="px-2 py-2 bg-blue-600 border-r border-blue-500">วันที่โหลด</th>
-                                <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">รอบโหลด</th>
+                                <th class="px-2 py-2 bg-blue-600 border-r border-blue-500">Load Date</th>
+                                <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">เวลา</th>
                                 <th class="px-2 py-2 bg-blue-700 border-r border-blue-600 min-w-[150px]">ปลายทาง (สาขา)</th>
                                 <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">น้ำหนัก</th>
                                 <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">ทะเบียน</th>
                                 <th class="px-2 py-2 bg-blue-700 border-r border-blue-600">คนขับ</th>
+                                <!-- Process Columns: Amber Theme -->
                                 <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">เข้าโรงงาน</th>
                                 <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">เริ่มโหลด</th>
                                 <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">โหลดเสร็จ</th>
                                 <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">ยื่นเอกสาร</th>
                                 <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">รับเอกสาร</th>
                                 <th class="px-1 py-2 bg-amber-600 border-r border-amber-500">ออกโรงงาน</th>
+                                <!-- Success Columns: Green Theme -->
                                 <th class="px-2 py-2 bg-emerald-600 border-r border-emerald-500">ถึงสาขา</th>
-                                <th class="px-2 py-2 bg-emerald-700">จบงาน</th>
+                                <th class="px-2 py-2 bg-emerald-700 border-r border-emerald-600">จบงาน</th>
                             </tr>
                         </thead>
                         <tbody class="text-gray-700 bg-white">
@@ -538,10 +560,12 @@ TFMสาขาซอยบางแวก"></textarea>
                                     {% endif %}
                                     
                                     <tr class="border-b hover:bg-gray-50 transition border-gray-100">
+                                        <!-- Column 1: Car No -->
                                         <td class="px-2 py-1 border-r font-bold bg-gray-50 sticky left-0 z-10 border-gray-200 text-indigo-900 text-center shadow-sm">
                                             {% if not is_same %} #{{ job.Car_No }} {% endif %}
                                         </td>
                                         
+                                        <!-- Columns 2-8: Job Info -->
                                         <td class="px-2 py-1 border-r border-gray-200">{% if not is_same %}{{ job.PO_Date | thai_date }}{% endif %}</td>
                                         <td class="px-2 py-1 border-r border-gray-200 text-blue-700 font-bold bg-blue-50/20">
                                             {% if not is_same %}
@@ -555,6 +579,7 @@ TFMสาขาซอยบางแวก"></textarea>
                                         <td class="px-2 py-1 border-r border-gray-200 text-gray-800">{% if not is_same %} {{ job.Plate }} {% endif %}</td>
                                         <td class="px-2 py-1 border-r border-gray-200 font-medium truncate max-w-[120px] text-gray-700" title="{{ job.Driver }}">{% if not is_same %} {{ job.Driver }} {% endif %}</td>
                                         
+                                        <!-- Columns 9-14: Process (Amber Theme) -->
                                         <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T1_Enter, job.L1_Loc) }}{% endif %}</td>
                                         <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T2_StartLoad, job.L2_Loc, start_load_color, job.delay_msg) }}{% endif %}</td>
                                         <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T3_EndLoad, job.L3_Loc) }}{% endif %}</td>
@@ -562,8 +587,9 @@ TFMสาขาซอยบางแวก"></textarea>
                                         <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T5_RecvDoc, job.L5_Loc) }}{% endif %}</td>
                                         <td class="px-1 py-1 border-r border-gray-200 bg-amber-50/30">{% if not is_same %}{{ report_time_cell(job.T6_Exit, job.L6_Loc) }}{% endif %}</td>
                                         
+                                        <!-- Columns 15-16: Success (Green Theme) -->
                                         <td class="px-2 py-1 border-r font-bold text-emerald-700 bg-emerald-50/40 border-gray-200">{{ report_time_cell(job.T7_ArriveBranch, job.L7_Loc, 'text-emerald-800') }}</td>
-                                        <td class="px-2 py-1 font-bold text-emerald-800 bg-emerald-100/60">{{ report_time_cell(job.T8_EndJob, job.L8_Loc, 'text-emerald-900') }}</td>
+                                        <td class="px-2 py-1 font-bold text-emerald-800 bg-emerald-100/60 border-r border-gray-200">{{ report_time_cell(job.T8_EndJob, job.L8_Loc, 'text-emerald-900') }}</td>
                                     </tr>
                                 {% endfor %}
                             {% endif %}
@@ -589,9 +615,9 @@ TFMสาขาซอยบางแวก"></textarea>
     </div>
 </div>
 
+<!-- Change Driver Modal -->
 <div id="changeDriverModal" class="modal opacity-0 pointer-events-none fixed w-full h-full top-0 left-0 flex items-center justify-center z-50">
     <div class="modal-overlay absolute w-full h-full bg-gray-900 opacity-50" onclick="closeChangeDriverModal()"></div>
-    
     <div class="modal-container bg-white w-11/12 md:max-w-4xl mx-auto rounded-xl shadow-2xl z-50 overflow-y-auto max-h-[90vh]">
         <div class="modal-content py-4 text-left px-6">
             <div class="flex justify-between items-center pb-3 border-b">
@@ -600,7 +626,7 @@ TFMสาขาซอยบางแวก"></textarea>
                     <i class="fa-solid fa-xmark text-2xl text-gray-500 hover:text-gray-700"></i>
                 </div>
             </div>
-
+            <!-- Modal Body (Same as before) -->
             <div class="my-5 grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
                     <h4 class="font-bold text-gray-600 mb-3 border-b pb-1">ข้อมูลเดิม (Current)</h4>
@@ -619,10 +645,8 @@ TFMสาขาซอยบางแวก"></textarea>
                         <p><span class="font-bold">เบอร์โทร:</span> <span id="md_oldPhone" class="text-gray-500">-</span></p>
                     </div>
                 </div>
-
                 <div class="bg-white p-4 rounded-lg border-2 border-orange-100 shadow-inner">
                     <h4 class="font-bold text-orange-600 mb-3 border-b pb-1">ข้อมูลใหม่ (New)</h4>
-                    
                     <div class="space-y-3">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">เลือกคนขับใหม่</label>
@@ -633,22 +657,11 @@ TFMสาขาซอยบางแวก"></textarea>
                                 {% endfor %}
                             </select>
                         </div>
-
                         <div class="grid grid-cols-2 gap-3 bg-orange-50 p-3 rounded text-sm">
-                            <div>
-                                <span class="block text-xs text-gray-500">ทะเบียนใหม่</span>
-                                <span id="md_newPlate" class="font-bold text-gray-800">-</span>
-                            </div>
-                            <div>
-                                <span class="block text-xs text-gray-500">เบอร์โทร</span>
-                                <span id="md_newPhone" class="font-bold text-gray-800">-</span>
-                            </div>
-                            <div class="col-span-2">
-                                <span class="block text-xs text-gray-500">เลขบัตรประชาชน</span>
-                                <span id="md_newID" class="font-bold text-gray-800">-</span>
-                            </div>
+                            <div><span class="block text-xs text-gray-500">ทะเบียนใหม่</span><span id="md_newPlate" class="font-bold text-gray-800">-</span></div>
+                            <div><span class="block text-xs text-gray-500">เบอร์โทร</span><span id="md_newPhone" class="font-bold text-gray-800">-</span></div>
+                            <div class="col-span-2"><span class="block text-xs text-gray-500">เลขบัตรประชาชน</span><span id="md_newID" class="font-bold text-gray-800">-</span></div>
                         </div>
-
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">เนื่องจากสาเหตุ</label>
                             <textarea id="md_reason" rows="2" class="w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 p-2 border" placeholder="เช่น รถเสีย, คนขับลาป่วย..."></textarea>
@@ -656,17 +669,10 @@ TFMสาขาซอยบางแวก"></textarea>
                     </div>
                 </div>
             </div>
-
             <div class="flex justify-end pt-2 gap-3 border-t mt-4">
                 <button onclick="closeChangeDriverModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium">ปิด</button>
-                
-                <button id="btn-save-driver" onclick="saveChangeDriverToDB()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow flex items-center gap-2">
-                    <i class="fa-solid fa-floppy-disk"></i> บันทึกลงระบบ
-                </button>
-
-                <button onclick="copyChangeDriverText()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold shadow flex items-center gap-2">
-                    <i class="fa-regular fa-copy"></i> คัดลอกข้อความ
-                </button>
+                <button id="btn-save-driver" onclick="saveChangeDriverToDB()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow flex items-center gap-2"><i class="fa-solid fa-floppy-disk"></i> บันทึกลงระบบ</button>
+                <button onclick="copyChangeDriverText()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold shadow flex items-center gap-2"><i class="fa-regular fa-copy"></i> คัดลอกข้อความ</button>
             </div>
         </div>
     </div>
@@ -678,16 +684,13 @@ TFMสาขาซอยบางแวก"></textarea>
         const tabParam = urlParams.get('tab');
         const savedTab = localStorage.getItem('activeTab') || 'tab-monitor';
         if(tabParam) switchTab('tab-' + tabParam); else switchTab(savedTab);
-        
         const timeEl = document.getElementById('report-time');
         if (timeEl) timeEl.innerText = new Date().toLocaleString('th-TH');
-
-        // คำนวณสรุปท้ายตารางเมื่อโหลดเสร็จ
         setTimeout(calculateSummaryTable, 500);
     });
 
     // --------------------------------------------------------
-    // Calculate Summary Table (Day/Night Total)
+    // Calculate Summary Table (Day/Night Total) - GROUPED LOGIC
     // --------------------------------------------------------
     function calculateSummaryTable() {
         let counts = {
@@ -697,30 +700,45 @@ TFMสาขาซอยบางแวก"></textarea>
         };
 
         const rows = document.querySelectorAll("#main-report-table tbody tr");
-        
-        rows.forEach(row => {
-            const timeCell = row.cells[3]?.innerText.trim() || ""; 
-            if(!timeCell) return;
+        let currentGroup = [];
+        let allGroups = [];
 
-            const hour = parseInt(timeCell.split(':')[0]);
-            const isDay = (hour >= 6 && hour <= 18);
+        // Group rows by Trip
+        rows.forEach(row => {
+            const firstCellText = row.cells[0].innerText.trim();
+            if (firstCellText !== "") {
+                if (currentGroup.length > 0) allGroups.push(currentGroup);
+                currentGroup = [row];
+            } else {
+                if (currentGroup.length > 0) currentGroup.push(row);
+            }
+        });
+        if (currentGroup.length > 0) allGroups.push(currentGroup);
+
+        allGroups.forEach(group => {
+            if (group.length === 0) return;
+            const firstRow = group[0];
+            const lastRow = group[group.length - 1]; 
+
+            const timeText = firstRow.cells[3].innerText.trim();
+            let isDay = true;
+            if (timeText) {
+                const hour = parseInt(timeText.split(':')[0]);
+                isDay = (hour >= 6 && hour <= 18);
+            }
             const target = isDay ? counts.day : counts.night;
 
-            // Col Index: 8=T1, 9=T2, ... 15=T8
-            if(row.cells[8].innerText.trim()) target.t1++;
-            if(row.cells[9].innerText.trim()) target.t2++;
-            if(row.cells[10].innerText.trim()) target.t3++;
-            if(row.cells[11].innerText.trim()) target.t4++;
-            if(row.cells[12].innerText.trim()) target.t5++;
-            if(row.cells[13].innerText.trim()) target.t6++;
-            if(row.cells[14].innerText.trim()) target.t7++;
-            if(row.cells[15].innerText.trim()) target.t8++;
+            if (firstRow.cells[8].innerText.trim()) target.t1++;
+            if (firstRow.cells[9].innerText.trim()) target.t2++;
+            if (firstRow.cells[10].innerText.trim()) target.t3++;
+            if (firstRow.cells[11].innerText.trim()) target.t4++;
+            if (firstRow.cells[12].innerText.trim()) target.t5++;
+            if (firstRow.cells[13].innerText.trim()) target.t6++;
+            if (lastRow.cells[14].innerText.trim()) target.t7++;
+            if (lastRow.cells[15].innerText.trim()) target.t8++;
         });
 
-        // Sum Totals
-        for(let k in counts.total) {
-            counts.total[k] = counts.day[k] + counts.night[k];
-        }
+        for(let k in counts.total) { counts.total[k] = counts.day[k] + counts.night[k]; }
 
         const createCells = (data, rowId) => {
             const row = document.getElementById(rowId);
@@ -741,22 +759,20 @@ TFMสาขาซอยบางแวก"></textarea>
     }
 
     // --------------------------------------------------------
-    // [FIXED] Download Full Image Function (Manager Version)
+    // Download Full Image Function (Auto-Width)
     // --------------------------------------------------------
     async function copyReportImage() {
         const btnIcon = document.querySelector('button[onclick="copyReportImage()"] i');
         const originalIconClass = btnIcon.className;
-        btnIcon.className = "fa-solid fa-spinner fa-spin"; // เปลี่ยนไอคอนเป็นหมุนๆ
+        btnIcon.className = "fa-solid fa-spinner fa-spin"; 
 
         const captureArea = document.getElementById('report-capture-area');
         const headerTitle = document.getElementById('report-header-title');
         
-        // ดึงวันที่จาก Filter
         let poVal = "";
         const dateInput = document.getElementById('report_date_filter');
         if (dateInput) poVal = dateInput.value;
         
-        // เตรียมวันที่ไทย
         let poDisplay = poVal;
         if (poVal) {
             const [y, m, d] = poVal.split('-');
@@ -765,14 +781,11 @@ TFMสาขาซอยบางแวก"></textarea>
         }
         document.getElementById('img-po-date').innerText = poDisplay;
 
-        // แสดงหัวข้อชั่วคราว
         headerTitle.style.display = 'block';
 
-        // 1. [สำคัญ] วัดความกว้างจริงของตารางก่อน เพื่อตั้งค่า Canvas
-        // บวกเพิ่ม 40px เผื่อขอบซ้ายขวา
         const tableElement = document.getElementById('main-report-table');
         const realTableWidth = tableElement.scrollWidth + 40; 
-        const targetWidth = Math.max(realTableWidth, 1200); // อย่างน้อยต้องกว้าง 1200px
+        const targetWidth = Math.max(realTableWidth, 1200); 
 
         try {
             const canvas = await html2canvas(captureArea, {
@@ -780,7 +793,6 @@ TFMสาขาซอยบางแวก"></textarea>
                 backgroundColor: '#ffffff', 
                 useCORS: true,
                 logging: false,
-                // [แก้จุดที่ 1] ตั้งค่าหน้าจอจำลองให้กว้างเท่ากับตารางจริง
                 windowWidth: targetWidth,
                 width: targetWidth, 
                 
@@ -790,7 +802,6 @@ TFMสาขาซอยบางแวก"></textarea>
                     
                     if(clonedHeader) clonedHeader.style.display = 'block';
                     
-                    // [แก้จุดที่ 2] บังคับ Container ให้กว้างเท่าที่คำนวณไว้ ไม่ล็อคที่ 1200px แล้ว
                     if(clonedArea) {
                         clonedArea.style.width = targetWidth + 'px'; 
                         clonedArea.style.padding = '20px';
@@ -798,7 +809,6 @@ TFMสาขาซอยบางแวก"></textarea>
                         clonedArea.style.overflow = 'visible';
                     }
 
-                    // ปลดล็อค Scrollbar และขยายตารางให้เต็ม
                     const tableWrapper = clonedDoc.querySelector('.overflow-x-auto');
                     if(tableWrapper) {
                         tableWrapper.classList.remove('overflow-x-auto', 'custom-scrollbar');
@@ -809,7 +819,6 @@ TFMสาขาซอยบางแวก"></textarea>
                         tableWrapper.style.display = 'block';
                     }
                     
-                    // ปรับแต่งความสวยงาม (ลบเงา)
                     const shadows = clonedDoc.querySelectorAll('.shadow-lg, .shadow-xl, .shadow-sm, .shadow-md, .shadow-inner');
                     shadows.forEach(el => {
                         el.style.boxShadow = 'none';

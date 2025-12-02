@@ -212,7 +212,7 @@
     });
 
     // --------------------------------------------------------
-    // Calculate Summary Table
+    // Calculate Summary Table with Grouping Logic
     // --------------------------------------------------------
     function calculateSummaryTable() {
         let counts = {
@@ -222,31 +222,67 @@
         };
 
         const rows = document.querySelectorAll("#main-report-table tbody tr");
-        
-        rows.forEach(row => {
-            const timeCell = row.cells[3]?.innerText.trim() || ""; 
-            if(!timeCell) return;
+        let currentGroup = [];
+        let allGroups = [];
 
-            const hour = parseInt(timeCell.split(':')[0]);
-            const isDay = (hour >= 6 && hour <= 18);
+        // 1. จัดกลุ่มแถวตาม "เที่ยววิ่ง" (สังเกตจาก column แรก ถ้ามีข้อความ = คันใหม่)
+        rows.forEach(row => {
+            const firstCellText = row.cells[0].innerText.trim();
+            
+            if (firstCellText !== "") {
+                // ถ้ามีข้อมูลในช่องแรก แปลว่าเป็นคันใหม่ -> บันทึกกลุ่มเก่า เริ่มกลุ่มใหม่
+                if (currentGroup.length > 0) {
+                    allGroups.push(currentGroup);
+                }
+                currentGroup = [row];
+            } else {
+                // ถ้าช่องแรกว่าง แปลว่าเป็นสาขาต่อเนื่องของคันเดิม -> เพิ่มเข้ากลุ่มเดิม
+                if (currentGroup.length > 0) {
+                    currentGroup.push(row);
+                }
+            }
+        });
+        // อย่าลืมบันทึกกลุ่มสุดท้าย
+        if (currentGroup.length > 0) {
+            allGroups.push(currentGroup);
+        }
+
+        // 2. วนลูปแต่ละกลุ่มเพื่อคำนวณสถิติ
+        allGroups.forEach(group => {
+            if (group.length === 0) return;
+
+            const firstRow = group[0];
+            const lastRow = group[group.length - 1]; // แถวสุดท้ายของ Trip นี้
+            
+            // หกะ Day/Night จากเวลาใน Column 3 (Index 3)
+            const timeText = firstRow.cells[3].innerText.trim(); // เช่น "11:00"
+            let isDay = true;
+            if (timeText) {
+                const hour = parseInt(timeText.split(':')[0]);
+                isDay = (hour >= 6 && hour <= 18);
+            }
             const target = isDay ? counts.day : counts.night;
 
-            // Col Index: 8=T1, 9=T2, ... 15=T8
-            if(row.cells[8].innerText.trim()) target.t1++;
-            if(row.cells[9].innerText.trim()) target.t2++;
-            if(row.cells[10].innerText.trim()) target.t3++;
-            if(row.cells[11].innerText.trim()) target.t4++;
-            if(row.cells[12].innerText.trim()) target.t5++;
-            if(row.cells[13].innerText.trim()) target.t6++;
-            if(row.cells[14].innerText.trim()) target.t7++;
-            if(row.cells[15].innerText.trim()) target.t8++;
+            // ตรวจสอบสถานะต่างๆ
+            // T1-T6 (เข้า-ออก) เช็คจากแถวแรกก็พอ (เพราะระบบแสดงผลแถวแรกเสมอ)
+            if (firstRow.cells[8].innerText.trim()) target.t1++; // เข้าโรงงาน
+            if (firstRow.cells[9].innerText.trim()) target.t2++; // เริ่มโหลด
+            if (firstRow.cells[10].innerText.trim()) target.t3++; // โหลดเสร็จ
+            if (firstRow.cells[11].innerText.trim()) target.t4++; // ยื่นเอกสาร
+            if (firstRow.cells[12].innerText.trim()) target.t5++; // รับเอกสาร
+            if (firstRow.cells[13].innerText.trim()) target.t6++; // ออกโรงงาน
+
+            // [Modified] T7 (ถึงสาขา) และ T8 (จบงาน) ให้เช็คจาก "สาขาสุดท้าย" (แถวสุดท้ายของกลุ่ม)
+            if (lastRow.cells[14].innerText.trim()) target.t7++; // ถึงสาขาสุดท้าย
+            if (lastRow.cells[15].innerText.trim()) target.t8++; // จบงานสาขาสุดท้าย (จบ Trip)
         });
 
-        // Sum Totals
+        // 3. รวมยอด Total
         for(let k in counts.total) {
             counts.total[k] = counts.day[k] + counts.night[k];
         }
 
+        // 4. แสดงผลลงตาราง
         const createCells = (data, rowId) => {
             const row = document.getElementById(rowId);
             if(!row) return;

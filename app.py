@@ -370,20 +370,44 @@ def check_late_and_notify(sheet):
     except Exception as e:
         print(f"Late Check Error: {e}")
 
-# --- DB Connection ---
+# ======================================================
+# [FIXED] get_db Function with Retry Logic for Error 500
+# ======================================================
 def get_db():
     scope = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets', "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
     creds_json = os.environ.get('GSPREAD_CREDENTIALS')
     
     if not creds_json:
-        if os.path.exists("credentials.json"): return gspread.service_account(filename="credentials.json").open("DriverLogApp")
-        else: return None
-        
-    creds_dict = json.loads(creds_json)
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        if os.path.exists("credentials.json"): 
+            creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+        else: 
+            return None
+    else:
+        creds_dict = json.loads(creds_json)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    
     client = gspread.authorize(creds)
-    sheet = client.open("DriverLogApp") 
-    return sheet
+    
+    # Retry Logic for Google API 500/429 Errors
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # --------------------------------------------------------------------------
+            # [แนะนำ] ให้เปลี่ยนบรรทัดล่างนี้เป็น client.open_by_key("YOUR_SHEET_ID")
+            # โดยเอา ID จาก URL ของ Google Sheet มาใส่แทน "DriverLogApp" จะเสถียรกว่ามาก
+            # --------------------------------------------------------------------------
+            sheet = client.open("15kJuEyhIaIjxZsqvPIxhOqzTrB1eY62KDHRjNITcRkM")
+            return sheet
+        except gspread.exceptions.APIError as e:
+            # ถ้าเป็นรอบสุดท้ายแล้วยัง Error ให้โยน Error ออกไป
+            if attempt == max_retries - 1:
+                print(f"Failed to connect to Google Sheet after {max_retries} attempts: {e}")
+                raise e
+            # ถ้ายังไม่ครบ ให้รอสักครู่แล้วลองใหม่
+            print(f"Google Sheet API Error (Attempt {attempt+1}/{max_retries}). Retrying...")
+            time.sleep(2) # รอ 2 วินาที
+            
+    return None
 
 # --- Routes ---
 
@@ -1578,124 +1602,89 @@ def customer_view():
 
 @app.route('/driver')
 def driver_select():
+    # [FIXED] Use Cached Data instead of API Call
     sheet = get_db()
-    # ดึงรายชื่อคนขับทั้งหมด (เฉพาะ Column แรก)
-    drivers_list_raw = sheet.worksheet('Drivers').col_values(1)[1:]
+    cached_drivers = get_cached_records(sheet, 'Drivers')
+    # Extract names from cached list (assuming 'Name' is the key)
+    drivers_list_raw = [d['Name'] for d in cached_drivers if d.get('Name')]
+    
     all_jobs = get_cached_records(sheet, 'Jobs')
     now_thai = datetime.now() + timedelta(hours=7)
-    
-    # กำหนดเวลาขอบเขต 48 ชม.
     limit_time = now_thai + timedelta(hours=48)
     
     driver_info = {} 
-    # เก็บข้อมูลสำหรับ Sorting: { name: {'min_dt': datetime, 'min_car': int} }
     driver_sort_data = {}
 
-    # เริ่มต้นข้อมูล
     for name in drivers_list_raw:
         driver_info[name] = {
             'pending_set': set(), 
             'pending_count': 0, 
             'urgent_msg': '', 'urgent_color': '', 'urgent_time': '', 'sort_weight': 999
         }
-        # ค่า Default สำหรับคนไม่มีงาน: เวลาไกลสุด, เลขรถเยอะสุด
         driver_sort_data[name] = {'dt': datetime.max, 'car': 99999}
 
-    # วนลูปงานเพื่อหาเวลาที่เร็วที่สุด และสร้าง Badge แจ้งเตือน
     for job in all_jobs:
         d_name = job.get('Driver')
         if d_name not in driver_info: continue
-        
         status = str(job.get('Status', '')).lower()
         if status != 'done' and status != 'cancel':
             trip_key = f"{job['PO_Date']}_{job['Round']}_{job['Car_No']}"
             driver_info[d_name]['pending_set'].add(trip_key)
-            
             try:
-                # 1. Logic ใหม่: เน้นวันที่โหลดจริง (Load Date) เป็นหลัก
-                # ดึงค่า Load Date ถ้าไม่มีให้ใช้ PO Date แทน
                 load_date_val = str(job.get('Load_Date', '')).strip()
-                if not load_date_val:
-                    load_date_val = str(job['PO_Date']).strip()
-                
+                if not load_date_val: load_date_val = str(job['PO_Date']).strip()
                 round_str = str(job['Round']).strip()
-                
-                # แปลงเป็น datetime เพื่อใช้คำนวณและเรียงลำดับ
                 job_dt_str = f"{load_date_val} {round_str}"
-                try: 
-                    job_dt = datetime.strptime(job_dt_str, "%Y-%m-%d %H:%M")
-                except ValueError:
-                    continue # ข้ามถ้าข้อมูลเวลาไม่สมบูรณ์
+                try: job_dt = datetime.strptime(job_dt_str, "%Y-%m-%d %H:%M")
+                except: continue
                 
-                # เอาเลขรถมาใช้เป็นเกณฑ์รอง
                 try: car_n = int(str(job['Car_No']).strip())
                 except: car_n = 99999
 
-                # ถ้าเจองานที่เร็วกว่าที่เคยเจอ ให้บันทึกไว้เป็น "งานแรกสุด" ของคนนี้
                 if job_dt < driver_sort_data[d_name]['dt']:
                     driver_sort_data[d_name]['dt'] = job_dt
                     driver_sort_data[d_name]['car'] = car_n
 
-                # 2. คำนวณ UI Badge (เหมือนเดิม)
                 diff = job_dt - now_thai
                 hours_diff = diff.total_seconds() / 3600
                 delta_days = (job_dt.date() - now_thai.date()).days
                 h = job_dt.hour
                 m = job_dt.minute
-                
                 msg, color, weight = "", "", 999
                 
                 if hours_diff <= 0:
-                    if hours_diff > -12: 
-                        msg, color, weight = "❗ โหลดตอนนี้", "bg-red-500 text-white border-red-600 animate-pulse shadow-red-200", 1
+                    if hours_diff > -12: msg, color, weight = "❗ โหลดตอนนี้", "bg-red-500 text-white border-red-600 animate-pulse", 1
                 elif 0 < hours_diff <= 16:
-                    if 6 <= h <= 12:   msg, color = "☀️ โหลดเช้านี้", "bg-yellow-100 text-yellow-700 border-yellow-200"
-                    elif 13 <= h <= 18: msg, color = "⛅ โหลดบ่ายนี้", "bg-orange-100 text-orange-700 border-orange-200"
-                    else:               msg, color = "🌙 โหลดคืนนี้", "bg-indigo-100 text-indigo-700 border-indigo-200"
+                    if 6 <= h <= 12: msg, color = "☀️ โหลดเช้านี้", "bg-yellow-100 text-yellow-700"
+                    elif 13 <= h <= 18: msg, color = "⛅ โหลดบ่ายนี้", "bg-orange-100 text-orange-700"
+                    else: msg, color = "🌙 โหลดคืนนี้", "bg-indigo-100 text-indigo-700"
                     weight = 2
                 elif delta_days == 1:
-                    period = "คืนพรุ่งนี้" if (h >= 19 or h <= 5) else "วันพรุ่งนี้"
                     if driver_info[d_name]['sort_weight'] > 3:
-                        msg, color, weight = f"⏩ เตรียมโหลด{period}", "bg-gray-100 text-gray-500 border-gray-200", 3
+                        msg, color, weight = "⏩ เตรียมพรุ่งนี้", "bg-gray-100 text-gray-500", 3
 
                 if weight < driver_info[d_name]['sort_weight']:
                     driver_info[d_name]['urgent_msg'] = msg
                     driver_info[d_name]['urgent_color'] = color
                     driver_info[d_name]['urgent_time'] = f"{h:02}:{m:02} น."
                     driver_info[d_name]['sort_weight'] = weight
-
-            except Exception as e: pass
+            except: pass
     
-    # อัปเดตจำนวนงานค้าง
     for name in drivers_list_raw:
         driver_info[name]['pending_count'] = len(driver_info[name]['pending_set'])
 
-    # --- [แยกกลุ่ม และ เรียงลำดับ] ---
     active_drivers = []
     hidden_drivers = []
-
     for name in drivers_list_raw:
         earliest_dt = driver_sort_data[name]['dt']
-        
-        # เงื่อนไข Active: ต้องมีงาน (ไม่เท่ากับ max) และ งานนั้นต้องมาถึงใน <= 48 ชม.
-        # (รวมถึงงานที่เลยเวลามาแล้วแต่ยังไม่เสร็จด้วย เพราะ datetime < now + 48h)
-        if earliest_dt != datetime.max and earliest_dt <= limit_time:
-            active_drivers.append(name)
-        else:
-            hidden_drivers.append(name)
+        if earliest_dt != datetime.max and earliest_dt <= limit_time: active_drivers.append(name)
+        else: hidden_drivers.append(name)
             
-    # Key ในการ Sort: (เวลาโหลด, เลขรถ)
-    def sort_key(n):
-        return (driver_sort_data[n]['dt'], driver_sort_data[n]['car'])
-
+    def sort_key(n): return (driver_sort_data[n]['dt'], driver_sort_data[n]['car'])
     active_drivers.sort(key=sort_key)
-    # Hidden drivers ก็เรียงด้วย เผื่อกดดูจะได้เห็นงานที่ไกลๆ เป็นระเบียบ (หรือเรียงตามชื่อถ้าไม่มีงาน)
     hidden_drivers.sort(key=sort_key)
 
-    return render_template('driver_select.html', 
-                           active_drivers=active_drivers, 
-                           hidden_drivers=hidden_drivers, 
-                           driver_info=driver_info)
+    return render_template('driver_select.html', active_drivers=active_drivers, hidden_drivers=hidden_drivers, driver_info=driver_info)
 
 @app.route('/driver/tasks', methods=['GET'])
 def driver_tasks():

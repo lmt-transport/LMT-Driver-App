@@ -528,8 +528,6 @@ TFMสาขาซอยบางแวก"></textarea>
                                 <!-- Success Columns: Green Theme -->
                                 <th class="px-2 py-2 bg-emerald-600 border-r border-emerald-500">ถึงสาขา</th>
                                 <th class="px-2 py-2 bg-emerald-700 border-r border-emerald-600">จบงาน</th>
-                                <!-- [NEW] Doc Status Column -->
-                                <th class="px-2 py-2 bg-gray-700 text-white">สถานะเอกสาร</th>
                             </tr>
                         </thead>
                         <tbody class="text-gray-700 bg-white">
@@ -598,30 +596,6 @@ TFMสาขาซอยบางแวก"></textarea>
                                         <!-- Columns 15-16: Success (Green Theme) -->
                                         <td class="px-2 py-1 border-r font-bold text-emerald-700 bg-emerald-50/40 border-gray-200">{{ report_time_cell(job.T7_ArriveBranch, job.L7_Loc, 'text-emerald-800') }}</td>
                                         <td class="px-2 py-1 font-bold text-emerald-800 bg-emerald-100/60 border-r border-gray-200">{{ report_time_cell(job.T8_EndJob, job.L8_Loc, 'text-emerald-900') }}</td>
-                                        
-                                        <!-- [NEW] Column 17: Doc Status Logic -->
-                                        <td class="px-2 py-1 text-center bg-gray-50 border-gray-200">
-                                            {% if not is_same %}
-                                                {# Calculate Doc Status for this Trip #}
-                                                {% set ns_doc = namespace(total=0, recorded=0) %}
-                                                {% for j in jobs %}
-                                                    {% if j.PO_Date == job.PO_Date and j.Car_No == job.Car_No and j.Round == job.Round %}
-                                                        {% set ns_doc.total = ns_doc.total + 1 %}
-                                                        {% if j.get('Doc_Result') and j.get('Doc_Result')|string|trim|length > 0 %}
-                                                            {% set ns_doc.recorded = ns_doc.recorded + 1 %}
-                                                        {% endif %}
-                                                    {% endif %}
-                                                {% endfor %}
-
-                                                {% if ns_doc.recorded == ns_doc.total and ns_doc.total > 0 %}
-                                                    <span class="inline-flex items-center gap-1 bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-green-200 shadow-sm"><i class="fa-solid fa-check-circle"></i> ครบ</span>
-                                                {% elif ns_doc.recorded == 0 %}
-                                                    <span class="inline-flex items-center gap-1 bg-gray-100 text-gray-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-gray-200"><i class="fa-regular fa-circle"></i> รอ</span>
-                                                {% else %}
-                                                    <span class="inline-flex items-center gap-1 bg-orange-100 text-orange-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-orange-200 shadow-sm"><i class="fa-solid fa-circle-exclamation"></i> ขาด {{ ns_doc.total - ns_doc.recorded }}</span>
-                                                {% endif %}
-                                            {% endif %}
-                                        </td>
                                     </tr>
                                 {% endfor %}
                             {% endif %}
